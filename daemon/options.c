@@ -133,6 +133,9 @@ static void config_register_opts(struct lightningd_state *dstate)
 	opt_register_noarg("--bitcoind-regtest", opt_set_bool,
 			   &dstate->config.regtest,
 			   "Bitcoind is in regtest mode");
+	opt_register_arg("--redeemaddr", opt_set_charp, NULL,
+		       &dstate->default_redeem_address,
+		       "The redeem address used when channel is closed");
 	opt_register_arg("--locktime-blocks", opt_set_u32, opt_show_u32,
 			 &dstate->config.locktime_blocks,
 			 "Blocks before peer can unilaterally spend funds");
@@ -462,6 +465,9 @@ bool handle_opts(struct lightningd_state *dstate, int argc, char *argv[])
 	opt_register_arg("--bitcoin-datadir", opt_set_charp, NULL,
 			 &bitcoin_datadir,
 			 "-datadir arg for bitcoin-cli");
+	opt_register_arg("--bitcoind-address", opt_set_charp, NULL,
+		     &bitcoin_redeem_address,
+		     "-the wallet address of bitcoind");
 	opt_register_logging(dstate->base_log);
 	opt_register_version();
 

@@ -7,12 +7,17 @@
 #include "bitcoin/script.h"
 #include "bitcoin/signature.h"
 #include "bitcoin/tx.h"
+#include "bitcoin/address.h"
 #include "db.h"
 #include "jsonrpc.h"
 #include "lightningd.h"
+#include "channel.h"
+#include "chaintopology.h"
 #include "log.h"
 #include "wallet.h"
+#include <inttypes.h>
 #include <ccan/structeq/structeq.h>
+#include <ccan/tal/str/str.h>
 #include <sodium/randombytes.h>
 
 struct wallet {
@@ -62,9 +67,9 @@ static struct wallet *find_by_pubkey(struct lightningd_state *dstate,
 }
 
 bool wallet_add_signed_input(struct lightningd_state *dstate,
-			     const struct pubkey *walletkey,
-			     struct bitcoin_tx *tx,
-			     unsigned int input_num)
+                const struct pubkey *walletkey,
+                struct bitcoin_tx *tx,
+                unsigned int input_num)
 {
 	u8 *redeemscript;
 	struct bitcoin_signature sig;
@@ -142,3 +147,129 @@ static const struct json_command newaddr_command = {
 	"Returns {address} a p2sh address"
 };
 AUTODATA(json_command, &newaddr_command);
+
+static void json_payback(struct command *cmd,
+	const char *buffer, const jsmntok_t *params)
+{
+	struct json_result *response = new_json_result(cmd);
+	jsmntok_t *txtok, *addrstr;
+	size_t txhexlen;
+    char*  redeem_addr_str;
+    bool   istestnet;
+    struct bitcoin_address redeem_addr;
+	struct bitcoin_tx *tx, *txout;
+	u32 output;
+	struct pubkey walletpubkey;
+	u64 fee;
+    u8* rawtransaction;
+
+	if (!json_get_params(buffer, params, 
+        "tx", &txtok,
+        "?address", &addrstr,
+		NULL)) {
+		command_fail(cmd, "Need {raw tx} paid to our wallet address");
+		return;
+	}
+
+    log_debug(cmd->dstate->base_log, "dbg-payback phase 1");
+
+    redeem_addr_str = addrstr ? tal_strndup(cmd, buffer + addrstr->start,
+        addrstr->end - addrstr->start) : cmd->dstate->default_redeem_address;
+    if (!redeem_addr_str)
+    {
+        command_fail(cmd, "No default redeem address specified");
+        return;
+    }
+
+    log_debug(cmd->dstate->base_log, "dbg-payback phase 2");
+
+    if (!bitcoin_from_base58(&istestnet, &redeem_addr, redeem_addr_str,
+        strlen(redeem_addr_str)))
+    {
+        command_fail(cmd, "Invalid redeem address %s", redeem_addr_str);
+        return;
+    }
+
+    if (istestnet != cmd->dstate->testnet)
+    {
+        command_fail(cmd, "Not match for the nettype: is %s address", 
+            (istestnet ? "[testnet]" : "[mainnet]"));
+        return;
+    }
+
+	txhexlen = txtok->end - txtok->start;
+	tx = bitcoin_tx_from_hex(cmd, buffer + txtok->start, txhexlen);
+	if (!tx) {
+		command_fail(cmd, "'%.*s' is not a valid transaction",
+			txtok->end - txtok->start,
+			buffer + txtok->start);
+		return;
+	}
+
+	/* Find an output we know how to spend. */
+	for (output = 0; output < tx->output_count; output++) {
+		if (wallet_can_spend(cmd->dstate, &tx->output[output],
+			&walletpubkey))
+			break;
+	}
+	if (output == tx->output_count) {
+		command_fail(cmd, "Tx doesn't send to wallet address");
+		return;
+	}
+
+    log_debug(cmd->dstate->base_log, "dbg-payback phase 3");
+
+	/* construct the payback tx and broadcast */
+	txout = bitcoin_tx(cmd, 1, 1);
+
+    txout->output[0].script = 
+        /*scriptpubkey_p2sh_p2wpkh(cmd, &redeem_addr)*/
+        scriptpubkey_p2pkh(cmd, &redeem_addr);        
+
+    txout->output[0].script_length = tal_count(txout->output[0].script);
+
+    log_debug(cmd->dstate->base_log, "dbg-payback phase 4: output script is %s",
+        tal_hexstr(cmd, txout->output[0].script, txout->output[0].script_length));
+
+    bitcoin_txid(tx, &txout->input[0].txid);
+    txout->input[0].index = output;
+    txout->input[0].amount = &tx->output[output].amount;
+
+    /* FIXME: not exact, and round up */
+    fee = fee_by_feerate(125, get_feerate(cmd->dstate));
+    if (fee >= *txout->input[0].amount) {
+        command_fail(cmd, "Amount %"PRIu64" below fee %"PRIu64,
+            *txout->input[0].amount, fee);
+        return;
+    }
+
+    txout->output[0].amount = *txout->input[0].amount - fee;
+    log_debug(cmd->dstate->base_log, "dbg-payback phase 5: calculate output as %"PRIu64,
+        txout->output[0].amount);
+
+    if (!wallet_add_signed_input(cmd->dstate, &walletpubkey, txout, 0))
+    {
+        command_fail(cmd, "Sign tx input failed");
+        return;
+    }
+
+    log_debug(cmd->dstate->base_log, "dbg-payback phase 6");
+
+    /* all done, just output the raw transaction */
+    rawtransaction = linearize_tx(cmd, txout);
+
+    json_object_start(response, NULL);
+    json_add_string(response, "rawtransaction",
+        tal_hexstr(cmd, rawtransaction, tal_count(rawtransaction)));
+    json_object_end(response);
+    command_success(cmd, response);
+
+}
+
+static const struct json_command payback_command = {
+	"dbg-payback",
+	json_payback,
+	"Payback the coin in the hex-encoded {tx} output to our wallet to a specified address",
+	"Returns an empty result on success"
+};
+AUTODATA(json_command, &payback_command);

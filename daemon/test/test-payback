@@ -1,0 +1,79 @@
+#! /bin/sh -e
+
+# Wherever we are, we want to be in daemon/test dir.
+cd `git rev-parse --show-toplevel`/daemon/test
+
+. scripts/vars.sh
+. scripts/helpers.sh
+
+parse_cmdline 2
+setup_lightning 2
+
+# use our bitcoind ... and set address
+CLI="bitcoin-cli"
+REDEEMADDR=`$CLI getaccountaddress ""`
+
+cat > $DIR1/config <<EOF
+disable-irc
+log-level=debug
+bitcoind-regtest
+bitcoind-poll=5s
+deadline-blocks=5
+min-htlc-expiry=6
+locktime-blocks=6
+redeemaddr=$REDEEMADDR
+EOF
+
+cp $DIR1/config $DIR2/config
+# Find a free TCP port.
+echo port=`findport 4000 $VARIANT` >> $DIR2/config
+
+start_lightningd 2
+
+PAYBACK_TX=`$LCLI1 dbg-payback $FUND_INPUT_TX | sed -n 's/{ "rawtransaction" : "\(.*\)" }/\1/p'`
+$CLI sendrawtransaction $PAYBACK_TX
+
+#redo the payment after testing payback ...
+FUND_INPUT_TXID=`$CLI sendtoaddress $P2SHADDR 0.01`
+FUND_INPUT_TX=`$CLI getrawtransaction $FUND_INPUT_TXID`
+
+# Mine it so check_tx_spend doesn't see it (breaks some tests).
+$CLI generate 1
+
+lcli1 connect localhost $PORT2 $FUND_INPUT_TX &
+
+check_tx_spend
+$CLI generate 1
+
+check_peerstate lcli1 STATE_NORMAL
+check_peerstate lcli2 STATE_NORMAL
+
+lcli1 close $ID2
+
+# They should be negotiating the close.
+check_peerstate lcli1 STATE_MUTUAL_CLOSING
+check_peerstate lcli2 STATE_MUTUAL_CLOSING
+
+$CLI generate 1
+
+check_peerstate lcli1 STATE_CLOSE_ONCHAIN_MUTUAL
+check_peerstate lcli2 STATE_CLOSE_ONCHAIN_MUTUAL
+
+# Give it forever-1 blocks.
+$CLI generate 8
+
+# Make sure they saw it!
+check_peerstate lcli1 STATE_CLOSE_ONCHAIN_MUTUAL
+check_peerstate lcli2 STATE_CLOSE_ONCHAIN_MUTUAL
+
+# Now the final one.
+$CLI generate 1
+
+check_no_peers lcli1
+check_no_peers lcli2
+
+lcli1 stop
+lcli2 stop
+
+all_ok
+

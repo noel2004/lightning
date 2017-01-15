@@ -36,12 +36,22 @@ u8 *bitcoin_redeem_secret_or_delay(const tal_t *ctx,
 				   const struct pubkey *key_if_secret_known,
 				   const struct sha256 *hash_of_secret);
 
+/* Create an output script using p2pkh for this redeem script. */
+u8 *scriptpubkey_p2pkh(const tal_t *ctx, const struct bitcoin_address *addr);
+
+/* Create an output script using p2sh-p2wpkh for this redeem script. */
+u8 *scriptpubkey_p2sh_p2wpkh(const tal_t *ctx, const struct bitcoin_address *addr);
+
 /* Create an output script using p2sh for this redeem script. */
 u8 *scriptpubkey_p2sh(const tal_t *ctx, const u8 *redeemscript);
 
 /* Create the redeemscript for a P2SH + P2WPKH. */
 u8 *bitcoin_redeem_p2wpkh(const tal_t *ctx,
 			  const struct pubkey *key);
+
+/* Create the redeemscript for a P2SH + P2WPKH, from address */
+u8 *bitcoin_redeem_p2wpkh_by_addr(const tal_t *ctx,
+	const struct bitcoin_address *addr);
 
 /* Create a witness which spends the 2of2. */
 void bitcoin_witness_p2sh_p2wpkh(const tal_t *ctx,

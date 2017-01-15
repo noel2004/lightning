@@ -50,6 +50,7 @@ static struct lightningd_state *lightningd_state(void)
 	dstate->dev_no_broadcast = false;
 	dstate->bitcoin_req_running = false;
 	dstate->nodes = empty_node_map(dstate);
+    dstate->default_redeem_address = NULL;
 	dstate->reexec = NULL;
 	dstate->external_ip = NULL;
 	dstate->announce = NULL;

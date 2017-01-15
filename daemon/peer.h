@@ -126,6 +126,9 @@ struct peer {
 	/* Number of commitment signatures we've received. */
 	u64 their_commitsigs;
 
+    /* the final redeem address, can derived from global config*/
+	u8 *final_redeemscript;
+
 	/* Anchor tx output */
 	struct {
 		struct sha256_double txid;
@@ -147,6 +150,7 @@ struct peer {
 
 		/* Did we create anchor? */
 		bool ours;
+
 	} anchor;
 
 	struct {

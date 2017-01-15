@@ -29,6 +29,7 @@
 #include "utils.h"
 #include "wallet.h"
 #include <bitcoin/base58.h>
+#include <bitcoin/address.h>
 #include <bitcoin/script.h>
 #include <bitcoin/tx.h>
 #include <ccan/array_size/array_size.h>
@@ -123,9 +124,9 @@ static const struct bitcoin_tx *bitcoin_spend_ours(struct peer *peer)
 	tx->input[0].amount = tal_dup(tx->input, u64,
 				      &commit->output[p2wsh_out].amount);
 
-	tx->output[0].script = scriptpubkey_p2sh(tx,
+    tx->output[0].script = peer->final_redeemscript;/* scriptpubkey_p2sh(tx,
 				 bitcoin_redeem_single(tx,
-						       &peer->local.finalkey));
+						       &peer->local.finalkey));*/
 	tx->output[0].script_length = tal_count(tx->output[0].script);
 
 	/* Witness length can vary, due to DER encoding of sigs, but we
@@ -1814,7 +1815,7 @@ database_error:
 static bool peer_start_shutdown(struct peer *peer)
 {
 	enum state newstate;
-	u8 *redeemscript;
+	//u8 *redeemscript;
 
 	/* We might have uncommited changes; if so, commit them now. */
 	if (!do_commit(peer, NULL))
@@ -1827,10 +1828,10 @@ static bool peer_start_shutdown(struct peer *peer)
 	/* If they started close, we might not have sent ours. */
 	assert(!peer->closing.our_script);
 
-	redeemscript = bitcoin_redeem_single(peer, &peer->local.finalkey);
+	//redeemscript = bitcoin_redeem_single(peer, &peer->local.finalkey);
 
-	peer->closing.our_script = scriptpubkey_p2sh(peer, redeemscript);
-	tal_free(redeemscript);
+    peer->closing.our_script = peer->final_redeemscript;//scriptpubkey_p2sh(peer, redeemscript);
+	//tal_free(redeemscript);
 
 	/* FIXME-OLD #2:
 	 *
@@ -1965,9 +1966,9 @@ static const struct bitcoin_tx *htlc_fulfill_tx(const struct peer *peer,
 
 	/* Using a new output address here would be useless: they can tell
 	 * it's their HTLC, and that we collected it via rval. */
-	tx->output[0].script = scriptpubkey_p2sh(tx,
+    tx->output[0].script = peer->final_redeemscript;/*scriptpubkey_p2sh(tx,
 				 bitcoin_redeem_single(tx,
-						       &peer->local.finalkey));
+						       &peer->local.finalkey));*/
 	tx->output[0].script_length = tal_count(tx->output[0].script);
 
 	log_debug(peer->log, "Pre-witness txlen = %zu\n",
@@ -2587,10 +2588,91 @@ static struct io_plan *peer_send_init(struct io_conn *conn, struct peer *peer)
 				 read_init_pkt);
 }
 
+static bool select_wallet_address_bystr(struct lightningd_state *dstate,
+    struct bitcoin_address *addr)
+{
+    bool   istestnet;
+    char  *redeem_addr_str;
+    int    i;
+
+    for (i = 0;;++i)
+    {
+        switch (i)
+        {
+        case 0:
+            redeem_addr_str = dstate->default_redeem_address;
+            log_debug(dstate->base_log, "Try redeem address from config ...");
+            break;
+        case 1:
+            /* TODO: not defined yet */
+            redeem_addr_str = NULL;
+            log_debug(dstate->base_log, "Try redeem address from node wallet ...");
+            break;
+        case 2:
+            redeem_addr_str = bitcoin_redeem_address;
+            log_debug(dstate->base_log, "Try redeem address from bitcoind ...");
+        default:
+            return false;
+        }
+
+        if (!redeem_addr_str)
+        {
+            log_debug(dstate->base_log, "Not defined!");
+            continue;
+        }
+
+        if (!bitcoin_from_base58(&istestnet, addr, redeem_addr_str,
+            strlen(redeem_addr_str)))
+        {
+            log_debug(dstate->base_log, "Invalid redeem address %s", redeem_addr_str);
+            continue;
+        }
+
+        if (istestnet != dstate->testnet)
+        {   
+            log_debug(dstate->base_log,  "Not match for the nettype: is %s address", 
+                (istestnet ? "[testnet]" : "[mainnet]"));
+            continue;
+        }
+
+        return true;
+    }
+
+}
+
+/* 3 modes: 1 for native P2WPKH, 2 for P2SH-P2WPKH, other (e.g.: 0) for P2PKH*/
+static u8 *gen_redeemscript_from_wallet_str(const tal_t *ctx, 
+              struct bitcoin_address *addr, int mode)
+{
+    switch (mode)
+    {
+    case 1:
+        return bitcoin_redeem_p2wpkh_by_addr(ctx, addr);
+    case 2:
+        return scriptpubkey_p2sh_p2wpkh(ctx, addr); 
+    default:              
+        return scriptpubkey_p2pkh(ctx, addr); 
+    }
+
+}
+
 /* Crypto is on, we are live. */
 static struct io_plan *peer_crypto_on(struct io_conn *conn, struct peer *peer)
 {
+    struct bitcoin_address redeem_addr;
+
 	peer_secrets_init(peer);
+
+    /*init redeem script before save peer into db and after the secret is done*/
+    if (select_wallet_address_bystr(peer->dstate, &redeem_addr))
+        peer->final_redeemscript = /*now only use p2pkh script*/
+            gen_redeemscript_from_wallet_str(peer, &redeem_addr, 0);
+    else
+        peer->final_redeemscript = scriptpubkey_p2sh(peer, 
+            bitcoin_redeem_single(peer, &peer->local.finalkey));
+
+    log_debug(peer->log, "set redeem script as {%s}", 
+        tal_hexstr(peer, peer->final_redeemscript, tal_count(peer->final_redeemscript)));
 
 	peer_get_revocation_hash(peer, 0, &peer->local.next_revocation_hash);
 
@@ -2731,6 +2813,7 @@ struct peer *new_peer(struct lightningd_state *dstate,
 	peer->id = NULL;
 	peer->dstate = dstate;
 	peer->io_data = NULL;
+    peer->final_redeemscript = NULL;
 	peer->secrets = NULL;
 	list_head_init(&peer->watches);
 	peer->inpkt = NULL;
@@ -3526,9 +3609,9 @@ static const struct bitcoin_tx *htlc_timeout_tx(const struct peer *peer,
 
 	/* Using a new output address here would be useless: they can tell
 	 * it's our HTLC, and that we collected it via timeout. */
-	tx->output[0].script = scriptpubkey_p2sh(tx,
+    tx->output[0].script = peer->final_redeemscript;/*scriptpubkey_p2sh(tx,
 				 bitcoin_redeem_single(tx,
-						       &peer->local.finalkey));
+						       &peer->local.finalkey));*/
 	tx->output[0].script_length = tal_count(tx->output[0].script);
 
 	log_unusual(peer->log, "Pre-witness txlen = %zu\n",
@@ -4103,9 +4186,9 @@ static void resolve_their_steal(struct peer *peer,
 		return;
 	}
 	steal_tx->output[0].amount = input_total - fee;
-	steal_tx->output[0].script = scriptpubkey_p2sh(steal_tx,
+    steal_tx->output[0].script = peer->final_redeemscript;/* scriptpubkey_p2sh(steal_tx,
 				 bitcoin_redeem_single(steal_tx,
-						       &peer->local.finalkey));
+						       &peer->local.finalkey));*/
 	steal_tx->output[0].script_length = tal_count(steal_tx->output[0].script);
 
 	/* Now, we can sign them all (they're all of same form). */

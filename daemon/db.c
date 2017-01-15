@@ -972,6 +972,7 @@ static void db_load_peers(struct lightningd_state *dstate)
 		peer->htlc_id_counter = 0;
 		peer->id = tal_dup(peer, struct pubkey, &id);
 		peer->local.commit_fee_rate = sqlite3_column_int64(stmt, 3);
+        peer->final_redeemscript = tal_sql_blob(peer, stmt, 4);
 		peer->order_counter = 1;
 		log_debug(peer->log, "%s:%s",
 			  __func__, state_name(peer->state));
@@ -1328,6 +1329,7 @@ void db_init(struct lightningd_state *dstate)
 		TABLE(peers,
 		      SQL_PUBKEY(peer), SQL_STATENAME(state),
 		      SQL_BOOL(offered_anchor), SQL_U32(our_feerate),
+              SQL_BLOB(redeem_script),
 		      "PRIMARY KEY(peer)")
 		TABLE(version, "version VARCHAR(100)"));
 	db_exec(__func__, dstate, "INSERT INTO version VALUES ('"VERSION"');");
@@ -1432,12 +1434,22 @@ void db_create_peer(struct peer *peer)
 
 	log_debug(peer->log, "%s(%s)", __func__, peerid);
 	assert(peer->dstate->db->in_transaction);
-	db_exec(__func__, peer->dstate,
-		"INSERT INTO peers VALUES (x'%s', '%s', %s, %"PRIi64");",
-		peerid,
-		state_name(peer->state),
-		sql_bool(peer->local.offer_anchor),
-		peer->local.commit_fee_rate);
+    if(peer->final_redeemscript)
+	    db_exec(__func__, peer->dstate,
+		    "INSERT INTO peers VALUES (x'%s', '%s', %s, %"PRIi64", x'%s');",
+		    peerid,
+		    state_name(peer->state),
+		    sql_bool(peer->local.offer_anchor),
+		    peer->local.commit_fee_rate,
+ 		    tal_hexstr(ctx, peer->final_redeemscript,
+			    tal_count(peer->final_redeemscript)));
+    else
+	    db_exec(__func__, peer->dstate,
+		    "INSERT INTO peers VALUES (x'%s', '%s', %s, %"PRIi64", NULL);",
+		    peerid,
+		    state_name(peer->state),
+		    sql_bool(peer->local.offer_anchor),
+		    peer->local.commit_fee_rate);
 
 	db_exec(__func__, peer->dstate,
 		"INSERT INTO peer_secrets VALUES (x'%s', %s);",
@@ -1454,6 +1466,8 @@ void db_create_peer(struct peer *peer)
 			peer->anchor.input->in_amount,
 			peer->anchor.input->out_amount,
 			pubkey_to_hexstr(ctx, &peer->anchor.input->walletkey));
+
+
 
 	tal_free(ctx);
 }

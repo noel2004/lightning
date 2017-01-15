@@ -13,6 +13,13 @@ struct peer;
 struct bitcoin_block;
 /* -datadir arg for bitcoin-cli. */
 extern char *bitcoin_datadir;
+/* A default redeem bitcoin address*/
+extern char *bitcoin_redeem_address;
+
+void bitcoind_getaccount_address_(
+				struct lightningd_state *dstate,
+				void(*cb)(struct lightningd_state *dstate, char *),
+				void *arg);
 
 void bitcoind_estimate_fee_(struct lightningd_state *dstate,
 			    void (*cb)(struct lightningd_state *dstate,

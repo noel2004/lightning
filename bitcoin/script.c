@@ -3,6 +3,7 @@
 #include "script.h"
 #include "signature.h"
 #include "tx.h"
+#include "address.h"
 #include <assert.h>
 #include <ccan/crypto/ripemd160/ripemd160.h>
 #include <ccan/crypto/sha256/sha256.h>
@@ -210,6 +211,16 @@ u8 *bitcoin_redeem_p2wpkh(const tal_t *ctx, const struct pubkey *key)
 	return script;
 }
 
+u8 *bitcoin_redeem_p2wpkh_by_addr(const tal_t *ctx, const struct bitcoin_address *addr)
+{
+	u8 *script = tal_arr(ctx, u8, 0);
+	/* BIP141: BIP16 redeemScript pushed in the scriptSig is exactly a
+	* push of a version byte plus a push of a witness program. */
+	add_number(&script, 0);
+	add_push_bytes(&script, &addr->addr, sizeof(addr->addr));
+	return script;
+}
+
 /* Create an input which spends the p2sh-p2wpkh. */
 void bitcoin_witness_p2sh_p2wpkh(const tal_t *ctx,
 				 struct bitcoin_tx_input *input,
@@ -257,6 +268,29 @@ u8 *scriptpubkey_p2wpkh(const tal_t *ctx, const struct pubkey *key)
 	hash160(&h, der, sizeof(der));
 	add_push_bytes(&script, &h, sizeof(h));
 	return script;
+}
+
+/* Create an output script using p2pkh for this redeem script. */
+u8 *scriptpubkey_p2pkh(const tal_t *ctx, const struct bitcoin_address *addr)
+{
+    u8 *script = tal_arr(ctx, u8, 0);
+
+    add_op(&script, OP_DUP);
+    add_op(&script, OP_HASH160);
+    add_push_bytes(&script, &addr->addr, sizeof(addr->addr));
+    add_op(&script, OP_EQUALVERIFY);
+    add_op(&script, OP_CHECKSIG);
+    return script;
+}
+
+/* Create an output script using p2sh-p2wpkh for this redeem script. */
+u8 *scriptpubkey_p2sh_p2wpkh(const tal_t *ctx, const struct bitcoin_address *addr)
+{
+    u8 *redeemscript = bitcoin_redeem_p2wpkh_by_addr(ctx, addr);
+    u8 *script = scriptpubkey_p2sh(ctx, redeemscript);
+
+    tal_free(redeemscript);
+    return script;
 }
 
 /* Create a witness which spends the 2of2. */
@@ -395,6 +429,7 @@ u8 *bitcoin_redeem_htlc_recv(const tal_t *ctx,
 	return script;
 }
 
+
 /* Create scriptcode (fake witness, basically) for P2WPKH */
 u8 *p2wpkh_scriptcode(const tal_t *ctx, const struct pubkey *key)
 {
@@ -422,6 +457,7 @@ u8 *p2wpkh_scriptcode(const tal_t *ctx, const struct pubkey *key)
 
 	return script;
 }
+
 
 bool is_p2pkh(const u8 *script, size_t script_len)
 {

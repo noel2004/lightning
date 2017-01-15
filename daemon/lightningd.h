@@ -80,6 +80,9 @@ struct lightningd_state {
 	char *config_dir;
 	char *rpc_filename;
 
+    /* A default redeem address*/
+    char *default_redeem_address;
+
 	/* Port we're listening on */
 	u16 portnum;
 

@@ -5,6 +5,7 @@
 struct lightningd_state;
 struct bitcoin_tx;
 struct bitcoin_tx_output;
+struct bitcoin_address;
 
 bool restore_wallet_address(struct lightningd_state *dstate,
 			    const struct privkey *privkey);

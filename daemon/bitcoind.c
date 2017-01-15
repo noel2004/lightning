@@ -23,6 +23,7 @@
 #define BITCOIN_CLI "bitcoin-cli"
 
 char *bitcoin_datadir;
+char *bitcoin_redeem_address;
 
 static char **gather_args(struct lightningd_state *dstate,
 			  const tal_t *ctx, const char *cmd, va_list ap)
@@ -464,4 +465,12 @@ void bitcoind_getblockhash_(struct lightningd_state *dstate,
 
 	start_bitcoin_cli(dstate, NULL, process_getblockhash, false, cb, arg,
 			  "getblockhash", str, NULL);
+}
+
+void bitcoind_getaccount_address_(
+				struct lightningd_state *dstate,
+				void(*cb)(struct lightningd_state *dstate, char *),
+				void *arg)
+{
+	/*TODO: update the global redeem address*/
 }
