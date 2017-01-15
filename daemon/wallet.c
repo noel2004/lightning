@@ -171,8 +171,6 @@ static void json_payback(struct command *cmd,
 		return;
 	}
 
-    log_debug(cmd->dstate->base_log, "dbg-payback phase 1");
-
     redeem_addr_str = addrstr ? tal_strndup(cmd, buffer + addrstr->start,
         addrstr->end - addrstr->start) : cmd->dstate->default_redeem_address;
     if (!redeem_addr_str)
@@ -180,8 +178,6 @@ static void json_payback(struct command *cmd,
         command_fail(cmd, "No default redeem address specified");
         return;
     }
-
-    log_debug(cmd->dstate->base_log, "dbg-payback phase 2");
 
     if (!bitcoin_from_base58(&istestnet, &redeem_addr, redeem_addr_str,
         strlen(redeem_addr_str)))
@@ -217,8 +213,6 @@ static void json_payback(struct command *cmd,
 		return;
 	}
 
-    log_debug(cmd->dstate->base_log, "dbg-payback phase 3");
-
 	/* construct the payback tx and broadcast */
 	txout = bitcoin_tx(cmd, 1, 1);
 
@@ -227,9 +221,6 @@ static void json_payback(struct command *cmd,
         scriptpubkey_p2pkh(cmd, &redeem_addr);        
 
     txout->output[0].script_length = tal_count(txout->output[0].script);
-
-    log_debug(cmd->dstate->base_log, "dbg-payback phase 4: output script is %s",
-        tal_hexstr(cmd, txout->output[0].script, txout->output[0].script_length));
 
     bitcoin_txid(tx, &txout->input[0].txid);
     txout->input[0].index = output;
@@ -244,16 +235,12 @@ static void json_payback(struct command *cmd,
     }
 
     txout->output[0].amount = *txout->input[0].amount - fee;
-    log_debug(cmd->dstate->base_log, "dbg-payback phase 5: calculate output as %"PRIu64,
-        txout->output[0].amount);
 
     if (!wallet_add_signed_input(cmd->dstate, &walletpubkey, txout, 0))
     {
         command_fail(cmd, "Sign tx input failed");
         return;
     }
-
-    log_debug(cmd->dstate->base_log, "dbg-payback phase 6");
 
     /* all done, just output the raw transaction */
     rawtransaction = linearize_tx(cmd, txout);
