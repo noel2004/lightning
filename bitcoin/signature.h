@@ -5,6 +5,12 @@
 #include <secp256k1.h>
 #include <stdbool.h>
 
+struct sha256_double;
+struct bitcoin_tx;
+struct pubkey;
+struct privkey;
+struct bitcoin_tx_output;
+
 enum sighash_type {
     SIGHASH_ALL = 1,
     SIGHASH_NONE = 2,
@@ -12,48 +18,36 @@ enum sighash_type {
     SIGHASH_ANYONECANPAY = 0x80
 };
 
-/* ECDSA of double SHA256. */
-struct signature {
-	secp256k1_ecdsa_signature sig;
-};
-
-struct sha256_double;
-struct bitcoin_tx;
-struct pubkey;
-struct privkey;
-struct bitcoin_tx_output;
-struct bitcoin_signature;
-
 void sign_hash(const struct privkey *p,
 	       const struct sha256_double *h,
-	       struct signature *s);
+	       secp256k1_ecdsa_signature *s);
 
 bool check_signed_hash(const struct sha256_double *hash,
-		       const struct signature *signature,
+		       const secp256k1_ecdsa_signature *signature,
 		       const struct pubkey *key);
 
 /* All tx input scripts must be set to 0 len. */
 void sign_tx_input(struct bitcoin_tx *tx,
 		   unsigned int in,
-		   const u8 *subscript, size_t subscript_len,
+		   const u8 *subscript,
 		   const u8 *witness,
 		   const struct privkey *privkey, const struct pubkey *pubkey,
-		   struct signature *sig);
+		   secp256k1_ecdsa_signature *sig);
 
 /* Does this sig sign the tx with this input for this pubkey. */
 bool check_tx_sig(struct bitcoin_tx *tx, size_t input_num,
-		  const u8 *redeemscript, size_t redeemscript_len,
+		  const u8 *redeemscript,
 		  const u8 *witness,
 		  const struct pubkey *key,
-		  const struct bitcoin_signature *sig);
+		  const secp256k1_ecdsa_signature *sig);
 
 /* Signature must have low S value. */
-bool sig_valid(const struct signature *sig);
+bool sig_valid(const secp256k1_ecdsa_signature *sig);
 
 /* Give DER encoding of signature: returns length used (<= 72). */
-size_t signature_to_der(u8 der[72], const struct signature *s);
+size_t signature_to_der(u8 der[72], const secp256k1_ecdsa_signature *s);
 
 /* Parse DER encoding into signature sig */
-bool signature_from_der(const u8 *der, size_t len, struct signature *sig);
+bool signature_from_der(const u8 *der, size_t len, secp256k1_ecdsa_signature *sig);
 
 #endif /* LIGHTNING_BITCOIN_SIGNATURE_H */

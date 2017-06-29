@@ -46,6 +46,12 @@ parse_cmdline()
 		    exit 1
 		fi
 		;;
+	    x"--gdb1="*)
+		DAEMON1_EXTRA=--dev-debugger=${1#--gdb1=}
+		;;
+	    x"--gdb2="*)
+		DAEMON2_EXTRA=--dev-debugger=${1#--gdb2=}
+		;;
 	    x"--reconnect")
 		RECONNECT=reconnect
 		;;
@@ -122,26 +128,27 @@ EOF
     [ $NUM_LIGHTNINGD = 2 ] || echo port=`findport 4010 $VARIANT` >> $DIR3/config
 }
 
-# Use DIR REDIR REDIRERR GDBFLAG
+# Use DIR REDIR REDIRERR GDBFLAG BINARY EXTRAARGS
 start_one_lightningd()
 {
     # Need absolute path for re-exec testing.
     local CMD
-    CMD="$(readlink -f `pwd`/../lightningd) --lightning-dir=$1"
+    CMD="$(readlink -f `pwd`/../../$5) --lightning-dir=$1"
     if [ -n "$4" ]; then
-	echo Press return once you run: gdb --args $CMD >&2
+	echo Press return once you run: gdb --args $CMD $6 >&2
 
 	read REPLY
     else
 	CMD="$PREFIX $CMD"
-	$CMD > $2 2> $3 &
+	$CMD $6 > $2 2> $3 &
     fi
-    echo $CMD
+    echo $CMD $6
 }
 
 start_lightningd()
 {
     NUM_LIGHTNINGD=$1
+    BINARY=${2:-daemon/lightningd}
 
     # If bitcoind not already running, start it.
     if ! $CLI getinfo >/dev/null 2>&1; then
@@ -152,9 +159,9 @@ start_lightningd()
 	SHUTDOWN_BITCOIN=/bin/true
     fi
 
-    LIGHTNINGD1=`start_one_lightningd $DIR1 $REDIR1 $REDIRERR1 "$GDB1"`
-    LIGHTNINGD2=`start_one_lightningd $DIR2 $REDIR2 $REDIRERR2 "$GDB2"`
-    [ $NUM_LIGHTNINGD = 2 ] || LIGHTNINGD3=`start_one_lightningd $DIR3 $REDIR3 $REDIRERR3 "$GDB3"`
+    LIGHTNINGD1=`start_one_lightningd $DIR1 $REDIR1 $REDIRERR1 "$GDB1" $BINARY $DAEMON1_EXTRA`
+    LIGHTNINGD2=`start_one_lightningd $DIR2 $REDIR2 $REDIRERR2 "$GDB2" $BINARY $DAEMON2_EXTRA`
+    [ $NUM_LIGHTNINGD = 2 ] || LIGHTNINGD3=`start_one_lightningd $DIR3 $REDIR3 $REDIRERR3 "$GDB3" $BINARY`
 
     if ! check "$LCLI1 getlog 2>/dev/null | $FGREP Hello"; then
 	echo Failed to start daemon 1 >&2
@@ -186,7 +193,10 @@ start_lightningd()
 
     PORT2=`get_info_field "$LCLI2" port`
     [ $NUM_LIGHTNINGD = 2 ] || PORT3=`get_info_field "$LCLI3" port`
+}
 
+fund_lightningd()
+{
     # Make a payment into a P2SH for anchor.
     P2SHADDR=`$LCLI1 newaddr | sed -n 's/{ "address" : "\(.*\)" }/\1/p'`
     FUND_INPUT_TXID=`$CLI sendtoaddress $P2SHADDR 0.01`
@@ -303,6 +313,12 @@ all_ok()
     trap "rm -rf $DIR1 $DIR2 $DIR3" EXIT
     exit 0
 }
+
+# If result is in quotes, those are stripped.  Spaces in quotes not handled
+get_field()
+{
+    tr -s '\012\011" ' ' ' | sed 's/.* '$1' : \([^, }]*\).*/\1/'
+}    
 
 # If result is in quotes, those are stripped.  Spaces in quotes not handled
 get_info_field()

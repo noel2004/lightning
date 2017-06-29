@@ -5,11 +5,11 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include "address.h"
 #include "base58.h"
+#include "libbase58/libbase58.h"
 #include "privkey.h"
 #include "pubkey.h"
 #include "shadouble.h"
 #include "utils.h"
-#include "libbase58/libbase58.h"
 #include <assert.h>
 #include <ccan/build_assert/build_assert.h>
 #include <ccan/tal/str/str.h>
@@ -53,15 +53,17 @@ static bool from_base58(u8 *version,
 			const char *base58, size_t base58_len)
 {
 	u8 buf[1 + sizeof(*rmd) + 4];
-
+	/* Avoid memcheck complaining if decoding resulted in a short value */
+	memset(buf, 0, sizeof(buf));
 	b58_sha256_impl = my_sha256;
 
 	size_t buflen = sizeof(buf);
 	b58tobin(buf, &buflen, base58, base58_len);
-	int r = b58check(buf, sizeof(buf), base58, base58_len);
+
+	int r = b58check(buf, buflen, base58, base58_len);
 	*version = buf[0];
 	memcpy(rmd, buf + 1, sizeof(*rmd));
-	return r > 0;
+	return r >= 0;
 }
 
 bool bitcoin_from_base58(bool *test_net,
@@ -114,10 +116,11 @@ char *key_to_base58(const tal_t *ctx, bool test_net, const struct privkey *key)
 	u8 version = test_net ? 239 : 128;
 	size_t outlen = sizeof(out);
 
-	memcpy(buf, key->secret, sizeof(key->secret));
+	memcpy(buf, key->secret.data, sizeof(key->secret.data));
 	/* Mark this as a compressed key. */
 	buf[32] = 1;
 
+	b58_sha256_impl = my_sha256;
 	b58check_enc(out, &outlen, version, buf, sizeof(buf));
 	return tal_strdup(ctx, out);
 }
@@ -128,6 +131,8 @@ bool key_from_base58(const char *base58, size_t base58_len,
 	// 1 byte version, 32 byte private key, 1 byte compressed, 4 byte checksum
 	u8 keybuf[1 + 32 + 1 + 4];
 	size_t keybuflen = sizeof(keybuf);
+
+	b58_sha256_impl = my_sha256;
 
 	b58tobin(keybuf, &keybuflen, base58, base58_len);
 	if (b58check(keybuf, sizeof(keybuf), base58, base58_len) < 0)
@@ -145,9 +150,9 @@ bool key_from_base58(const char *base58, size_t base58_len,
 		return false;
 
 	/* Copy out secret. */
-	memcpy(priv->secret, keybuf + 1, sizeof(priv->secret));
+	memcpy(priv->secret.data, keybuf + 1, sizeof(priv->secret.data));
 
-	if (!secp256k1_ec_seckey_verify(secp256k1_ctx, priv->secret))
+	if (!secp256k1_ec_seckey_verify(secp256k1_ctx, priv->secret.data))
 		return false;
 
 	/* Get public key, too. */

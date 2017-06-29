@@ -1,3 +1,4 @@
+#include "bitcoin/preimage.h"
 #include "bitcoin/script.h"
 #include "bitcoin/tx.h"
 #include "chaintopology.h"
@@ -10,6 +11,7 @@
 #include "names.h"
 #include "packets.h"
 #include "peer.h"
+#include "peer_internal.h"
 #include "protobuf_convert.h"
 #include "secrets.h"
 #include "state.h"
@@ -111,7 +113,7 @@ void queue_pkt_open_commit_sig(struct peer *peer)
 
 	open_commit_sig__init(s);
 
-	s->sig = signature_to_proto(s, &peer->remote.commit->sig->sig);
+	s->sig = signature_to_proto(s, peer->remote.commit->sig);
 
 	queue_pkt(peer, PKT__PKT_OPEN_COMMIT_SIG, s);
 }
@@ -151,7 +153,7 @@ void queue_pkt_htlc_fulfill(struct peer *peer, struct htlc *htlc)
 
 	update_fulfill_htlc__init(f);
 	f->id = htlc->id;
-	f->r = rval_to_proto(f, htlc->r);
+	f->r = preimage_to_proto(f, htlc->r);
 
 	queue_pkt(peer, PKT__PKT_UPDATE_FULFILL_HTLC, f);
 }
@@ -183,14 +185,14 @@ void queue_pkt_feechange(struct peer *peer, u64 feerate)
 }
 
 /* OK, we're sending a signature for their pending changes. */
-void queue_pkt_commit(struct peer *peer, const struct bitcoin_signature *sig)
+void queue_pkt_commit(struct peer *peer, const secp256k1_ecdsa_signature *sig)
 {
 	UpdateCommit *u = tal(peer, UpdateCommit);
 
 	/* Now send message */
 	update_commit__init(u);
 	if (sig)
-		u->sig = signature_to_proto(u, &sig->sig);
+		u->sig = signature_to_proto(u, sig);
 	else
 		u->sig = NULL;
 
@@ -277,7 +279,7 @@ void queue_pkt_close_signature(struct peer *peer)
 {
 	CloseSignature *c = tal(peer, CloseSignature);
 	struct bitcoin_tx *close_tx;
-	struct signature our_close_sig;
+	secp256k1_ecdsa_signature our_close_sig;
 
 	close_signature__init(c);
 	close_tx = peer_create_close_tx(c, peer, peer->closing.our_fee);
@@ -303,7 +305,7 @@ Pkt *accept_pkt_open(struct peer *peer, const Pkt *pkt,
 {
 	struct rel_locktime locktime;
 	const OpenChannel *o = pkt->open;
-	u64 feerate = get_feerate(peer->dstate);
+	u64 feerate = get_feerate(peer->dstate->topology);
 
 	if (!proto_to_rel_locktime(o->delay, &locktime))
 		return pkt_err(peer, "Invalid delay");
@@ -368,14 +370,12 @@ Pkt *accept_pkt_anchor(struct peer *peer, const Pkt *pkt)
 }
 
 Pkt *accept_pkt_open_commit_sig(struct peer *peer, const Pkt *pkt,
-				struct bitcoin_signature *sig)
+				secp256k1_ecdsa_signature *sig)
 {
 	const OpenCommitSig *s = pkt->open_commit_sig;
 
-	if (!proto_to_signature(s->sig, &sig->sig))
+	if (!proto_to_signature(s->sig, sig))
 		return pkt_err(peer, "Malformed signature");
-
-	sig->stype = SIGHASH_ALL;
 	return NULL;
 }
 
@@ -478,7 +478,7 @@ Pkt *accept_pkt_htlc_fail(struct peer *peer, const Pkt *pkt, struct htlc **h,
 }
 
 Pkt *accept_pkt_htlc_fulfill(struct peer *peer, const Pkt *pkt, struct htlc **h,
-			     struct rval *r)
+			     struct preimage *r)
 {
 	const UpdateFulfillHtlc *f = pkt->update_fulfill_htlc;
 	struct sha256 rhash;
@@ -489,7 +489,7 @@ Pkt *accept_pkt_htlc_fulfill(struct peer *peer, const Pkt *pkt, struct htlc **h,
 		return err;
 
 	/* Now, it must solve the HTLC rhash puzzle. */
-	proto_to_rval(f->r, r);
+	proto_to_preimage(f->r, r);
 	sha256(&rhash, r, sizeof(*r));
 
 	if (!structeq(&rhash, &(*h)->rhash))
@@ -507,7 +507,7 @@ Pkt *accept_pkt_update_fee(struct peer *peer, const Pkt *pkt, u64 *feerate)
 }
 
 Pkt *accept_pkt_commit(struct peer *peer, const Pkt *pkt,
-		       struct bitcoin_signature *sig)
+		       secp256k1_ecdsa_signature *sig)
 {
 	const UpdateCommit *c = pkt->update_commit;
 
@@ -520,8 +520,7 @@ Pkt *accept_pkt_commit(struct peer *peer, const Pkt *pkt,
 	if (!sig && !c->sig)
 		return NULL;
 
-	sig->stype = SIGHASH_ALL;
-	if (!proto_to_signature(c->sig, &sig->sig))
+	if (!proto_to_signature(c->sig, sig))
 		return pkt_err(peer, "Malformed signature");
 	return NULL;
 }
@@ -571,6 +570,10 @@ Pkt *accept_pkt_close_shutdown(struct peer *peer, const Pkt *pkt)
 {
 	const CloseShutdown *c = pkt->close_shutdown;
 
+	peer->closing.their_script = tal_dup_arr(peer, u8,
+						 c->scriptpubkey.data,
+						 c->scriptpubkey.len, 0);
+
 	/* FIXME-OLD #2:
 	 *
 	 * 1. `OP_DUP` `OP_HASH160` `20` 20-bytes `OP_EQUALVERIFY` `OP_CHECKSIG`
@@ -582,17 +585,15 @@ Pkt *accept_pkt_close_shutdown(struct peer *peer, const Pkt *pkt)
 	 * A node receiving `close_shutdown` SHOULD fail the connection
 	 * `script_pubkey` is not one of those forms.
 	 */
-	if (!is_p2pkh(c->scriptpubkey.data, c->scriptpubkey.len)
-	    && !is_p2sh(c->scriptpubkey.data, c->scriptpubkey.len)
-	    && !is_p2wpkh(c->scriptpubkey.data, c->scriptpubkey.len)
-	    && !is_p2wsh(c->scriptpubkey.data, c->scriptpubkey.len)) {
+	if (!is_p2pkh(peer->closing.their_script)
+	    && !is_p2sh(peer->closing.their_script)
+	    && !is_p2wpkh(peer->closing.their_script)
+	    && !is_p2wsh(peer->closing.their_script)) {
 		log_broken_blob(peer->log, "Bad script_pubkey %s",
-				c->scriptpubkey.data, c->scriptpubkey.len);
+				peer->closing.their_script,
+				tal_count(peer->closing.their_script));
 		return pkt_err(peer, "Bad script_pubkey");
 	}
 
-	peer->closing.their_script = tal_dup_arr(peer, u8,
-						 c->scriptpubkey.data,
-						 c->scriptpubkey.len, 0);
 	return NULL;
 }

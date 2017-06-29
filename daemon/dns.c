@@ -18,6 +18,7 @@
 struct dns_async {
 	struct lightningd_state *dstate;
 	struct io_plan *(*init)(struct io_conn *, struct lightningd_state *,
+				const struct netaddr *,
 				void *);
 	void (*fail)(struct lightningd_state *, void *arg);
 	const char *name;
@@ -76,7 +77,7 @@ static struct io_plan *connected(struct io_conn *conn, struct dns_async *d)
 	/* No longer need to try more connections via connect_failed. */
 	io_set_finish(conn, NULL, NULL);
 
-	plan = d->init(conn, d->dstate, d->arg);
+	plan = d->init(conn, d->dstate, &d->addresses[-1], d->arg);
 	tal_free(d);
 
 	return plan;
@@ -153,6 +154,29 @@ static struct io_plan *start_connecting(struct io_conn *conn,
 	return io_close(conn);
 }
 
+struct dns_async *multiaddress_connect_(struct lightningd_state *dstate,
+		  const struct netaddr *addresses,
+		  struct io_plan *(*init)(struct io_conn *,
+					  struct lightningd_state *,
+					  const struct netaddr *,
+					  void *arg),
+		  void (*fail)(struct lightningd_state *, void *arg),
+		  void *arg)
+{
+	struct dns_async *d = tal(dstate, struct dns_async);
+
+	d->dstate = dstate;
+	d->init = init;
+	d->fail = fail;
+	d->arg = arg;
+	d->name = "names from address list";
+	d->num_addresses = tal_count(addresses);
+	d->addresses = tal_dup_arr(d, struct netaddr, addresses,
+				   d->num_addresses, 0);
+	try_connect_one(d);
+	return d;
+}
+
 static struct io_plan *read_addresses(struct io_conn *conn, struct dns_async *d)
 {
 	d->addresses = tal_arr(d, struct netaddr, d->num_addresses);
@@ -178,6 +202,7 @@ struct dns_async *dns_resolve_and_connect_(struct lightningd_state *dstate,
 		  const char *name, const char *port,
 		  struct io_plan *(*init)(struct io_conn *,
 					  struct lightningd_state *,
+					  const struct netaddr *,
 					  void *arg),
 		  void (*fail)(struct lightningd_state *, void *arg),
 		  void *arg)

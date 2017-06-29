@@ -32,8 +32,8 @@ static struct lightningd_state *lightningd_state(void)
 {
 	struct lightningd_state *dstate = tal(NULL, struct lightningd_state);
 
-	dstate->log_record = new_log_record(dstate, 20*1024*1024, LOG_INFORM);
-	dstate->base_log = new_log(dstate, dstate->log_record,
+	dstate->log_book = new_log_book(dstate, 20*1024*1024, LOG_INFORM);
+	dstate->base_log = new_log(dstate, dstate->log_book,
 				   "lightningd(%u):", (int)getpid());
 
 	list_head_init(&dstate->peers);
@@ -41,23 +41,32 @@ static struct lightningd_state *lightningd_state(void)
 	dstate->portnum = 0;
 	dstate->testnet = true;
 	timers_init(&dstate->timers, time_mono());
-	txwatch_hash_init(&dstate->txwatches);
-	txowatch_hash_init(&dstate->txowatches);
-	list_head_init(&dstate->bitcoin_req);
 	list_head_init(&dstate->wallet);
 	list_head_init(&dstate->addresses);
 	dstate->dev_never_routefail = false;
-	dstate->dev_no_broadcast = false;
-	dstate->bitcoin_req_running = false;
-	dstate->nodes = empty_node_map(dstate);
+	dstate->rstate = new_routing_state(dstate, dstate->base_log);
     dstate->default_redeem_address = NULL;
 	dstate->reexec = NULL;
 	dstate->external_ip = NULL;
 	dstate->announce = NULL;
-	list_head_init(&dstate->broadcast_queue);
 	dstate->invoices = invoices_init(dstate);
 	return dstate;
 }
+
+static void json_lightningd_dev_broadcast(struct command *cmd,
+					  const char *buffer,
+					  const jsmntok_t *params)
+{
+	json_dev_broadcast(cmd, cmd->dstate->topology, buffer, params);
+}
+
+static const struct json_command dev_broadcast_command = {
+	"dev-broadcast",
+	json_lightningd_dev_broadcast,
+	"Pretend we broadcast txs, but don't send to bitcoind",
+	"Returns an empty result on success (waits for flush if enabled)"
+};
+AUTODATA(json_command, &dev_broadcast_command);
 
 int main(int argc, char *argv[])
 {
@@ -72,7 +81,11 @@ int main(int argc, char *argv[])
 	secp256k1_ctx = secp256k1_context_create(SECP256K1_CONTEXT_VERIFY
 						 | SECP256K1_CONTEXT_SIGN);
 
+	dstate->topology = new_topology(dstate, dstate->base_log);
+	dstate->bitcoind = new_bitcoind(dstate, dstate->base_log);
+
 	/* Handle options and config; move to .lightningd */
+	register_opts(dstate);
 	handle_opts(dstate, argc, argv);
 
 	/* Activate crash log now we're in the right place. */
@@ -83,13 +96,15 @@ int main(int argc, char *argv[])
 
 	/* Set up node ID and private key. */
 	secrets_init(dstate);
-	new_node(dstate, &dstate->id);
+	new_node(dstate->rstate, &dstate->id);
 
 	/* Read or create database. */
 	db_init(dstate);
 
 	/* Initialize block topology. */
-	setup_topology(dstate);
+	setup_topology(dstate->topology, dstate->bitcoind, &dstate->timers,
+		       dstate->config.poll_time,
+		       get_peer_min_block(dstate));
 
 	/* Create RPC socket (if any) */
 	setup_jsonrpc(dstate, dstate->rpc_filename);

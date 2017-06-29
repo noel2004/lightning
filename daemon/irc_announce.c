@@ -5,6 +5,7 @@
 #include "daemon/lightningd.h"
 #include "daemon/log.h"
 #include "daemon/peer.h"
+#include "daemon/peer_internal.h"
 #include "daemon/routing.h"
 #include "daemon/secrets.h"
 #include "daemon/timeout.h"
@@ -18,7 +19,7 @@ static void sign_privmsg(struct ircstate *state, struct privmsg *msg)
 {
 	int siglen;
 	u8 der[72];
-	struct signature sig;
+	secp256k1_ecdsa_signature sig;
 	privkey_sign(state->dstate, msg->msg, strlen(msg->msg), &sig);
 	siglen = signature_to_der(der, &sig);
 	msg->msg = tal_fmt(msg, "%s %s", tal_hexstr(msg, der, siglen), msg->msg);
@@ -28,7 +29,7 @@ static bool announce_channel(const tal_t *ctx, struct ircstate *state, struct pe
 {
 	char txid[65];
 	struct privmsg *msg = talz(ctx, struct privmsg);
-	struct txlocator *loc = locate_tx(ctx, state->dstate, &p->anchor.txid);
+	struct txlocator *loc = locate_tx(ctx, state->dstate->topology, &p->anchor.txid);
 
 	if (loc == NULL)
 		return false;
@@ -95,7 +96,7 @@ static void announce(struct ircstate *state)
 
 	/* By default we announce every 6 hours, otherwise when someone joins */
 	log_debug(state->log, "Setting long announce time: 6 hours");
-	state->dstate->announce = new_reltimer(state->dstate, state,
+	state->dstate->announce = new_reltimer(&state->dstate->timers, state,
 					       time_from_sec(3600 * 6),
 					       announce, state);
 }
@@ -105,7 +106,8 @@ static void handle_irc_disconnect(struct ircstate *state)
 {
 	/* Stop announcing. */
 	state->dstate->announce = tal_free(state->dstate->announce);
-	new_reltimer(state->dstate, state, state->reconnect_timeout, irc_connect, state);
+	new_reltimer(&state->dstate->timers, state, state->reconnect_timeout,
+		     irc_connect, state);
 }
 
 /* Verify a signed privmsg */
@@ -114,7 +116,7 @@ static bool verify_signed_privmsg(
 	const struct pubkey *pk,
 	const struct privmsg *msg)
 {
-	struct signature sig;
+	secp256k1_ecdsa_signature sig;
 	struct sha256_double hash;
 	const char *m = msg->msg + 1;
 	int siglen = strchr(m, ' ') - m;
@@ -131,7 +133,7 @@ static bool verify_signed_privmsg(
 	return check_signed_hash(&hash, &sig, pk);
 }
 
-static void handle_channel_announcement(
+static void handle_irc_channel_announcement(
 	struct ircstate *istate,
 	const struct privmsg *msg,
 	char **splits)
@@ -165,19 +167,17 @@ static void handle_channel_announcement(
 	 * that the endpoints match.
 	 */
 
-	add_connection(istate->dstate, pk1, pk2, atoi(splits[6]),
+	add_connection(istate->dstate->rstate, pk1, pk2, atoi(splits[6]),
 		       atoi(splits[7]), atoi(splits[8]), 6);
 }
 
-static void handle_node_announcement(
+static void handle_irc_node_announcement(
 	struct ircstate *istate,
 	const struct privmsg *msg,
 	char **splits)
 {
 	struct pubkey *pk = talz(msg, struct pubkey);
-	char *hostname = tal_strdup(msg, splits[2]);
-	int port = atoi(splits[3]);
-	if (!pubkey_from_hexstr(splits[1], strlen(splits[1]), pk) || port < 1)
+	if (!pubkey_from_hexstr(splits[1], strlen(splits[1]), pk))
 		return;
 
 	if (!verify_signed_privmsg(istate, pk, msg)) {
@@ -189,7 +189,7 @@ static void handle_node_announcement(
 			splits[1]);
 	}
 
-	struct node *node = add_node(istate->dstate, pk, hostname, port);
+	struct node *node = add_node(istate->dstate->rstate, pk);
 	if (splits[4] != NULL){
 		tal_free(node->alias);
 		node->alias = tal_hexdata(node, splits[4], strlen(splits[4]));
@@ -215,9 +215,9 @@ static void handle_irc_privmsg(struct ircstate *istate, const struct privmsg *ms
 	char *type = splits[1];
 
 	if (splitcount == 10 && streq(type, "CHAN"))
-		handle_channel_announcement(istate, msg, splits + 1);
+		handle_irc_channel_announcement(istate, msg, splits + 1);
 	else if (splitcount >= 5 && streq(type, "NODE"))
-		handle_node_announcement(istate, msg, splits + 1);
+		handle_irc_node_announcement(istate, msg, splits + 1);
 }
 
 static void handle_irc_command(struct ircstate *istate, const struct irccommand *cmd)
@@ -231,8 +231,7 @@ static void handle_irc_command(struct ircstate *istate, const struct irccommand 
 		log_debug(dstate->base_log, "Detected my own IP as %s", dstate->external_ip);
 
 		// Add our node to the node_map for completeness
-		add_node(istate->dstate, &dstate->id,
-			 dstate->external_ip, dstate->portnum);
+		add_node(istate->dstate->rstate, &dstate->id);
 	} else if (streq(cmd->command, "JOIN")) {
 		unsigned int delay;
 
@@ -243,7 +242,7 @@ static void handle_irc_command(struct ircstate *istate, const struct irccommand 
 		delay = pseudorand(60000000);
 		log_debug(istate->log, "Setting new announce time %u sec",
 			  delay / 1000000);
-		dstate->announce = new_reltimer(dstate, istate,
+		dstate->announce = new_reltimer(&dstate->timers, istate,
 						time_from_usec(delay),
 						announce, istate);
 	}
@@ -267,7 +266,7 @@ void setup_irc_connection(struct lightningd_state *dstate)
 	state->dstate = dstate;
 	state->server = "irc.lfnet.org";
 	state->reconnect_timeout = time_from_sec(15);
-	state->log = new_log(state, state->dstate->log_record, "%s:irc",
+	state->log = new_log(state, state->dstate->log_book, "%s:irc",
 			     log_prefix(state->dstate->base_log));
 
 	/* Truncate nick at 13 bytes, would be imposed by freenode anyway */

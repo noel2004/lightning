@@ -9,24 +9,19 @@
 
 struct bitcoin_tx {
 	u32 version;
-	varint_t input_count;
 	struct bitcoin_tx_input *input;
-
-	varint_t output_count;
 	struct bitcoin_tx_output *output;
 	u32 lock_time;
 };
 
 struct bitcoin_tx_output {
 	u64 amount;
-	varint_t script_length;
 	u8 *script;
 };
 
 struct bitcoin_tx_input {
 	struct sha256_double txid;
 	u32 index; /* output number referred to by above */
-	varint_t script_length;
 	u8 *script;
 	u32 sequence_number;
 
@@ -43,8 +38,7 @@ void bitcoin_txid(const struct bitcoin_tx *tx, struct sha256_double *txid);
 
 /* Useful for signature code. */
 void sha256_tx_for_sig(struct sha256_double *h, const struct bitcoin_tx *tx,
-		       unsigned int input_num, enum sighash_type stype,
-		       const u8 *witness_script);
+		       unsigned int input_num, const u8 *witness_script);
 
 /* Linear bytes of tx. */
 u8 *linearize_tx(const tal_t *ctx, const struct bitcoin_tx *tx);

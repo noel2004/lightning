@@ -2,7 +2,6 @@
 #include <ccan/tal/tal.h>
 #include <ccan/compiler/compiler.h>
 #include <ccan/list/list.h>
-#include <ccan/take/take.h>
 #include <ccan/alignof/alignof.h>
 #include <assert.h>
 #include <stdio.h>
@@ -653,6 +652,9 @@ const char *tal_name(const tal_t *t)
 size_t tal_len(const tal_t *ptr)
 {
 	struct length *l;
+
+	if (!ptr)
+		return 0;
 
 	l = find_property(debug_tal(to_tal_hdr(ptr)), LENGTH);
 	if (!l)

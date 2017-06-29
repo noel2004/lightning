@@ -22,14 +22,14 @@ enum log_level {
 	LOG_BROKEN
 };
 
-/* We have a single record. */
-struct log_record *new_log_record(struct lightningd_state *dstate,
-				  size_t max_mem,
-				  enum log_level printlevel);
+/* We can have a single log book, with multiple logs in it. */
+struct log_book *new_log_book(const tal_t *ctx,
+			      size_t max_mem,
+			      enum log_level printlevel);
 
 /* With different entry points */
 struct log *PRINTF_FMT(3,4)
-new_log(const tal_t *ctx, struct log_record *record, const char *fmt, ...);
+new_log(const tal_t *ctx, struct log_book *record, const char *fmt, ...);
 
 #define log_debug(log, ...) log_((log), LOG_DBG, __VA_ARGS__)
 #define log_info(log, ...) log_((log), LOG_INFORM, __VA_ARGS__)
@@ -42,6 +42,7 @@ void log_(struct log *log, enum log_level level, const char *fmt, ...)
 	PRINTF_FMT(3,4);
 void log_add(struct log *log, const char *fmt, ...) PRINTF_FMT(2,3);
 void logv(struct log *log, enum log_level level, const char *fmt, va_list ap);
+void logv_add(struct log *log, const char *fmt, va_list ap);
 
 void log_blob_(struct log *log, int level, const char *fmt,
 	       size_t len, ...)
@@ -83,7 +84,8 @@ void PRINTF_FMT(4,5) log_struct_(struct log *log, int level,
 				 const char *structname,
 				 const char *fmt, ...);
 
-void set_log_level(struct log_record *lr, enum log_level level);
+enum log_level get_log_level(struct log_book *lr);
+void set_log_level(struct log_book *lr, enum log_level level);
 void set_log_prefix(struct log *log, const char *prefix);
 const char *log_prefix(const struct log *log);
 #define set_log_outfn(lr, print, arg)					\
@@ -94,16 +96,16 @@ const char *log_prefix(const struct log *log);
 					   bool,			\
 					   const char *), (arg))
 
-void set_log_outfn_(struct log_record *lr,
+void set_log_outfn_(struct log_book *lr,
 		    void (*print)(const char *prefix,
 				  enum log_level level,
 				  bool continued,
 				  const char *str, void *arg),
 		    void *arg);
 
-size_t log_max_mem(const struct log_record *lr);
-size_t log_used(const struct log_record *lr);
-const struct timeabs *log_init_time(const struct log_record *lr);
+size_t log_max_mem(const struct log_book *lr);
+size_t log_used(const struct log_book *lr);
+const struct timeabs *log_init_time(const struct log_book *lr);
 
 #define log_each_line(lr, func, arg)					\
 	log_each_line_((lr),						\
@@ -114,7 +116,7 @@ const struct timeabs *log_init_time(const struct log_record *lr);
 					   const char *,		\
 					   const char *), (arg))
 
-void log_each_line_(const struct log_record *lr,
+void log_each_line_(const struct log_book *lr,
 		    void (*func)(unsigned int skipped,
 				 struct timerel time,
 				 enum log_level level,
@@ -124,7 +126,7 @@ void log_each_line_(const struct log_record *lr,
 		    void *arg);
 
 
-void log_dump_to_file(int fd, const struct log_record *lr);
+void log_dump_to_file(int fd, const struct log_book *lr);
 void opt_register_logging(struct log *log);
 void crashlog_activate(struct log *log);
 

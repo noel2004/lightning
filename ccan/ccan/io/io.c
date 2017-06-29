@@ -392,12 +392,25 @@ void io_ready(struct io_conn *conn, int pollflags)
 
 void io_do_always(struct io_conn *conn)
 {
+	/* There's a corner case where the in next_plan wakes up the
+	 * out, placing it in IO_ALWAYS and we end up processing it immediately,
+	 * only to leave it in the always list.
+	 *
+	 * Yet we can't just process one, in case they are both supposed
+	 * to be done, so grab state beforehand.
+	 */
+	bool always_out = (conn->plan[IO_OUT].status == IO_ALWAYS);
+
 	if (conn->plan[IO_IN].status == IO_ALWAYS)
 		if (!next_plan(conn, &conn->plan[IO_IN]))
 			return;
 
-	if (conn->plan[IO_OUT].status == IO_ALWAYS)
+	if (always_out) {
+		/* You can't *unalways* a conn (except by freeing, in which
+		 * case next_plan() returned false */
+		assert(conn->plan[IO_OUT].status == IO_ALWAYS);
 		next_plan(conn, &conn->plan[IO_OUT]);
+	}
 }
 
 void io_do_wakeup(struct io_conn *conn, enum io_direction dir)
@@ -418,6 +431,14 @@ struct io_plan *io_close(struct io_conn *conn)
 
 struct io_plan *io_close_cb(struct io_conn *conn, void *next_arg)
 {
+	return io_close(conn);
+}
+
+struct io_plan *io_close_taken_fd(struct io_conn *conn)
+{
+	set_blocking(conn->fd.fd, true);
+
+	cleanup_conn_without_close(conn);
 	return io_close(conn);
 }
 
@@ -474,4 +495,38 @@ struct io_plan *io_set_plan(struct io_conn *conn, enum io_direction dir,
 	assert(next != NULL);
 
 	return plan;
+}
+
+bool io_flush_sync(struct io_conn *conn)
+{
+	struct io_plan *plan = &conn->plan[IO_OUT];
+	bool ok;
+
+	/* Not writing?  Nothing to do. */
+	if (plan->status != IO_POLLING)
+		return true;
+
+	/* Synchronous please. */
+	set_blocking(io_conn_fd(conn), true);
+
+again:
+	switch (plan->io(conn->fd.fd, &plan->arg)) {
+	case -1:
+		ok = false;
+		break;
+	/* Incomplete, try again. */
+	case 0:
+		goto again;
+	case 1:
+		ok = true;
+		/* In case they come back. */
+		set_always(conn, IO_OUT, plan->next, plan->next_arg);
+		break;
+	default:
+		/* IO should only return -1, 0 or 1 */
+		abort();
+	}
+
+	set_blocking(io_conn_fd(conn), false);
+	return ok;
 }

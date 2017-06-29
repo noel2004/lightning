@@ -7,12 +7,10 @@
 #include <ccan/short_types/short_types.h>
 #include <ccan/timer/timer.h>
 #include <stdio.h>
+#include <wire/wire.h>
 
 /* Various adjustable things. */
 struct config {
-	/* Are we on regtest? */
-	bool regtest;
-
 	/* How long do we want them to lock up their funds? (blocks) */
 	u32 locktime_blocks;
 
@@ -40,12 +38,6 @@ struct config {
 	/* Percent of fee rate we'll use. */
 	u32 commitment_fee_percent;
 
-	/* Force a partiular fee rate regardless of estimatefee (satoshis/kb) */
-	u64 override_fee_rate;
-
-	/* What fee we use if estimatefee fails (satoshis/kb) */
-	u64 default_fee_rate;
-
 	/* Minimum/maximum time for an expiring HTLC (blocks). */
 	u32 min_htlc_expiry, max_htlc_expiry;
 
@@ -67,12 +59,15 @@ struct config {
 
 	/* Whether to ignore database version. */
 	bool db_version_ignore;
+
+	/* IPv4 or IPv6 address to announce to the network */
+	struct ipaddr ipaddr;
 };
 
 /* Here's where the global variables hide! */
 struct lightningd_state {
 	/* Where all our logging goes. */
-	struct log_record *log_record;
+	struct log_book *log_book;
 	struct log *base_log;
 	FILE *logf;
 
@@ -99,7 +94,7 @@ struct lightningd_state {
 	struct timers timers;
 
 	/* Cached block topology. */
-	struct topology *topology;
+	struct chain_topology *topology;
 
 	/* Our peers. */
 	struct list_head peers;
@@ -111,18 +106,13 @@ struct lightningd_state {
 	struct list_head pay_commands;
 
 	/* Our private key */
-	struct secret *secret;
+	struct privkey *privkey;
 
 	/* This is us. */
 	struct pubkey id;
 
-	/* Transactions/txos we are watching. */
-	struct txwatch_hash txwatches;
-	struct txowatch_hash txowatches;
-
-	/* Outstanding bitcoind requests. */
-	struct list_head bitcoin_req;
-	bool bitcoin_req_running;
+	/* Our tame bitcoind. */
+	struct bitcoind *bitcoind;
 
 	/* Wallet addresses we maintain. */
 	struct list_head wallet;
@@ -130,14 +120,11 @@ struct lightningd_state {
 	/* Maintained by invoices.c */
 	struct invoices *invoices;
 
-	/* All known nodes. */
-	struct node_map *nodes;
+	/* Routing information */
+	struct routing_state *rstate;
 
 	/* For testing: don't fail if we can't route. */
 	bool dev_never_routefail;
-
-	/* For testing: don't broadcast txs (but pretend it worked)(. */
-	bool dev_no_broadcast;
 
 	/* Re-exec hack for testing. */
 	char **reexec;
@@ -147,8 +134,5 @@ struct lightningd_state {
 
 	/* Announce timer. */
 	struct oneshot *announce;
-
-	/* Outgoing messages queued for the staggered broadcast */
-	struct list_head broadcast_queue;
 };
 #endif /* LIGHTNING_DAEMON_LIGHTNING_H */

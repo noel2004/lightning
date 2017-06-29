@@ -7,11 +7,10 @@
 #include <stdbool.h>
 
 /* Convert to-from protobuf to internal representation. */
-struct signature;
 Signature *signature_to_proto(const tal_t *ctx,
-			      const struct signature *sig);
+			      const secp256k1_ecdsa_signature *sig);
 bool proto_to_signature(const Signature *pb,
-			struct signature *sig);
+			secp256k1_ecdsa_signature *sig);
 
 /* Convert to-from protobuf to internal representation. */
 struct pubkey;
@@ -24,11 +23,9 @@ struct sha256;
 Sha256Hash *sha256_to_proto(const tal_t *ctx, const struct sha256 *hash);
 void proto_to_sha256(const Sha256Hash *pb, struct sha256 *hash);
 
-struct rval {
-	u8 r[32];
-};
-Rval *rval_to_proto(const tal_t *ctx, const struct rval *r);
-void proto_to_rval(const Rval *pb, struct rval *r);
+struct preimage;
+Preimage *preimage_to_proto(const tal_t *ctx, const struct preimage *r);
+void proto_to_preimage(const Preimage *pb, struct preimage *r);
 
 struct rel_locktime;
 struct abs_locktime;

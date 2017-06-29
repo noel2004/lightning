@@ -6,8 +6,10 @@
 #include "log.h"
 #include "pay.h"
 #include "peer.h"
+#include "peer_internal.h"
 #include "routing.h"
 #include "sphinx.h"
+#include <bitcoin/preimage.h>
 #include <ccan/str/hex/hex.h>
 #include <ccan/structeq/structeq.h>
 #include <inttypes.h>
@@ -22,10 +24,10 @@ struct pay_command {
 	/* Set if this is in progress. */
 	struct htlc *htlc;
 	/* Preimage if this succeeded. */
-	const struct rval *rval;
+	const struct preimage *rval;
 	struct command *cmd;
 };
-static void json_pay_success(struct command *cmd, const struct rval *rval)
+static void json_pay_success(struct command *cmd, const struct preimage *rval)
 {
 	struct json_result *response;
 
@@ -83,7 +85,7 @@ static void check_routing_failure(struct lightningd_state *dstate,
 	/* Don't remove route if it's last node (obviously) */
 	for (i = 0; i+1 < tal_count(pc->ids); i++) {
 		if (structeq(&pc->ids[i], &id)) {
-			remove_connection(dstate, &pc->ids[i], &pc->ids[i+1]);
+			remove_connection(dstate->rstate, &pc->ids[i], &pc->ids[i+1]);
 			return;
 		}
 	}
@@ -106,7 +108,7 @@ void complete_pay_command(struct lightningd_state *dstate,
 			db_complete_pay_command(dstate, htlc);
 
 			if (htlc->r)
-				i->rval = tal_dup(i, struct rval, htlc->r);
+				i->rval = tal_dup(i, struct preimage, htlc->r);
 			else {
 				f = failinfo_unwrap(i->cmd, htlc->fail,
 						    tal_count(htlc->fail));
@@ -162,7 +164,7 @@ bool pay_add(struct lightningd_state *dstate,
 	     const struct pubkey *ids,
 	     struct htlc *htlc,
 	     const u8 *fail UNNEEDED,
-	     const struct rval *r)
+	     const struct preimage *r)
 {
 	struct pay_command *pc;
 
@@ -175,7 +177,7 @@ bool pay_add(struct lightningd_state *dstate,
 	pc->ids = tal_dup_arr(pc, struct pubkey, ids, tal_count(ids), 0);
 	pc->htlc = htlc;
 	if (r)
-		pc->rval = tal_dup(pc, struct rval, r);
+		pc->rval = tal_dup(pc, struct preimage, r);
 	else
 		pc->rval = NULL;
 	pc->cmd = NULL;
@@ -201,21 +203,16 @@ static void json_getroute(struct command *cmd,
 	struct pubkey id;
 	jsmntok_t *idtok, *msatoshitok, *riskfactortok;
 	struct json_result *response;
-	int i;
+	size_t i;
 	u64 msatoshi;
-	s64 fee;
 	double riskfactor;
-	struct node_connection **route;
-	struct peer *peer;
-	u64 *amounts, total_amount;
-	unsigned int total_delay, *delays;
 
 	if (!json_get_params(buffer, params,
 			     "id", &idtok,
 			     "msatoshi", &msatoshitok,
 			     "riskfactor", &riskfactortok,
 			     NULL)) {
-		command_fail(cmd, "Need id and msatoshi");
+		command_fail(cmd, "Need id, msatoshi and riskfactor");
 		return;
 	}
 
@@ -239,43 +236,19 @@ static void json_getroute(struct command *cmd,
 		return;
 	}
 
-	peer = find_route(cmd, cmd->dstate, &id, msatoshi, riskfactor,
-			  &fee, &route);
-	if (!peer) {
+	struct route_hop *hops = get_route(cmd, cmd->dstate->rstate, &cmd->dstate->id, &id, msatoshi, riskfactor);
+
+	if (!hops) {
 		command_fail(cmd, "no route found");
 		return;
 	}
 
-	/* Fees, delays need to be calculated backwards along route. */
-	amounts = tal_arr(cmd, u64, tal_count(route)+1);
-	delays = tal_arr(cmd, unsigned int, tal_count(route)+1);
-	total_amount = msatoshi;
-
-	total_delay = 0;
-	for (i = tal_count(route) - 1; i >= 0; i--) {
-		amounts[i+1] = total_amount;
-		total_amount += connection_fee(route[i], total_amount);
-
-		total_delay += route[i]->delay;
-		if (total_delay < route[i]->min_blocks)
-			total_delay = route[i]->min_blocks;
-		delays[i+1] = total_delay;
-	}
-	/* We don't charge ourselves any fees. */
-	amounts[0] = total_amount;
-	/* We do require delay though. */
-	total_delay += peer->nc->delay;
-	if (total_delay < peer->nc->min_blocks)
-		total_delay = peer->nc->min_blocks;
-	delays[0] = total_delay;
-
 	response = new_json_result(cmd);
 	json_object_start(response, NULL);
 	json_array_start(response, "route");
-	json_add_route(response, peer->id, amounts[0], delays[0]);
-	for (i = 0; i < tal_count(route); i++)
+	for (i = 0; i < tal_count(hops); i++)
 		json_add_route(response,
-			       &route[i]->dst->id, amounts[i+1], delays[i+1]);
+			       &hops[i].nodeid, hops[i].amount, hops[i].delay);
 	json_array_end(response);
 	json_object_end(response);
 	command_success(cmd, response);
@@ -367,11 +340,12 @@ static void json_sendpay(struct command *cmd,
 			/* What that hop will forward */
 			tal_resize(&hoppayloads, n_hops);
 			memset(&hoppayloads[n_hops-1], 0, sizeof(struct hoppayload));
-			if (!json_tok_u64(buffer, amttok, &hoppayloads[n_hops-1].amount)) {
+			if (!json_tok_u64(buffer, amttok, &hoppayloads[n_hops-1].amt_to_forward)) {
 				command_fail(cmd, "route %zu invalid msatoshi", n_hops);
 				return;
 			}
-			lastamount = hoppayloads[n_hops-1].amount;
+			/* FIXME: Populate outgoing_cltv_value */
+			lastamount = hoppayloads[n_hops-1].amt_to_forward;
 		}
 
 		tal_resize(&ids, n_hops+1);
@@ -442,9 +416,8 @@ static void json_sendpay(struct command *cmd,
 	randombytes_buf(&sessionkey, sizeof(sessionkey));
 
 	/* Onion will carry us from first peer onwards. */
-	packet = create_onionpacket(
-		cmd, ids, hoppayloads,
-		sessionkey, (u8*)"", 0);
+	packet = create_onionpacket(cmd, ids, hoppayloads, sessionkey,
+				    rhash.u.u8, sizeof(struct sha256));
 	onion = serialize_onionpacket(cmd, packet);
 
 	if (pc)
@@ -459,7 +432,8 @@ static void json_sendpay(struct command *cmd,
 
 	/* Expiry for HTLCs is absolute.  And add one to give some margin. */
 	err = command_htlc_add(peer, amount,
-			       delay + get_block_height(cmd->dstate) + 1,
+			       delay + get_block_height(cmd->dstate->topology)
+			       + 1,
 			       &rhash, NULL,
 			       onion, &error_code, &pc->htlc);
 	if (err) {

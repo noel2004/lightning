@@ -6,6 +6,7 @@
 #include "log.h"
 #include "names.h"
 #include "peer.h"
+#include "peer_internal.h"
 #include "protobuf_convert.h"
 #include "secrets.h"
 #include "utils.h"
@@ -374,7 +375,7 @@ static bool check_proof(struct key_negotiate *neg, struct log *log,
 			struct pubkey *id)
 {
 	struct sha256_double sha;
-	struct signature sig;
+	secp256k1_ecdsa_signature sig;
 	Authenticate *auth;
 
 	auth = pkt_unwrap(inpkt, log, PKT__PKT_AUTH);
@@ -442,6 +443,9 @@ static struct io_plan *recv_body_negotiate(struct io_conn *conn,
 	if (!check_proof(neg, neg->log, pkt, neg->expected_id, &id))
 		return io_close(conn);
 
+	/* Steal so that the callback may not accidentally free it for us */
+	tal_steal(NULL, neg);
+
 	plan = neg->cb(conn, neg->dstate, neg->iod, neg->log, &id, neg->arg);
 	tal_free(neg);
 	return plan;
@@ -480,7 +484,7 @@ static Pkt *pkt_wrap(const tal_t *ctx, void *w, Pkt__PktCase pkt_case)
 
 static Pkt *authenticate_pkt(const tal_t *ctx,
 			     const struct pubkey *node_id,
-			     const struct signature *sig)
+			     const secp256k1_ecdsa_signature *sig)
 {
 	Authenticate *auth = tal(ctx, Authenticate);
 	authenticate__init(auth);
@@ -494,7 +498,7 @@ static struct io_plan *keys_exchanged(struct io_conn *conn,
 {
 	u8 shared_secret[32];
 	struct pubkey sessionkey;
-	struct signature sig;
+	secp256k1_ecdsa_signature sig;
 	Pkt *auth;
 	size_t totlen;
 

@@ -57,7 +57,7 @@ static struct invoice *find_invoice_by_label(const struct list_head *list,
 }
 
 void invoice_add(struct invoices *invs,
-		 const struct rval *r,
+		 const struct preimage *r,
 		 u64 msatoshi,
 		 const char *label,
 		 u64 paid_num)
@@ -78,9 +78,9 @@ void invoice_add(struct invoices *invs,
 		list_add(&invs->unpaid, &invoice->list);
 }
 
-struct invoices *invoices_init(struct lightningd_state *dstate)
+struct invoices *invoices_init(const tal_t *ctx)
 {
-	struct invoices *invs = tal(dstate, struct invoices);
+	struct invoices *invs = tal(ctx, struct invoices);
 
 	list_head_init(&invs->unpaid);
 	list_head_init(&invs->paid);
@@ -301,7 +301,7 @@ static const struct json_command delinvoice_command = {
 };
 AUTODATA(json_command, &delinvoice_command);
 
-static void json_waitinvoice(struct command *cmd,
+static void json_waitanyinvoice(struct command *cmd,
 			    const char *buffer, const jsmntok_t *params)
 {
 	struct invoice *i;
@@ -343,10 +343,59 @@ static void json_waitinvoice(struct command *cmd,
 	list_add_tail(&invs->invoice_waiters, &w->list);
 }
 
+static const struct json_command waitanyinvoice_command = {
+	"waitanyinvoice",
+	json_waitanyinvoice,
+	"Wait for the next invoice to be paid, after {label} (if supplied)))",
+	"Returns {label}, {rhash} and {msatoshi} on success. "
+};
+AUTODATA(json_command, &waitanyinvoice_command);
+
+
+/* Wait for an incoming payment matching the `label` in the JSON
+ * command.  This will either return immediately if the payment has
+ * already been received or it may add the `cmd` to the list of
+ * waiters, if the payment is still pending.
+ */
+static void json_waitinvoice(struct command *cmd,
+			      const char *buffer, const jsmntok_t *params)
+{
+	struct invoice *i;
+	jsmntok_t *labeltok;
+	const char *label = NULL;
+	struct invoice_waiter *w;
+	struct invoices *invs = cmd->dstate->invoices;
+
+	if (!json_get_params(buffer, params, "label", &labeltok, NULL)) {
+		command_fail(cmd, "Missing {label}");
+		return;
+	}
+
+	/* Search in paid invoices, if found return immediately */
+	label = tal_strndup(cmd, buffer + labeltok->start, labeltok->end - labeltok->start);
+	i = find_invoice_by_label(&invs->paid, label);
+	if (i) {
+		tell_waiter(cmd, i);
+		return;
+	}
+
+	/* No luck in paid ones? Now try the unpaid ones. */
+	i = find_invoice_by_label(&invs->unpaid, label);
+	if (!i) {
+		command_fail(cmd, "Label not found");
+		return;
+	}
+
+	/* There is an unpaid one matching, let's wait... */
+	w = tal(cmd, struct invoice_waiter);
+	w->cmd = cmd;
+	list_add_tail(&invs->invoice_waiters, &w->list);
+}
+
 static const struct json_command waitinvoice_command = {
 	"waitinvoice",
 	json_waitinvoice,
-	"Wait for the next invoice to be paid, after {label} (if supplied)))",
-	"Returns {label}, {rhash} and {msatoshi} on success. "
+	"Wait for an incoming payment matching the invoice with {label}",
+	"Returns {label}, {rhash} and {msatoshi} on success"
 };
 AUTODATA(json_command, &waitinvoice_command);

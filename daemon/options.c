@@ -1,4 +1,5 @@
 #include "daemon/bitcoind.h"
+#include "daemon/chaintopology.h"
 #include "daemon/configdir.h"
 #include "daemon/lightningd.h"
 #include "daemon/log.h"
@@ -6,6 +7,7 @@
 #include "daemon/options.h"
 #include "daemon/routing.h"
 #include "version.h"
+#include <arpa/inet.h>
 #include <ccan/err/err.h>
 #include <ccan/opt/opt.h>
 #include <ccan/short_types/short_types.h>
@@ -19,6 +21,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <wire/wire.h>
 
 /* Tal wrappers for opt. */
 static void *opt_allocfn(size_t size)
@@ -108,6 +111,26 @@ static char *opt_set_s32(const char *arg, s32 *u)
 	return NULL;
 }
 
+static char *opt_set_ipaddr(const char *arg, struct ipaddr *addr)
+{
+	struct in6_addr v6;
+	struct in_addr v4;
+	char *err = NULL;
+	memset(&addr->addr, 0, sizeof(addr->addr));
+	if (inet_pton(AF_INET, arg, &v4) == 1) {
+		addr->type = ADDR_TYPE_IPV4;
+		addr->addrlen = 4;
+		memcpy(&addr->addr, &v4, addr->addrlen);
+	} else if (inet_pton(AF_INET6, arg, &v6) == 1) {
+		addr->type = ADDR_TYPE_IPV6;
+		addr->addrlen = 16;
+		memcpy(&addr->addr, &v6, addr->addrlen);
+	} else {
+		err = tal_fmt(NULL, "Unable to parse IP address '%s'", arg);
+	}
+	return err;
+}
+
 static void opt_show_u64(char buf[OPT_SHOW_LEN], const u64 *u)
 {
 	snprintf(buf, OPT_SHOW_LEN, "%"PRIu64, *u);
@@ -128,10 +151,16 @@ static void opt_show_u16(char buf[OPT_SHOW_LEN], const u16 *u)
 	snprintf(buf, OPT_SHOW_LEN, "%u", *u);
 }
 
+static char *opt_set_regtest(struct bitcoind *bitcoind)
+{
+	bitcoind->testmode = BITCOIND_REGTEST;
+	return NULL;
+}
+
 static void config_register_opts(struct lightningd_state *dstate)
 {
-	opt_register_noarg("--bitcoind-regtest", opt_set_bool,
-			   &dstate->config.regtest,
+	opt_register_noarg("--bitcoind-regtest", opt_set_regtest,
+			   dstate->bitcoind,
 			   "Bitcoind is in regtest mode");
 	opt_register_arg("--redeemaddr", opt_set_charp, NULL,
 		       &dstate->default_redeem_address,
@@ -164,10 +193,10 @@ static void config_register_opts(struct lightningd_state *dstate)
 			 &dstate->config.commitment_fee_percent,
 			 "Percentage of fee to request for their commitment");
 	opt_register_arg("--override-fee-rate", opt_set_u64, opt_show_u64,
-			 &dstate->config.override_fee_rate,
+			 &dstate->topology->override_fee_rate,
 			 "Force a specific rate in satoshis per kb regardless of estimated fees");
 	opt_register_arg("--default-fee-rate", opt_set_u64, opt_show_u64,
-			 &dstate->config.default_fee_rate,
+			 &dstate->topology->default_fee_rate,
 			 "Satoshis per kb if can't estimate fees");
 	opt_register_arg("--min-htlc-expiry", opt_set_u32, opt_show_u32,
 			 &dstate->config.min_htlc_expiry,
@@ -201,6 +230,10 @@ static void config_register_opts(struct lightningd_state *dstate)
 	opt_register_noarg("--ignore-dbversion", opt_set_bool,
 			   &dstate->config.db_version_ignore,
 			   "Continue despite invalid database version (DANGEROUS!)");
+
+	opt_register_arg("--ipaddr", opt_set_ipaddr, NULL,
+			   &dstate->config.ipaddr,
+			   "Set the IP address (v4 or v6) to announce to the network for incoming connections");
 }
 
 static void dev_register_opts(struct lightningd_state *dstate)
@@ -208,7 +241,7 @@ static void dev_register_opts(struct lightningd_state *dstate)
 	opt_register_noarg("--dev-no-routefail", opt_set_bool,
 			   &dstate->dev_never_routefail, opt_hidden);
 	opt_register_noarg("--dev-no-broadcast", opt_set_bool,
-			   &dstate->dev_no_broadcast, opt_hidden);
+			   &dstate->topology->dev_no_broadcast, opt_hidden);
 }
 
 static const struct config testnet_config = {
@@ -245,12 +278,6 @@ static const struct config testnet_config = {
 	/* We offer to pay 5 times 2-block fee */
 	.commitment_fee_percent = 500,
 
-	/* Use this rate, if specified, regardless of what estimatefee says. */
-	.override_fee_rate = 0,
-
-	/* Use this rate by default if estimatefee doesn't estimate. */
-	.default_fee_rate = 40000,
-
 	/* Don't bother me unless I have 6 hours to collect. */
 	.min_htlc_expiry = 6 * 6,
 	/* Don't lock up channel for more than 5 days. */
@@ -275,6 +302,9 @@ static const struct config testnet_config = {
 
 	/* Don't ignore database version */
 	.db_version_ignore = false,
+
+	/* Do not advertise any IP */
+	.ipaddr.type = 0,
 };
 
 /* aka. "Dude, where's my coins?" */
@@ -312,12 +342,6 @@ static const struct config mainnet_config = {
 	/* We offer to pay 5 times 2-block fee */
 	.commitment_fee_percent = 500,
 
-	/* Use this rate, if specified, regardless of what estimatefee says. */
-	.override_fee_rate = 0,
-
-	/* Use this rate by default if estimatefee doesn't estimate. */
-	.default_fee_rate = 40000,
-
 	/* Don't bother me unless I have 6 hours to collect. */
 	.min_htlc_expiry = 6 * 6,
 	/* Don't lock up channel for more than 5 days. */
@@ -342,6 +366,9 @@ static const struct config mainnet_config = {
 
 	/* Don't ignore database version */
 	.db_version_ignore = false,
+
+	/* Do not advertise any IP */
+	.ipaddr.type = 0,
 };
 
 static void check_config(struct lightningd_state *dstate)
@@ -450,10 +477,8 @@ static void opt_parse_from_config(struct lightningd_state *dstate)
 	tal_free(contents);
 }
 
-bool handle_opts(struct lightningd_state *dstate, int argc, char *argv[])
+void register_opts(struct lightningd_state *dstate)
 {
-	bool newdir = false;
-
 	opt_set_alloc(opt_allocfn, tal_reallocfn, tal_freefn);
 
 	opt_register_early_noarg("--help|-h", opt_usage_and_exit,
@@ -463,7 +488,7 @@ bool handle_opts(struct lightningd_state *dstate, int argc, char *argv[])
 	opt_register_arg("--port", opt_set_u16, opt_show_u16, &dstate->portnum,
 			 "Port to bind to (0 means don't listen)");
 	opt_register_arg("--bitcoin-datadir", opt_set_charp, NULL,
-			 &bitcoin_datadir,
+			 &dstate->bitcoind->datadir,
 			 "-datadir arg for bitcoin-cli");
 	opt_register_arg("--bitcoind-address", opt_set_charp, NULL,
 		     &bitcoin_redeem_address,
@@ -475,6 +500,11 @@ bool handle_opts(struct lightningd_state *dstate, int argc, char *argv[])
 				&dstate->config_dir, &dstate->rpc_filename);
 	config_register_opts(dstate);
 	dev_register_opts(dstate);
+}
+
+bool handle_opts(struct lightningd_state *dstate, int argc, char *argv[])
+{
+	bool newdir = false;
 
 	/* Get any configdir/testnet options first. */
 	opt_early_parse(argc, argv, opt_log_stderr_exit);
@@ -496,6 +526,7 @@ bool handle_opts(struct lightningd_state *dstate, int argc, char *argv[])
 	/* Now look for config file */
 	opt_parse_from_config(dstate);
 
+	dstate->config.ipaddr.port = dstate->portnum;
 	opt_parse(&argc, argv, opt_log_stderr_exit);
 	if (argc != 1)
 		errx(1, "no arguments accepted");

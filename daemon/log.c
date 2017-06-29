@@ -26,10 +26,9 @@ struct log_entry {
 	char *log;
 };
 
-struct log_record {
+struct log_book {
 	size_t mem_used;
 	size_t max_mem;
-	struct lightningd_state *dstate;
 	void (*print)(const char *prefix,
 		      enum log_level level,
 		      bool continued,
@@ -42,7 +41,7 @@ struct log_record {
 };
 
 struct log {
-	struct log_record *lr;
+	struct log_book *lr;
 	const char *prefix;
 };
 
@@ -56,6 +55,7 @@ static void log_default_print(const char *prefix,
 	} else {
 		printf("%s \t%s\n", prefix, str);
 	}
+	fflush(stdout);
 }
 
 static size_t log_bufsize(const struct log_entry *e)
@@ -66,7 +66,7 @@ static size_t log_bufsize(const struct log_entry *e)
 		return strlen(e->log) + 1;
 }
 
-static size_t prune_log(struct log_record *log)
+static size_t prune_log(struct log_book *log)
 {
 	struct log_entry *i, *next, *tail;
 	size_t skipped = 0, deleted = 0;
@@ -93,17 +93,16 @@ static size_t prune_log(struct log_record *log)
 	return deleted;
 }
 
-struct log_record *new_log_record(struct lightningd_state *dstate,
-				  size_t max_mem,
-				  enum log_level printlevel)
+struct log_book *new_log_book(const tal_t *ctx,
+			      size_t max_mem,
+			      enum log_level printlevel)
 {
-	struct log_record *lr = tal(dstate, struct log_record);
+	struct log_book *lr = tal(ctx, struct log_book);
 
 	/* Give a reasonable size for memory limit! */
 	assert(max_mem > sizeof(struct log) * 2);
 	lr->mem_used = 0;
 	lr->max_mem = max_mem;
-	lr->dstate = dstate;
 	lr->print = log_default_print;
 	lr->print_level = printlevel;
 	lr->init_time = time_now();
@@ -114,7 +113,7 @@ struct log_record *new_log_record(struct lightningd_state *dstate,
 
 /* With different entry points */
 struct log *PRINTF_FMT(3,4)
-new_log(const tal_t *ctx, struct log_record *record, const char *fmt, ...)
+new_log(const tal_t *ctx, struct log_book *record, const char *fmt, ...)
 {
 	struct log *log = tal(ctx, struct log);
 	va_list ap;
@@ -128,7 +127,12 @@ new_log(const tal_t *ctx, struct log_record *record, const char *fmt, ...)
 	return log;
 }
 
-void set_log_level(struct log_record *lr, enum log_level level)
+enum log_level get_log_level(struct log_book *lr)
+{
+	return lr->print_level;
+}
+
+void set_log_level(struct log_book *lr, enum log_level level)
 {
 	lr->print_level = level;
 }
@@ -139,7 +143,7 @@ void set_log_prefix(struct log *log, const char *prefix)
 	log->prefix = tal_strdup(log->lr, prefix);
 }
 
-void set_log_outfn_(struct log_record *lr,
+void set_log_outfn_(struct log_book *lr,
 		    void (*print)(const char *prefix,
 				  enum log_level level,
 				  bool continued,
@@ -155,17 +159,17 @@ const char *log_prefix(const struct log *log)
 	return log->prefix;
 }
 
-size_t log_max_mem(const struct log_record *lr)
+size_t log_max_mem(const struct log_book *lr)
 {
 	return lr->max_mem;
 }
 
-size_t log_used(const struct log_record *lr)
+size_t log_used(const struct log_book *lr)
 {
 	return lr->mem_used;
 }
 
-const struct timeabs *log_init_time(const struct log_record *lr)
+const struct timeabs *log_init_time(const struct log_book *lr)
 {
 	return &lr->init_time;
 }
@@ -231,7 +235,7 @@ void log_io(struct log *log, bool in, const void *data, size_t len)
 	errno = save_errno;
 }
 
-static void do_log_add(struct log *log, const char *fmt, va_list ap)
+void logv_add(struct log *log, const char *fmt, va_list ap)
 {
 	struct log_entry *l = list_tail(&log->lr->log, struct log_entry, list);
 	size_t oldlen = strlen(l->log);
@@ -262,7 +266,7 @@ void log_add(struct log *log, const char *fmt, ...)
 	va_list ap;
 
 	va_start(ap, fmt);
-	do_log_add(log, fmt, ap);
+	logv_add(log, fmt, ap);
 	va_end(ap);
 }
 
@@ -313,7 +317,7 @@ void log_blob_(struct log *log, int level, const char *fmt,
 	tal_free(hex);
 }
 
-void log_each_line_(const struct log_record *lr,
+void log_each_line_(const struct log_book *lr,
 		    void (*func)(unsigned int skipped,
 				 struct timerel time,
 				 enum log_level level,
@@ -422,6 +426,7 @@ static void log_to_file(const char *prefix,
 	} else {
 		fprintf(logf, "%s \t%s\n", prefix, str);
 	}
+	fflush(logf);
 }
 
 static char *arg_log_to_file(const char *arg, struct log *log)
@@ -445,6 +450,7 @@ void opt_register_logging(struct log *log)
 
 static struct log *crashlog;
 
+/* FIXME: Dump peer logs! */
 static void log_crash(int sig)
 {
 	const char *logfile = NULL;
@@ -496,7 +502,7 @@ void crashlog_activate(struct log *log)
 	sigaction(SIGBUS, &sa, NULL);
 }
 
-void log_dump_to_file(int fd, const struct log_record *lr)
+void log_dump_to_file(int fd, const struct log_book *lr)
 {
 	const struct log_entry *i;
 	char buf[100];
