@@ -77,6 +77,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)..\;$(SolutionDir)..\ccan;$(SolutionDir)..\secp256k1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -103,6 +104,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)..\;$(SolutionDir)..\ccan;$(SolutionDir)..\secp256k1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -142,14 +144,9 @@
     <ClCompile Include="..\..\bitcoin\varint.c" />
     <ClCompile Include="..\..\close_tx.c" />
     <ClCompile Include="..\..\find_p2sh_out.c" />
-    <ClCompile Include="..\..\irc.c" />
     <ClCompile Include="..\..\opt_bits.c" />
     <ClCompile Include="..\..\permute_tx.c" />
-    <ClCompile Include="..\..\protobuf_convert.c" />
-    <ClCompile Include="..\..\status.c" />
-    <ClCompile Include="..\..\type_to_string.c" />
     <ClCompile Include="..\..\utils.c" />
-    <ClCompile Include="..\..\version.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\bitcoin\address.h" />
@@ -166,16 +163,11 @@
     <ClInclude Include="..\..\bitcoin\varint.h" />
     <ClInclude Include="..\..\close_tx.h" />
     <ClInclude Include="..\..\find_p2sh_out.h" />
-    <ClInclude Include="..\..\irc.h" />
     <ClInclude Include="..\..\opt_bits.h" />
     <ClInclude Include="..\..\overflows.h" />
     <ClInclude Include="..\..\permute_tx.h" />
-    <ClInclude Include="..\..\protobuf_convert.h" />
     <ClInclude Include="..\..\remove_dust.h" />
-    <ClInclude Include="..\..\status.h" />
-    <ClInclude Include="..\..\type_to_string.h" />
     <ClInclude Include="..\..\utils.h" />
-    <ClInclude Include="..\..\version.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

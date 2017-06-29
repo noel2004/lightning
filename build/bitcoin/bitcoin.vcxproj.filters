@@ -59,25 +59,10 @@
     <ClCompile Include="..\..\permute_tx.c">
       <Filter>CORE_TX</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\irc.c">
-      <Filter>CORE</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\opt_bits.c">
       <Filter>CORE</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\protobuf_convert.c">
-      <Filter>CORE</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\status.c">
-      <Filter>CORE</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\type_to_string.c">
-      <Filter>CORE</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\utils.c">
-      <Filter>CORE</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\version.c">
       <Filter>CORE</Filter>
     </ClCompile>
   </ItemGroup>
@@ -130,28 +115,13 @@
     <ClInclude Include="..\..\remove_dust.h">
       <Filter>CORE_TX</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\irc.h">
-      <Filter>CORE</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\opt_bits.h">
       <Filter>CORE</Filter>
     </ClInclude>
     <ClInclude Include="..\..\overflows.h">
       <Filter>CORE</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\protobuf_convert.h">
-      <Filter>CORE</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\status.h">
-      <Filter>CORE</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\type_to_string.h">
-      <Filter>CORE</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\utils.h">
-      <Filter>CORE</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\version.h">
       <Filter>CORE</Filter>
     </ClInclude>
   </ItemGroup>
