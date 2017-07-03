@@ -31,7 +31,9 @@
 #endif
 
 #include <sys/types.h>
+#if HAVE_MMAP
 #include <sys/mman.h>
+#endif
 
 #include <errno.h>
 #include <stdint.h>

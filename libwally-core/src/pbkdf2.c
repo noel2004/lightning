@@ -4,7 +4,7 @@
 #include "ccan/ccan/crypto/sha256/sha256.h"
 #include "ccan/ccan/crypto/sha512/sha512.h"
 #include "ccan/ccan/build_assert/build_assert.h"
-#include <ccan/compiler/compiler.h>
+#include "ccan/ccan/compiler/compiler.h"
 #include <include/wally_crypto.h>
 
 #define SHA_T sha256
