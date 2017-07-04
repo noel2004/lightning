@@ -6,7 +6,6 @@
 #include <stdlib.h>
 #include "str.h"
 #include <sys/types.h>
-//#include <regex.h>
 #include <stdarg.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -255,6 +254,9 @@ static size_t count_open_braces(const char *string)
 #endif
 }
 
+#ifndef WIN32
+#include <regex.h>
+
 bool tal_strreg(const tal_t *ctx, const char *string, const char *regex, ...)
 {
 	size_t nmatch = 1 + count_open_braces(regex);
@@ -307,3 +309,5 @@ fail_no_re:
 		tal_free(string);
 	return ret;
 }
+
+#endif

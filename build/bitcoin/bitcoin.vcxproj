@@ -129,9 +129,6 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <Text Include="ReadMe.txt" />
-  </ItemGroup>
-  <ItemGroup>
     <ClInclude Include="..\..\bitcoin\address.h" />
     <ClInclude Include="..\..\bitcoin\base58.h" />
     <ClInclude Include="..\..\bitcoin\block.h" />

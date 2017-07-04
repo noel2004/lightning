@@ -66,6 +66,18 @@
     <ClCompile Include="..\..\ccan\ccan\timer\timer.c">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\ccan\ccan\opt\helpers.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\ccan\ccan\opt\opt.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\ccan\ccan\opt\parse.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\ccan\ccan\opt\usage.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\ccan_config.h">

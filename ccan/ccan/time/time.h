@@ -4,6 +4,7 @@
 #include "config.h"
 #ifdef WIN32
 #include <Winsock2.h>
+#undef far
 #else
 #include <sys/time.h>
 #endif

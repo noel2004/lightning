@@ -9,10 +9,16 @@
       <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
       <Extensions>h;hh;hpp;hxx;hm;inl;inc;xsd</Extensions>
     </Filter>
+    <Filter Include="proto">
+      <UniqueIdentifier>{76ea604c-c374-48cf-afe6-524d82d0f449}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\version.c">
       <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\protos\peer.pb.cc">
+      <Filter>proto</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

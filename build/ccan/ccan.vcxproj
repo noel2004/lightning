@@ -160,12 +160,22 @@
     <ClCompile Include="..\..\ccan\ccan\likely\likely.c" />
     <ClCompile Include="..\..\ccan\ccan\list\list.c" />
     <ClCompile Include="..\..\ccan\ccan\mem\mem.c" />
+    <ClCompile Include="..\..\ccan\ccan\opt\helpers.c" />
+    <ClCompile Include="..\..\ccan\ccan\opt\opt.c" />
+    <ClCompile Include="..\..\ccan\ccan\opt\parse.c" />
+    <ClCompile Include="..\..\ccan\ccan\opt\usage.c" />
     <ClCompile Include="..\..\ccan\ccan\strmap\strmap.c" />
     <ClCompile Include="..\..\ccan\ccan\str\debug.c" />
     <ClCompile Include="..\..\ccan\ccan\str\str.c" />
     <ClCompile Include="..\..\ccan\ccan\take\take.c" />
-    <ClCompile Include="..\..\ccan\ccan\tal\grab_file\grab_file.c" />
-    <ClCompile Include="..\..\ccan\ccan\tal\path\path.c" />
+    <ClCompile Include="..\..\ccan\ccan\tal\grab_file\grab_file.c">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\..\ccan\ccan\tal\path\path.c">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="..\..\ccan\ccan\tal\str\str.c">
       <ObjectFileName Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)tal_str.obj</ObjectFileName>
       <ObjectFileName Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)tal_str.obj</ObjectFileName>

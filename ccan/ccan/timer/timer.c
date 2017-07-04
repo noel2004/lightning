@@ -56,7 +56,7 @@ static void timer_add_raw(struct timers *timers, struct timer *t)
 	uint64_t *first;
 
 	if (!timers->level[level]) {
-		l = &timers->far_;
+		l = &timers->far;
 		first = &timers->firsts[ARRAY_SIZE(timers->level)];
 	} else {
 		int off = (t->time >> (level*TIMER_LEVEL_BITS)) & (PER_LEVEL-1);
@@ -125,9 +125,9 @@ static void timers_far_get(struct timers *timers,
 {
 	struct timer *i, *next;
 
-	list_for_each_safe(&timers->far_, i, next, list) {
+	list_for_each_safe(&timers->far, i, next, list) {
 		if (i->time <= when) {
-			list_del_from(&timers->far_, &i->list);
+			list_del_from(&timers->far, &i->list);
 			list_add_tail(list, &i->list);
 		}
 	}
@@ -218,7 +218,7 @@ static const struct timer *brute_force_first(struct timers *timers)
 	/* Check (and update) far list if there's a chance. */
 	l = ARRAY_SIZE(timers->level);
 	if (level_may_beat(timers, l, found)) {
-		const struct timer *t = find_first(&timers->far_, l, NULL);
+		const struct timer *t = find_first(&timers->far, l, NULL);
 		found = first_for_level(timers, l, t, found);
 	}
 
@@ -326,7 +326,7 @@ struct timer *timers_expire(struct timers *timers, struct timemono expire)
 	assert(now >= timers->base);
 
 	if (!timers->level[0]) {
-		if (list_empty(&timers->far_))
+		if (list_empty(&timers->far))
 			return NULL;
 		add_level(timers, 0);
 	}
@@ -426,7 +426,7 @@ struct timers *timers_check(const struct timers *timers, const char *abortstr)
 past_levels:
 	base = (timers->base & ~((1ULL << (TIMER_LEVEL_BITS * l)) - 1))
 		+ (1ULL << (TIMER_LEVEL_BITS * l)) - 1;
-	if (!timer_list_check(&timers->far_, base, -1ULL,
+	if (!timer_list_check(&timers->far, base, -1ULL,
 			      timers->firsts[ARRAY_SIZE(timers->level)],
 			      abortstr))
 		return NULL;
@@ -509,9 +509,9 @@ void timers_dump(const struct timers *timers, FILE *fp)
 	}
 
 past_levels:
-	if (!list_empty(&timers->far_)) {
+	if (!list_empty(&timers->far)) {
 		fprintf(fp, "Far timers:");
-		dump_bucket_stats(fp, &timers->far_);
+		dump_bucket_stats(fp, &timers->far);
 	}
 }
 #endif
