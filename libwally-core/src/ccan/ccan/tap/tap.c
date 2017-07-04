@@ -61,6 +61,33 @@ static pthread_mutex_t M = PTHREAD_MUTEX_INITIALIZER;
 # define UNLOCK
 #endif
 
+#ifdef WIN32
+
+int
+vasprintf(char **ptr, const char *format, va_list ap)
+{
+    int len;
+
+    len = _vscprintf_p(format, ap) + 1;
+    *ptr = (char *)malloc(len * sizeof(char));
+    if (!*ptr)
+    {
+        return -1;
+    }
+
+    return _vsprintf_p(*ptr, len, format, ap);
+}
+
+void flockfile(FILE *filehandle)
+{
+}
+
+void funlockfile(FILE *filehandle)
+{
+}
+
+#endif
+
 static void
 _expected_tests(unsigned int tests)
 {

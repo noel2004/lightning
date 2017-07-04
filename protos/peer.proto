@@ -1,0 +1,14 @@
+
+syntax = "proto3";
+package LNCore.protos;
+import "google/protobuf/timestamp.proto";
+
+message Tx{
+  bytes btctx = 1;
+}
+
+message AnchorChannel {
+  Tx    anchor = 1;
+  bytes nextPublicKey = 10;
+}
+

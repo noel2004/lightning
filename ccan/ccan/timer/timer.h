@@ -185,6 +185,7 @@ void timers_dump(const struct timers *timers, FILE *fp);
 struct timers {
 	/* Far in the future. */
 	struct list_head far;
+    struct list_head far_;
 	/* Current time. */
 	uint64_t base;
 	/* Overall first value. */

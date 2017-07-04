@@ -129,22 +129,6 @@
   <ItemGroup>
     <Text Include="ReadMe.txt" />
   </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="..\..\lightningd\cryptomsg.c" />
-    <ClCompile Include="..\..\lightningd\gossip_control.c" />
-    <ClCompile Include="..\..\lightningd\hsm_control.c" />
-    <ClCompile Include="..\..\lightningd\lightningd.c" />
-    <ClCompile Include="..\..\lightningd\peer_control.c" />
-    <ClCompile Include="..\..\lightningd\subdaemon.c" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="..\..\lightningd\cryptomsg.h" />
-    <ClInclude Include="..\..\lightningd\gossip_control.h" />
-    <ClInclude Include="..\..\lightningd\hsm_control.h" />
-    <ClInclude Include="..\..\lightningd\lightningd.h" />
-    <ClInclude Include="..\..\lightningd\peer_control.h" />
-    <ClInclude Include="..\..\lightningd\subdaemon.h" />
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

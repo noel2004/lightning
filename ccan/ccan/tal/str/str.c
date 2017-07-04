@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include "str.h"
 #include <sys/types.h>
-#include <regex.h>
+//#include <regex.h>
 #include <stdarg.h>
 #include <unistd.h>
 #include <stdio.h>

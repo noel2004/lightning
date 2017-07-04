@@ -4,7 +4,6 @@
 #include <stdio.h>
 
 #if !HAVE_CLOCK_GETTIME
-#include <sys/time.h>
 
 struct timeabs time_now(void)
 {

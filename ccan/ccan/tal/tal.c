@@ -935,8 +935,13 @@ static bool check_err(struct tal_hdr *t, const char *errorstr,
 {
 	if (errorstr) {
 		/* Try not to malloc: it may be corrupted. */
-		char msg[strlen(errorstr) + 20 + strlen(errmsg) + 1];
-		sprintf(msg, "%s:%p %s", errorstr, from_tal_hdr(t), errmsg);
+#ifdef _MSC_VER
+		char msg[1024];
+        snprintf(msg, 1024, "%s:%p %s", errorstr, from_tal_hdr(t), errmsg);
+#else
+        char msg[strlen(errorstr) + 20 + strlen(errmsg) + 1];
+        sprintf(msg, "%s:%p %s", errorstr, from_tal_hdr(t), errmsg);
+#endif		
 		call_error(msg);
 	}
 	return false;

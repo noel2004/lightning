@@ -13,13 +13,63 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="源文件\tal">
+      <UniqueIdentifier>{cc758eb5-6f68-4866-b8a4-2c32b53c1bd0}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <Text Include="ReadMe.txt" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\ccan\tools\configurator\configurator.c">
+    <ClCompile Include="..\..\ccan\ccan\list\list.c">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\ccan\ccan\likely\likely.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\ccan\ccan\str\str.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\ccan\ccan\str\debug.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\ccan\ccan\take\take.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\ccan\ccan\tal\str\str.c">
+      <Filter>源文件\tal</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\ccan\ccan\tal\path\path.c">
+      <Filter>源文件\tal</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\ccan\ccan\tal\grab_file\grab_file.c">
+      <Filter>源文件\tal</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\ccan\ccan\tal\tal.c">
+      <Filter>源文件\tal</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\ccan\ccan\err\err.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\ccan\ccan\ilog\ilog.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\ccan\ccan\mem\mem.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\ccan\ccan\strmap\strmap.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\ccan\ccan\time\time.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\ccan\ccan\timer\timer.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\ccan_config.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

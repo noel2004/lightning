@@ -18,10 +18,13 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\version.c" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{9B5E5DBD-E868-4D90-B68D-A8EAA73307F3}</ProjectGuid>
+    <ProjectGuid>{E732EDF6-EF8B-45DD-8AFA-991B6EBC62C0}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
-    <RootNamespace>bitcoin</RootNamespace>
+    <RootNamespace>lightningcore</RootNamespace>
     <WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -128,36 +131,6 @@
       <OptimizeReferences>true</OptimizeReferences>
     </Link>
   </ItemDefinitionGroup>
-  <ItemGroup>
-    <Text Include="ReadMe.txt" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="..\..\bitcoin\address.h" />
-    <ClInclude Include="..\..\bitcoin\base58.h" />
-    <ClInclude Include="..\..\bitcoin\block.h" />
-    <ClInclude Include="..\..\bitcoin\locktime.h" />
-    <ClInclude Include="..\..\bitcoin\preimage.h" />
-    <ClInclude Include="..\..\bitcoin\privkey.h" />
-    <ClInclude Include="..\..\bitcoin\pubkey.h" />
-    <ClInclude Include="..\..\bitcoin\pullpush.h" />
-    <ClInclude Include="..\..\bitcoin\script.h" />
-    <ClInclude Include="..\..\bitcoin\shadouble.h" />
-    <ClInclude Include="..\..\bitcoin\signature.h" />
-    <ClInclude Include="..\..\bitcoin\tx.h" />
-    <ClInclude Include="..\..\bitcoin\varint.h" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="..\..\bitcoin\base58.c" />
-    <ClCompile Include="..\..\bitcoin\block.c" />
-    <ClCompile Include="..\..\bitcoin\locktime.c" />
-    <ClCompile Include="..\..\bitcoin\pubkey.c" />
-    <ClCompile Include="..\..\bitcoin\pullpush.c" />
-    <ClCompile Include="..\..\bitcoin\script.c" />
-    <ClCompile Include="..\..\bitcoin\shadouble.c" />
-    <ClCompile Include="..\..\bitcoin\signature.c" />
-    <ClCompile Include="..\..\bitcoin\tx.c" />
-    <ClCompile Include="..\..\bitcoin\varint.c" />
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

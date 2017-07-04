@@ -2,7 +2,11 @@
 #ifndef CCAN_TIME_H
 #define CCAN_TIME_H
 #include "config.h"
+#ifdef WIN32
+#include <Winsock2.h>
+#else
 #include <sys/time.h>
+#endif
 #if HAVE_STRUCT_TIMESPEC
 #include <time.h>
 #else
