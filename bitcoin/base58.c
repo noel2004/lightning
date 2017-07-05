@@ -3,18 +3,19 @@
 // Copyright (c) 2009-2012 The Bitcoin Developers
 // Distributed under the MIT/X11 software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
-#include "address.h"
+
 #include "base58.h"
-#include "libbase58/libbase58.h"
 #include "privkey.h"
 #include "pubkey.h"
 #include "shadouble.h"
-#include "utils.h"
+#include "utils/utils.h"
+#include "include/wally_core.h"
 #include <assert.h>
 #include <ccan/build_assert/build_assert.h>
 #include <ccan/tal/str/str.h>
-#include <secp256k1.h>
 #include <string.h>
+
+static bool test_net = false;
 
 static bool my_sha256(void *digest, const void *data, size_t datasz)
 {
@@ -23,69 +24,75 @@ static bool my_sha256(void *digest, const void *data, size_t datasz)
 }
 
 static char *to_base58(const tal_t *ctx, u8 version,
-		       const struct ripemd160 *rmd)
+		       const unsigned char *bytes, unsigned int byteslen)
 {
-	char out[BASE58_ADDR_MAX_LEN + 1];
-	size_t outlen = sizeof(out);
+    char *outstr;
+    char *ret;
+    size_t inlen = byteslen + 1;
+    unsigned char* out = tal_arr(ctx, unsigned char, inlen);
+    out[0] = version;
+    memcpy(out + 1, bytes, byteslen);
+    if (wally_base58_from_bytes(bytes, inlen, BASE58_FLAG_CHECKSUM, &outstr) != WALLY_OK) {
+        return NULL;
+    }
 
-	b58_sha256_impl = my_sha256;
-	if (!b58check_enc(out, &outlen, version, rmd, sizeof(*rmd))) {
-		return NULL;
-	}else{
-		return tal_strdup(ctx, out);
-	}
+    ret = tal_strdup(ctx, outstr);
+    wally_free_string(outstr);
+
+    return ret;
 }
 
-char *bitcoin_to_base58(const tal_t *ctx, bool test_net,
+void bitcoin_use_testnet(bool b) { test_net = b; }
+
+char *bitcoin_to_base58(const tal_t *ctx, 
 			const struct bitcoin_address *addr)
 {
-	return to_base58(ctx, test_net ? 111 : 0, &addr->addr);
+	return to_base58(ctx, test_net ? 111 : 0, addr->addr, sizeof(addr->addr));
 }
 
-char *p2sh_to_base58(const tal_t *ctx, bool test_net,
-		     const struct ripemd160 *p2sh)
+char *p2sh_to_base58(const tal_t *ctx, 
+		     const struct bitcoin_address *p2sh)
 {
-	return to_base58(ctx, test_net ? 196 : 5, p2sh);
+	return to_base58(ctx, test_net ? 196 : 5, p2sh->addr, sizeof(p2sh->addr));
 }
 
 static bool from_base58(u8 *version,
-			struct ripemd160 *rmd,
+			struct bitcoin_address *rmd,
 			const char *base58, size_t base58_len)
 {
-	u8 buf[1 + sizeof(*rmd) + 4];
-	/* Avoid memcheck complaining if decoding resulted in a short value */
-	memset(buf, 0, sizeof(buf));
-	b58_sha256_impl = my_sha256;
+    u8 buf[1 + sizeof(rmd->addr)];
+    size_t outlen = 0;
 
-	size_t buflen = sizeof(buf);
-	b58tobin(buf, &buflen, base58, base58_len);
+    if (wally_base58_to_bytes(base58, BASE58_FLAG_CHECKSUM, buf, sizeof(buf), &outlen)
+        != WALLY_OK) {
+        return false;
+    }
 
-	int r = b58check(buf, buflen, base58, base58_len);
-	*version = buf[0];
-	memcpy(rmd, buf + 1, sizeof(*rmd));
-	return r >= 0;
+    memset(rmd->addr, 0, sizeof(rmd->addr));
+    *version = buf[0];
+    memcpy(rmd->addr, buf + 1, outlen - 1);
+
+    return true;
 }
 
-bool bitcoin_from_base58(bool *test_net,
-			 struct bitcoin_address *addr,
+bool bitcoin_from_base58(struct bitcoin_address *addr,
 			 const char *base58, size_t len)
 {
 	u8 version;
 
-	if (!from_base58(&version, &addr->addr, base58, len))
+	if (!from_base58(&version, addr, base58, len))
 		return false;
 
-	if (version == 111)
-		*test_net = true;
+    if (version == 111)
+        return test_net;
 	else if (version == 0)
-		*test_net = false;
+        return !test_net;
 	else
 		return false;
-	return true;
+
 }
 
-bool p2sh_from_base58(bool *test_net,
-		      struct ripemd160 *p2sh,
+bool p2sh_from_base58(struct bitcoin_address *p2sh,
 		      const char *base58, size_t len)
 {
 	u8 version;
@@ -94,70 +101,53 @@ bool p2sh_from_base58(bool *test_net,
 		return false;
 
 	if (version == 196)
-		*test_net = true;
+        return test_net;
 	else if (version == 5)
-		*test_net = false;
-	else
-		return false;
-	return true;
-}
-
-bool ripemd_from_base58(u8 *version,
-			struct ripemd160 *ripemd160,
-			const char *base58)
-{
-	return from_base58(version, ripemd160, base58, strlen(base58));
-}
-
-char *key_to_base58(const tal_t *ctx, bool test_net, const struct privkey *key)
-{
-	u8 buf[32 + 1];
-	char out[BASE58_KEY_MAX_LEN + 2];
-	u8 version = test_net ? 239 : 128;
-	size_t outlen = sizeof(out);
-
-	memcpy(buf, key->secret.data, sizeof(key->secret.data));
-	/* Mark this as a compressed key. */
-	buf[32] = 1;
-
-	b58_sha256_impl = my_sha256;
-	b58check_enc(out, &outlen, version, buf, sizeof(buf));
-	return tal_strdup(ctx, out);
-}
-
-bool key_from_base58(const char *base58, size_t base58_len,
-		     bool *test_net, struct privkey *priv, struct pubkey *key)
-{
-	// 1 byte version, 32 byte private key, 1 byte compressed, 4 byte checksum
-	u8 keybuf[1 + 32 + 1 + 4];
-	size_t keybuflen = sizeof(keybuf);
-
-	b58_sha256_impl = my_sha256;
-
-	b58tobin(keybuf, &keybuflen, base58, base58_len);
-	if (b58check(keybuf, sizeof(keybuf), base58, base58_len) < 0)
-		return false;
-
-	/* Byte after key should be 1 to represent a compressed key. */
-	if (keybuf[1 + 32] != 1)
-		return false;
-
-	if (keybuf[0] == 128)
-		*test_net = false;
-	else if (keybuf[0] == 239)
-		*test_net = true;
+        return !test_net;
 	else
 		return false;
 
-	/* Copy out secret. */
-	memcpy(priv->secret.data, keybuf + 1, sizeof(priv->secret.data));
+}
 
-	if (!secp256k1_ec_seckey_verify(secp256k1_ctx, priv->secret.data))
-		return false;
 
-	/* Get public key, too. */
-	if (!pubkey_from_privkey(priv, key))
-		return false;
+char *key_to_base58(const tal_t *ctx, const struct privkey *key)
+{
+    return to_base58(ctx, test_net ? 239 : 128, key->secret.data, sizeof(key->secret.data));
+}
 
-	return true;
+bool key_from_base58(const char *base58, size_t base58_len, 
+    struct privkey *priv, struct pubkey *key)
+{
+	//// 1 byte version, 32 byte private key, 1 byte compressed, 4 byte checksum
+	//u8 keybuf[1 + 32 + 1 + 4];
+	//size_t keybuflen = sizeof(keybuf);
+
+	//b58_sha256_impl = my_sha256;
+
+	//b58tobin(keybuf, &keybuflen, base58, base58_len);
+	//if (b58check(keybuf, sizeof(keybuf), base58, base58_len) < 0)
+	//	return false;
+
+	///* Byte after key should be 1 to represent a compressed key. */
+	//if (keybuf[1 + 32] != 1)
+	//	return false;
+
+	//if (keybuf[0] == 128)
+	//	*test_net = false;
+	//else if (keybuf[0] == 239)
+	//	*test_net = true;
+	//else
+	//	return false;
+
+	///* Copy out secret. */
+	//memcpy(priv->secret.data, keybuf + 1, sizeof(priv->secret.data));
+
+	//if (!secp256k1_ec_seckey_verify(secp256k1_ctx, priv->secret.data))
+	//	return false;
+
+	///* Get public key, too. */
+	//if (!pubkey_from_privkey(priv, key))
+	//	return false;
+
+	return false;
 }

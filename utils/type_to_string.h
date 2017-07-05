@@ -1,7 +1,7 @@
 #ifndef LIGHTNING_TYPE_TO_STRING_H
 #define LIGHTNING_TYPE_TO_STRING_H
 #include "config.h"
-#include "utils/utils.h"
+#include "utils.h"
 #include <ccan/autodata/autodata.h>
 //#include <secp256k1.h>
 
@@ -23,7 +23,7 @@ union printable_types {
 	const struct short_channel_id *short_channel_id;
 	const struct secret *secret;
 	const struct privkey *privkey;
-	const ecdsa_signature *ecdsa_signature;
+//	const secp256k1_ecdsa_signature *secp256k1_ecdsa_signature;
 	const struct channel *channel;
 	const char *charp_;
 };

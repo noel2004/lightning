@@ -1,13 +1,13 @@
 #include "bitcoin/block.h"
 #include "bitcoin/pullpush.h"
 #include "bitcoin/tx.h"
-#include "type_to_string.h"
+#include "utils/type_to_string.h"
 #include <assert.h>
 #include <ccan/cast/cast.h>
 #include <ccan/crypto/sha256/sha256.h>
 #include <ccan/endian/endian.h>
 #include <ccan/mem/mem.h>
-#include <ccan/read_write_all/read_write_all.h>
+//#include <ccan/read_write_all/read_write_all.h>
 #include <ccan/str/hex/hex.h>
 #include <stdio.h>
 

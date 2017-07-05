@@ -5,12 +5,12 @@
 #include "signature.h"
 #include "tx.h"
 #include "type_to_string.h"
-#include "utils.h"
+#include "include/wally_crypto.h"
+#include "utils/utils.h"
 #include <assert.h>
 #include <ccan/cast/cast.h>
 
-#undef DEBUG
-#ifdef DEBUG
+#ifndef NDEBUG
 # include <ccan/err/err.h>
 # include <stdio.h>
 #define SHA_FMT					   \
@@ -76,15 +76,21 @@ static void dump_tx(const char *msg,
 
 void sign_hash(const struct privkey *privkey,
 	       const struct sha256_double *h,
-	       secp256k1_ecdsa_signature *s)
+           ecdsa_signature *s)
 {
 	bool ok;
 
-	ok = secp256k1_ecdsa_sign(secp256k1_ctx,
-				  s,
-				  h->sha.u.u8,
-				  privkey->secret.data, NULL, NULL);
+    ok = wally_ec_sig_from_bytes(privkey->secret.data,
+        sizeof(privkey->secret.data),
+        h->sha.u.u8, sizeof(h->sha.u.u8),
+        EC_FLAG_ECDSA,
+        s->data, sizeof(s->data)) == WALLY_OK;
+
 	assert(ok);
+
+    //if (ok) {
+    //    wally_ec_sig_normalize(s->data, sizeof(s->data), s->data, sizeof(s->data));
+    //}
 }
 
 /* Only does SIGHASH_ALL */
@@ -116,7 +122,7 @@ void sign_tx_input(struct bitcoin_tx *tx,
 		   const u8 *subscript,
 		   const u8 *witness_script,
 		   const struct privkey *privkey, const struct pubkey *key,
-		   secp256k1_ecdsa_signature *sig)
+           ecdsa_signature *sig)
 {
 	struct sha256_double hash;
 
@@ -126,22 +132,25 @@ void sign_tx_input(struct bitcoin_tx *tx,
 }
 
 bool check_signed_hash(const struct sha256_double *hash,
-		       const secp256k1_ecdsa_signature *signature,
+		       const ecdsa_signature *signature,
 		       const struct pubkey *key)
 {
-	int ret;
+    //TODO
+    if (!key->compressed) {
+        return false;
+    }
 
-	ret = secp256k1_ecdsa_verify(secp256k1_ctx,
-				     signature,
-				     hash->sha.u.u8, &key->pubkey);
-	return ret == 1;
+    return wally_ec_sig_verify(key->pubkey.data, sizeof(key->pubkey.data),
+        hash->sha.u.u8, sizeof(hash->sha.u.u8), key->sign_type,
+        signature->data, sizeof(signature->data)) == WALLY_OK;
+
 }
 
 bool check_tx_sig(struct bitcoin_tx *tx, size_t input_num,
 		  const u8 *redeemscript,
 		  const u8 *witness_script,
 		  const struct pubkey *key,
-		  const secp256k1_ecdsa_signature *sig)
+		  const ecdsa_signature *sig)
 {
 	struct sha256_double hash;
 	bool ret;
@@ -228,40 +237,43 @@ static bool IsValidSignatureEncoding(const unsigned char sig[], size_t len)
     return true;
 }
 
-size_t signature_to_der(u8 der[72], const secp256k1_ecdsa_signature *sig)
+size_t signature_to_der(u8 der[72], const ecdsa_signature *sig)
 {
 	size_t len = 72;
 
-	secp256k1_ecdsa_signature_serialize_der(secp256k1_ctx,
-						der, &len, sig);
+    if (wally_ec_sig_to_der(sig->data, sizeof(sig->data), der, sizeof(der), &len)
+        != WALLY_OK)
+        return 0;
 
 	/* IsValidSignatureEncoding() expect extra byte for sighash */
 	assert(IsValidSignatureEncoding(der, len + 1));
 	return len;
 }
 
-bool signature_from_der(const u8 *der, size_t len, secp256k1_ecdsa_signature *sig)
+bool signature_from_der(const u8 *der, size_t len, ecdsa_signature *sig)
 {
-	return secp256k1_ecdsa_signature_parse_der(secp256k1_ctx,
-						   sig, der, len);
+    return wally_ec_sig_from_der(der, len, sig->data, sizeof(sig->data)) == WALLY_OK;
 }
 
 /* Signature must have low S value. */
-bool sig_valid(const secp256k1_ecdsa_signature *sig)
+bool sig_valid(const ecdsa_signature *sig)
 {
-	secp256k1_ecdsa_signature tmp;
+    ecdsa_signature tmp;
 
-	if (secp256k1_ecdsa_signature_normalize(secp256k1_ctx, &tmp, sig) == 0)
-		return true;
-	return false;
+    if (wally_ec_sig_normalize(sig->data, sizeof(sig->data), tmp.data, sizeof(tmp.data))
+        != WALLY_OK)
+        return false;
+
+    return memcmp(sig->data, tmp.data, EC_SIGNATURE_LEN) == 0;
+
 }
 
 static char *signature_to_hexstr(const tal_t *ctx,
-				 const secp256k1_ecdsa_signature *sig)
+				 const ecdsa_signature *sig)
 {
 	u8 der[72];
 	size_t len = signature_to_der(der, sig);
 
 	return tal_hexstr(ctx, der, len);
 }
-REGISTER_TYPE_TO_STRING(secp256k1_ecdsa_signature, signature_to_hexstr);
+REGISTER_TYPE_TO_STRING(ecdsa_signature, signature_to_hexstr);
