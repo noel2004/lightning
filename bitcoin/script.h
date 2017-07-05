@@ -45,7 +45,7 @@ u8 *scriptpubkey_p2pkh(const tal_t *ctx, const struct bitcoin_address *addr);
 
 /* Create an input script which spends p2pkh */
 u8 *bitcoin_redeem_p2pkh(const tal_t *ctx, const struct pubkey *pubkey,
-			 const secp256k1_ecdsa_signature *sig);
+			 const ecdsa_signature *sig);
 
 /* Create the redeemscript for a P2SH + P2WPKH. */
 u8 *bitcoin_redeem_p2sh_p2wpkh(const tal_t *ctx, const struct pubkey *key);
@@ -57,7 +57,7 @@ u8 *bitcoin_redeem_p2wpkh_by_addr(const tal_t *ctx,
 /* Create a witness which spends the P2SH + P2WPKH. */
 void bitcoin_witness_p2sh_p2wpkh(const tal_t *ctx,
 				 struct bitcoin_tx_input *input,
-				 const secp256k1_ecdsa_signature *sig,
+				 const ecdsa_signature *sig,
 				 const struct pubkey *key);
 
 /* Create scriptsig for p2sh-p2wpkh */
@@ -95,26 +95,26 @@ u8 *scriptpubkey_p2wpkh_derkey(const tal_t *ctx, const u8 der[33]);
 
 /* Create a witness which spends the 2of2. */
 u8 **bitcoin_witness_2of2(const tal_t *ctx,
-			  const secp256k1_ecdsa_signature *sig1,
-			  const secp256k1_ecdsa_signature *sig2,
+			  const ecdsa_signature *sig1,
+			  const ecdsa_signature *sig2,
 			  const struct pubkey *key1,
 			  const struct pubkey *key2);
 
 /* Create a witness which spends a p2wpkh. */
 u8 **bitcoin_witness_p2wpkh(const tal_t *ctx,
-			    const secp256k1_ecdsa_signature *sig,
+			    const ecdsa_signature *sig,
 			    const struct pubkey *key);
 
 /* Create a witness which spends a "secret_or_delay" scriptpubkey */
 u8 **bitcoin_witness_secret(const tal_t *ctx,
 			    const void *secret, size_t secret_len,
-			    const secp256k1_ecdsa_signature *sig,
+			    const ecdsa_signature *sig,
 			    const u8 *witnessscript);
 
 /* Create a witness which spends bitcoin_redeeem_htlc_recv/send */
 u8 **bitcoin_witness_htlc(const tal_t *ctx,
 			  const void *htlc_or_revocation_preimage,
-			  const secp256k1_ecdsa_signature *sig,
+			  const ecdsa_signature *sig,
 			  const u8 *witnessscript);
 
 /* BOLT #3 to-local output */
@@ -123,10 +123,10 @@ u8 *bitcoin_wscript_to_local(const tal_t *ctx,
 			     const struct pubkey *revocation_pubkey,
 			     const struct pubkey *local_delayedkey);
 u8 **bitcoin_to_local_spend_delayedkey(const tal_t *ctx,
-			const secp256k1_ecdsa_signature *local_delayedsig,
+			const ecdsa_signature *local_delayedsig,
 			const u8 *wscript);
 u8 **bitcoin_to_local_spend_revocation(const tal_t *ctx,
-		const secp256k1_ecdsa_signature *revocation_sig,
+		const ecdsa_signature *revocation_sig,
 		const u8 *wscript);
 
 /* BOLT #3 offered/accepted HTLC outputs */
@@ -136,8 +136,8 @@ u8 *bitcoin_wscript_htlc_offer(const tal_t *ctx,
 			       const struct sha256 *payment_hash,
 			       const struct pubkey *revocationkey);
 u8 **bitcoin_htlc_offer_spend_timeout(const tal_t *ctx,
-				      const secp256k1_ecdsa_signature *localsig,
-				      const secp256k1_ecdsa_signature *remotesig,
+				      const ecdsa_signature *localsig,
+				      const ecdsa_signature *remotesig,
 				      const u8 *wscript);
 u8 *bitcoin_wscript_htlc_receive(const tal_t *ctx,
 				 const struct abs_locktime *htlc_abstimeout,
@@ -146,8 +146,8 @@ u8 *bitcoin_wscript_htlc_receive(const tal_t *ctx,
 				 const struct sha256 *payment_hash,
 				 const struct pubkey *revocationkey);
 u8 **bitcoin_htlc_receive_spend_preimage(const tal_t *ctx,
-				const secp256k1_ecdsa_signature *localsig,
-				const secp256k1_ecdsa_signature *remotesig,
+				const ecdsa_signature *localsig,
+				const ecdsa_signature *remotesig,
 				const struct preimage *preimage,
 				const u8 *wscript);
 
