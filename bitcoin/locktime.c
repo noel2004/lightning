@@ -1,5 +1,5 @@
 #include "bitcoin/locktime.h"
-#include "type_to_string.h"
+#include "utils/type_to_string.h"
 #include <assert.h>
 #include <ccan/tal/str/str.h>
 

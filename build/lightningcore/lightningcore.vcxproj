@@ -19,8 +19,24 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\lightningcore\chaintopology.c">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\..\lightningcore\db.c" />
+    <ClCompile Include="..\..\lightningcore\log.c" />
+    <ClCompile Include="..\..\lightningcore\pseudorand.c" />
+    <ClCompile Include="..\..\lightningcore\version.c" />
     <ClCompile Include="..\..\protos\peer.pb.cc" />
-    <ClCompile Include="..\..\version.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\lightningcore\chaintopology.h" />
+    <ClInclude Include="..\..\lightningcore\db.h" />
+    <ClInclude Include="..\..\lightningcore\log.h" />
+    <ClInclude Include="..\..\lightningcore\pseudorand.h" />
+    <ClInclude Include="..\..\lightningcore\state.h" />
+    <ClInclude Include="..\..\lightningcore\version.h" />
+    <ClInclude Include="..\..\protos\peer.pb.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{E732EDF6-EF8B-45DD-8AFA-991B6EBC62C0}</ProjectGuid>
@@ -86,7 +102,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(SolutionDir);$(ProjectDir)..\..\ccan;$(ProjectDir)..\..\libwally-core;$(ProjectDir)..\..\protos\dep\protobuf\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(ProjectDir)..\..\;$(ProjectDir)..\..\ccan;$(ProjectDir)..\..\sqlite3;$(ProjectDir)..\..\libwally-core;$(ProjectDir)..\..\protos\dep\protobuf\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -115,7 +131,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\..\ccan;$(ProjectDir)..\..\libwally-core;$(ProjectDir)..\..\protos\dep\protobuf\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(ProjectDir)..\..\;$(ProjectDir)..\..\ccan;$(ProjectDir)..\..\sqlite3;$(ProjectDir)..\..\libwally-core;$(ProjectDir)..\..\protos\dep\protobuf\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>

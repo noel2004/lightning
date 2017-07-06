@@ -78,12 +78,6 @@ struct lightningd_state {
     /* A default redeem address*/
     char *default_redeem_address;
 
-	/* Port we're listening on */
-	u16 portnum;
-
-	/* We're on testnet. */
-	bool testnet;
-
 	/* Configuration settings. */
 	struct config config;
 

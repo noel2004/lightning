@@ -329,6 +329,20 @@ WALLY_CORE_API int wally_ec_public_key_decompress(
     size_t len);
 
 /**
+* Create an compressed public key from a uncompressed public key.
+*
+* @pub_key: The private key to create a public key from.
+* @pub_key_len: The length of @pub_key in bytes. Must be @EC_PUBLIC_KEY_UNCOMPRESSED_LEN.
+* @bytes_out: Destination for the resulting public key.
+* @len: The length of @bytes_out in bytes. Must be @EC_PUBLIC_KEY_LEN.
+*/
+WALLY_CORE_API int wally_ec_public_key_compress(
+    const unsigned char *pub_key,
+    size_t pub_key_len,
+    unsigned char *bytes_out,
+    size_t len);
+
+/**
  * Sign a message hash with a private key, producing a compact signature.
  *
  * @priv_key: The private key to sign with.

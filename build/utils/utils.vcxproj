@@ -19,10 +19,22 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\utils\opt_bits.c" />
+    <ClCompile Include="..\..\utils\sodium\randombytes.c" />
+    <ClCompile Include="..\..\utils\sodium\randombytes_sysrandom.c" />
+    <ClCompile Include="..\..\utils\sodium\utils.c">
+      <ObjectFileName Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)\sodium-utils.obj</ObjectFileName>
+      <ObjectFileName Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)\sodium-utils.obj</ObjectFileName>
+    </ClCompile>
     <ClCompile Include="..\..\utils\type_to_string.c" />
     <ClCompile Include="..\..\utils\utils.c" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\utils\opt_bits.h" />
+    <ClInclude Include="..\..\utils\sodium\export.h" />
+    <ClInclude Include="..\..\utils\sodium\randombytes.h" />
+    <ClInclude Include="..\..\utils\sodium\randombytes_sysrandom.h" />
+    <ClInclude Include="..\..\utils\sodium\utils.h" />
     <ClInclude Include="..\..\utils\type_to_string.h" />
     <ClInclude Include="..\..\utils\utils.h" />
   </ItemGroup>

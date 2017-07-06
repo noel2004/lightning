@@ -5,7 +5,6 @@
 #include "daemon/htlc.h"
 #include "daemon/lightningd.h"
 #include "daemon/peer.h"
-//#include "protobuf_convert.h"
 #include "type_to_string.h"
 #include "utils.h"
 #include <ccan/tal/str/str.h>

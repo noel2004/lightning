@@ -1,5 +1,5 @@
 #include "shadouble.h"
-#include "type_to_string.h"
+#include "utils/type_to_string.h"
 #include <ccan/mem/mem.h>
 
 void sha256_double(struct sha256_double *shadouble, const void *p, size_t len)

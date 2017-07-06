@@ -155,7 +155,10 @@
     <Text Include="ReadMe.txt" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\ccan\ccan\crypto\ripemd160\ripemd160.c" />
+    <ClCompile Include="..\..\ccan\ccan\crypto\sha256\sha256.c" />
     <ClCompile Include="..\..\ccan\ccan\err\err.c" />
+    <ClCompile Include="..\..\ccan\ccan\htable\htable.c" />
     <ClCompile Include="..\..\ccan\ccan\ilog\ilog.c" />
     <ClCompile Include="..\..\ccan\ccan\likely\likely.c" />
     <ClCompile Include="..\..\ccan\ccan\list\list.c" />

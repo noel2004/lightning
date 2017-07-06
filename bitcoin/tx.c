@@ -7,7 +7,6 @@
 #include <ccan/crypto/sha256/sha256.h>
 #include <ccan/endian/endian.h>
 #include <ccan/mem/mem.h>
-//#include <ccan/read_write_all/read_write_all.h>
 #include <ccan/str/hex/hex.h>
 #include <stdio.h>
 
