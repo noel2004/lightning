@@ -56,14 +56,9 @@ struct config {
     /* How long between changing commit and sending COMMIT message. */
     struct timerel commit_time;
 
-    /* Whether to enable IRC peer discovery. */
-    bool use_irc;
-
     /* Whether to ignore database version. */
     bool db_version_ignore;
 
-    /* IPv4 or IPv6 address to announce to the network */
-    struct ipaddr ipaddr;
 };
 
 /* Here's where the global variables hide! */

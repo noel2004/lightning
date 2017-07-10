@@ -90,6 +90,12 @@
     <ClCompile Include="..\..\ccan\ccan\htable\htable.c">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\ccan\ccan\crypto\shachain\shachain.c">
+      <Filter>源文件\crypto</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\ccan\ccan\crypto\siphash24\siphash24.c">
+      <Filter>源文件\crypto</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\ccan_config.h">

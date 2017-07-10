@@ -12,48 +12,81 @@
     <Filter Include="proto">
       <UniqueIdentifier>{76ea604c-c374-48cf-afe6-524d82d0f449}</UniqueIdentifier>
     </Filter>
+    <Filter Include="源文件\LNChannel">
+      <UniqueIdentifier>{bd641c98-cf88-491f-a6ac-a7e1453db211}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="头文件\LNChannel">
+      <UniqueIdentifier>{a56caea5-38ae-42b6-a5b9-f962b20c0840}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\protos\peer.pb.cc">
       <Filter>proto</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\lightningcore\version.c">
-      <Filter>源文件</Filter>
+    <ClCompile Include="..\..\lightningcore\chaintopology.c">
+      <Filter>源文件\LNChannel</Filter>
     </ClCompile>
     <ClCompile Include="..\..\lightningcore\db.c">
-      <Filter>源文件</Filter>
+      <Filter>源文件\LNChannel</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\lightningcore\chaintopology.c">
-      <Filter>源文件</Filter>
+    <ClCompile Include="..\..\lightningcore\failure.c">
+      <Filter>源文件\LNChannel</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\lightningcore\htlc.c">
+      <Filter>源文件\LNChannel</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\lightningcore\invoice.c">
+      <Filter>源文件\LNChannel</Filter>
     </ClCompile>
     <ClCompile Include="..\..\lightningcore\log.c">
-      <Filter>源文件</Filter>
+      <Filter>源文件\LNChannel</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\lightningcore\lnchannel.c">
+      <Filter>源文件\LNChannel</Filter>
     </ClCompile>
     <ClCompile Include="..\..\lightningcore\pseudorand.c">
-      <Filter>源文件</Filter>
+      <Filter>源文件\LNChannel</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\lightningcore\version.c">
+      <Filter>源文件\LNChannel</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\protos\peer.pb.h">
       <Filter>proto</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\lightningcore\db.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\lightningcore\chaintopology.h">
-      <Filter>头文件</Filter>
+      <Filter>头文件\LNChannel</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\lightningcore\version.h">
-      <Filter>头文件</Filter>
+    <ClInclude Include="..\..\lightningcore\db.h">
+      <Filter>头文件\LNChannel</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\lightningcore\failure.h">
+      <Filter>头文件\LNChannel</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\lightningcore\htlc.h">
+      <Filter>头文件\LNChannel</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\lightningcore\invoice.h">
+      <Filter>头文件\LNChannel</Filter>
     </ClInclude>
     <ClInclude Include="..\..\lightningcore\log.h">
-      <Filter>头文件</Filter>
+      <Filter>头文件\LNChannel</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\lightningcore\lnchannel.h">
+      <Filter>头文件\LNChannel</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\lightningcore\lnchannel_internal.h">
+      <Filter>头文件\LNChannel</Filter>
     </ClInclude>
     <ClInclude Include="..\..\lightningcore\pseudorand.h">
-      <Filter>头文件</Filter>
+      <Filter>头文件\LNChannel</Filter>
     </ClInclude>
     <ClInclude Include="..\..\lightningcore\state.h">
-      <Filter>头文件</Filter>
+      <Filter>头文件\LNChannel</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\lightningcore\version.h">
+      <Filter>头文件\LNChannel</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

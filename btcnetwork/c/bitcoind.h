@@ -8,42 +8,19 @@
 #include <stdbool.h>
 
 struct sha256_double;
-struct lightningd_state;
-struct ripemd160;
 struct bitcoin_tx;
-struct peer;
 struct bitcoin_block;
-/* A default redeem bitcoin address*/
-extern char *bitcoin_redeem_address;
 
-void bitcoind_getaccount_address_(
-				struct lightningd_state *dstate,
-				void(*cb)(struct lightningd_state *dstate, char *),
-				void *arg);
+
 enum bitcoind_mode {
 	BITCOIND_MAINNET = 1,
 	BITCOIND_TESTNET,
 	BITCOIND_REGTEST
 };
 
-struct bitcoind {
-	/* What mode are we in. */
-	enum bitcoind_mode testmode;
+struct bitcoind;
 
-	/* -datadir arg for bitcoin-cli. */
-	char *datadir;
-
-	/* Where to do logging. */
-	struct log *log;
-
-	/* Are we currently running a bitcoind request (it's ratelimited) */
-	bool req_running;
-
-	/* Pending requests. */
-	struct list_head pending;
-};
-
-struct bitcoind *new_bitcoind(const tal_t *ctx, struct log *log);
+struct bitcoind *new_bitcoind(const tal_t *ctx, enum bitcoind_mode mode);
 
 void bitcoind_estimate_fee_(struct bitcoind *bitcoind,
 			    void (*cb)(struct bitcoind *bitcoind,

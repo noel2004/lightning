@@ -42,16 +42,6 @@ static void check_siphash24(struct siphash24_ctx *ctx)
 	assert(ctx->bytes != -1ULL);
 }
 
-static bool alignment_ok(const void *p, size_t n)
-{
-#if HAVE_UNALIGNED_ACCESS
-	(void)p; (void)n;
-	return true;
-#else
-	return ((size_t)p % n == 0);
-#endif
-}
-
 static void add_64bits(uint64_t v[4], uint64_t in)
 {
 	int i;

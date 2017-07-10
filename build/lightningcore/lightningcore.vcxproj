@@ -24,15 +24,27 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="..\..\lightningcore\db.c" />
+    <ClCompile Include="..\..\lightningcore\failure.c" />
+    <ClCompile Include="..\..\lightningcore\htlc.c" />
+    <ClCompile Include="..\..\lightningcore\invoice.c" />
     <ClCompile Include="..\..\lightningcore\log.c" />
+    <ClCompile Include="..\..\lightningcore\lnchannel.c" />
     <ClCompile Include="..\..\lightningcore\pseudorand.c" />
     <ClCompile Include="..\..\lightningcore\version.c" />
-    <ClCompile Include="..\..\protos\peer.pb.cc" />
+    <ClCompile Include="..\..\protos\peer.pb.cc">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\lightningcore\chaintopology.h" />
     <ClInclude Include="..\..\lightningcore\db.h" />
+    <ClInclude Include="..\..\lightningcore\failure.h" />
+    <ClInclude Include="..\..\lightningcore\htlc.h" />
+    <ClInclude Include="..\..\lightningcore\invoice.h" />
     <ClInclude Include="..\..\lightningcore\log.h" />
+    <ClInclude Include="..\..\lightningcore\lnchannel.h" />
+    <ClInclude Include="..\..\lightningcore\lnchannel_internal.h" />
     <ClInclude Include="..\..\lightningcore\pseudorand.h" />
     <ClInclude Include="..\..\lightningcore\state.h" />
     <ClInclude Include="..\..\lightningcore\version.h" />
