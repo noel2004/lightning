@@ -1,10 +1,9 @@
 #include "bitcoin/locktime.h"
 #include "bitcoin/pubkey.h"
 #include "bitcoin/tx.h"
-#include "daemon/channel.h"
-#include "daemon/htlc.h"
-#include "daemon/lightningd.h"
-#include "daemon/peer.h"
+#include "lightningcore/channel.h"
+#include "lightningcore/htlc.h"
+#include "lightningcore/lnchannel.h"
 #include "type_to_string.h"
 #include "utils.h"
 #include <ccan/tal/str/str.h>

@@ -4,17 +4,12 @@
 #include "feechange.h"
 #include "gen_version.h"
 #include "htlc.h"
-#include "invoice.h"
-#include "lightningd.h"
+#include "state.h"
 #include "log.h"
-#include "names.h"
-#include "netaddr.h"
 #include "pay.h"
-#include "peer_internal.h"
-#include "routing.h"
+#include "lnchannel_internal.h"
 #include "secrets.h"
-#include "utils.h"
-#include "wallet.h"
+#include "utils/utils.h"
 #include <ccan/array_size/array_size.h>
 #include <ccan/cast/cast.h>
 #include <ccan/cppmagic/cppmagic.h>
@@ -149,10 +144,17 @@ static u8 *tal_sql_blob(const tal_t *ctx, sqlite3_stmt *stmt, int idx)
 
 static void pubkey_from_sql(sqlite3_stmt *stmt, int idx, struct pubkey *pk)
 {
-	if (!pubkey_from_der(sqlite3_column_blob(stmt, idx),
-			     sqlite3_column_bytes(stmt, idx), pk))
-		fatal("db:bad pubkey length %i",
-		      sqlite3_column_bytes(stmt, idx));
+    int len = sqlite3_column_bytes(stmt, idx);
+
+    if (len == sizeof(pk->pubkey.data)) {
+        memcpy(pk->pubkey.data, sqlite3_column_blob(stmt, idx), len);
+    }
+    else if (len == sizeof(pk->pubkey.data_uc)) {
+        memcpy(pk->pubkey.data_uc, sqlite3_column_blob(stmt, idx), len);
+    }
+    else {
+        fatal("db:bad pubkey length %i", len);
+    }
 }
 
 static void sha256_from_sql(sqlite3_stmt *stmt, int idx, struct sha256 *sha)
@@ -161,27 +163,19 @@ static void sha256_from_sql(sqlite3_stmt *stmt, int idx, struct sha256 *sha)
 }
 
 static void sig_from_sql(sqlite3_stmt *stmt, int idx,
-			 secp256k1_ecdsa_signature *sig)
+			 ecdsa_signature *sig)
 {
-	u8 compact[64];
+	from_sql_blob(stmt, idx, sig->data, sizeof(sig->data));
 
-	from_sql_blob(stmt, idx, compact, sizeof(compact));
-	if (secp256k1_ecdsa_signature_parse_compact(secp256k1_ctx, sig,
-						    compact) != 1)
-		fatal("db:bad signature blob");
 }
 
 static char *sig_to_sql(const tal_t *ctx,
-			const secp256k1_ecdsa_signature *sig)
+			const ecdsa_signature *sig)
 {
-	u8 compact[64];
-
 	if (!sig)
 		return sql_hex_or_null(ctx, NULL, 0);
 
-	secp256k1_ecdsa_signature_serialize_compact(secp256k1_ctx, compact,
-						    sig);
-	return sql_hex_or_null(ctx, compact, sizeof(compact));
+	return sql_hex_or_null(ctx, sig->data, sizeof(sig->data));
 }
 
 static void db_load_wallet(struct lightningd_state *dstate)
@@ -229,32 +223,32 @@ void db_add_wallet_privkey(struct lightningd_state *dstate,
 	tal_free(ctx);
 }
 
-static void load_peer_secrets(struct peer *peer)
+static void load_lnchn_secrets(struct LNchannel *lnchn)
 {
 	int err;
 	sqlite3_stmt *stmt;
-	sqlite3 *sql = peer->dstate->db->sql;
-	char *ctx = tal_tmpctx(peer);
+	sqlite3 *sql = lnchn->dstate->db->sql;
+	char *ctx = tal_tmpctx(lnchn);
 	const char *select;
 	bool secrets_set = false;
 
 	select = tal_fmt(ctx,
-			 "SELECT * FROM peer_secrets WHERE peer = x'%s';",
-			 pubkey_to_hexstr(ctx, peer->id));
+			 "SELECT * FROM lnchn_secrets WHERE lnchn = x'%s';",
+			 pubkey_to_hexstr(ctx, lnchn->id));
 
 	err = sqlite3_prepare_v2(sql, select, -1, &stmt, NULL);
 	if (err != SQLITE_OK)
-		fatal("load_peer_secrets:prepare gave %s:%s",
+		fatal("load_lnchn_secrets:prepare gave %s:%s",
 		      sqlite3_errstr(err), sqlite3_errmsg(sql));
 
 	while ((err = sqlite3_step(stmt)) != SQLITE_DONE) {
 		if (err != SQLITE_ROW)
-			fatal("load_peer_secrets:step gave %s:%s",
+			fatal("load_lnchn_secrets:step gave %s:%s",
 			      sqlite3_errstr(err), sqlite3_errmsg(sql));
 		if (secrets_set)
-			fatal("load_peer_secrets: two secrets for '%s'",
+			fatal("load_lnchn_secrets: two secrets for '%s'",
 			      select);
-		peer_set_secrets_from_db(peer,
+		lnchn_set_secrets_from_db(lnchn,
 					 sqlite3_column_blob(stmt, 1),
 					 sqlite3_column_bytes(stmt, 1),
 					 sqlite3_column_blob(stmt, 2),
@@ -265,211 +259,211 @@ static void load_peer_secrets(struct peer *peer)
 	}
 
 	if (!secrets_set)
-		fatal("load_peer_secrets: no secrets for '%s'", select);
+		fatal("load_lnchn_secrets: no secrets for '%s'", select);
 	tal_free(ctx);
 }
 
-static void load_peer_anchor(struct peer *peer)
+static void load_lnchn_anchor(struct LNchannel *lnchn)
 {
 	int err;
 	sqlite3_stmt *stmt;
-	sqlite3 *sql = peer->dstate->db->sql;
-	char *ctx = tal_tmpctx(peer);
+	sqlite3 *sql = lnchn->dstate->db->sql;
+	char *ctx = tal_tmpctx(lnchn);
 	const char *select;
 	bool anchor_set = false;
 
 	select = tal_fmt(ctx,
-			 "SELECT * FROM anchors WHERE peer = x'%s';",
-			 pubkey_to_hexstr(ctx, peer->id));
+			 "SELECT * FROM anchors WHERE lnchn = x'%s';",
+			 pubkey_to_hexstr(ctx, lnchn->id));
 
 	err = sqlite3_prepare_v2(sql, select, -1, &stmt, NULL);
 	if (err != SQLITE_OK)
-		fatal("load_peer_anchor:prepare gave %s:%s",
+		fatal("load_lnchn_anchor:prepare gave %s:%s",
 		      sqlite3_errstr(err), sqlite3_errmsg(sql));
 
 	while ((err = sqlite3_step(stmt)) != SQLITE_DONE) {
 		if (err != SQLITE_ROW)
-			fatal("load_peer_anchor:step gave %s:%s",
+			fatal("load_lnchn_anchor:step gave %s:%s",
 			      sqlite3_errstr(err), sqlite3_errmsg(sql));
 		if (anchor_set)
-			fatal("load_peer_anchor: two anchors for '%s'",
+			fatal("load_lnchn_anchor: two anchors for '%s'",
 			      select);
 		from_sql_blob(stmt, 1,
-			      &peer->anchor.txid, sizeof(peer->anchor.txid));
-		peer->anchor.index = sqlite3_column_int64(stmt, 2);
-		peer->anchor.satoshis = sqlite3_column_int64(stmt, 3);
-		peer->anchor.ours = sqlite3_column_int(stmt, 6);
-		peer_watch_anchor(peer, sqlite3_column_int(stmt, 4));
-		peer->anchor.min_depth = sqlite3_column_int(stmt, 5);
+			      &lnchn->anchor.txid, sizeof(lnchn->anchor.txid));
+		lnchn->anchor.index = sqlite3_column_int64(stmt, 2);
+		lnchn->anchor.satoshis = sqlite3_column_int64(stmt, 3);
+		lnchn->anchor.ours = sqlite3_column_int(stmt, 6);
+		lnchn_watch_anchor(lnchn, sqlite3_column_int(stmt, 4));
+		lnchn->anchor.min_depth = sqlite3_column_int(stmt, 5);
 		anchor_set = true;
 	}
 
 	if (!anchor_set)
-		fatal("load_peer_anchor: no anchor for '%s'", select);
+		fatal("load_lnchn_anchor: no anchor for '%s'", select);
 	tal_free(ctx);
 }
 
-static void load_peer_anchor_input(struct peer *peer)
+static void load_lnchn_anchor_input(struct LNchannel *lnchn)
 {
 	int err;
 	sqlite3_stmt *stmt;
-	sqlite3 *sql = peer->dstate->db->sql;
-	char *ctx = tal_tmpctx(peer);
+	sqlite3 *sql = lnchn->dstate->db->sql;
+	char *ctx = tal_tmpctx(lnchn);
 	const char *select;
 	bool anchor_input_set = false;
 
 	select = tal_fmt(ctx,
-			 "SELECT * FROM anchor_inputs WHERE peer = x'%s';",
-			 pubkey_to_hexstr(ctx, peer->id));
+			 "SELECT * FROM anchor_inputs WHERE lnchn = x'%s';",
+			 pubkey_to_hexstr(ctx, lnchn->id));
 
 	err = sqlite3_prepare_v2(sql, select, -1, &stmt, NULL);
 	if (err != SQLITE_OK)
-		fatal("load_peer_anchor_input:prepare gave %s:%s",
+		fatal("load_lnchn_anchor_input:prepare gave %s:%s",
 		      sqlite3_errstr(err), sqlite3_errmsg(sql));
 
 	while ((err = sqlite3_step(stmt)) != SQLITE_DONE) {
 		if (err != SQLITE_ROW)
-			fatal("load_peer_anchor_input:step gave %s:%s",
+			fatal("load_lnchn_anchor_input:step gave %s:%s",
 			      sqlite3_errstr(err), sqlite3_errmsg(sql));
 		if (anchor_input_set)
-			fatal("load_peer_anchor_input: two inputs for '%s'",
+			fatal("load_lnchn_anchor_input: two inputs for '%s'",
 			      select);
-		peer->anchor.input = tal(peer, struct anchor_input);
+		lnchn->anchor.input = tal(lnchn, struct anchor_input);
 		from_sql_blob(stmt, 1,
-			      &peer->anchor.input->txid,
-			      sizeof(peer->anchor.input->txid));
-		peer->anchor.input->index = sqlite3_column_int(stmt, 2);
-		peer->anchor.input->in_amount = sqlite3_column_int64(stmt, 3);
-		peer->anchor.input->out_amount = sqlite3_column_int64(stmt, 4);
-		pubkey_from_sql(stmt, 5, &peer->anchor.input->walletkey);
+			      &lnchn->anchor.input->txid,
+			      sizeof(lnchn->anchor.input->txid));
+		lnchn->anchor.input->index = sqlite3_column_int(stmt, 2);
+		lnchn->anchor.input->in_amount = sqlite3_column_int64(stmt, 3);
+		lnchn->anchor.input->out_amount = sqlite3_column_int64(stmt, 4);
+		pubkey_from_sql(stmt, 5, &lnchn->anchor.input->walletkey);
 		anchor_input_set = true;
 	}
 
 	if (!anchor_input_set)
-		fatal("load_peer_anchor_input: no inputs for '%s'", select);
+		fatal("load_lnchn_anchor_input: no inputs for '%s'", select);
 	tal_free(ctx);
 }
 
-static void load_peer_visible_state(struct peer *peer)
+static void load_lnchn_visible_state(struct LNchannel *lnchn)
 {
 	int err;
 	sqlite3_stmt *stmt;
-	sqlite3 *sql = peer->dstate->db->sql;
-	char *ctx = tal_tmpctx(peer);
+	sqlite3 *sql = lnchn->dstate->db->sql;
+	char *ctx = tal_tmpctx(lnchn);
 	const char *select;
 	bool visible_set = false;
 
 	select = tal_fmt(ctx,
-			 "SELECT * FROM their_visible_state WHERE peer = x'%s';",
-			 pubkey_to_hexstr(ctx, peer->id));
+			 "SELECT * FROM their_visible_state WHERE lnchn = x'%s';",
+			 pubkey_to_hexstr(ctx, lnchn->id));
 
 	err = sqlite3_prepare_v2(sql, select, -1, &stmt, NULL);
 	if (err != SQLITE_OK)
-		fatal("load_peer_visible_state:prepare gave %s:%s",
+		fatal("load_lnchn_visible_state:prepare gave %s:%s",
 		      sqlite3_errstr(err), sqlite3_errmsg(sql));
 
 	while ((err = sqlite3_step(stmt)) != SQLITE_DONE) {
 		if (err != SQLITE_ROW)
-			fatal("load_peer_visible_state:step gave %s:%s",
+			fatal("load_lnchn_visible_state:step gave %s:%s",
 			      sqlite3_errstr(err), sqlite3_errmsg(sql));
 
 		if (sqlite3_column_count(stmt) != 8)
-			fatal("load_peer_visible_state:step gave %i cols, not 8",
+			fatal("load_lnchn_visible_state:step gave %i cols, not 8",
 			      sqlite3_column_count(stmt));
 
 		if (visible_set)
-			fatal("load_peer_visible_state: two states for %s", select);
+			fatal("load_lnchn_visible_state: two states for %s", select);
 		visible_set = true;
 
-		peer->remote.offer_anchor = sqlite3_column_int(stmt, 1);
-		pubkey_from_sql(stmt, 2, &peer->remote.commitkey);
-		pubkey_from_sql(stmt, 3, &peer->remote.finalkey);
-		peer->remote.locktime.locktime = sqlite3_column_int(stmt, 4);
-		peer->remote.mindepth = sqlite3_column_int(stmt, 5);
-		peer->remote.commit_fee_rate = sqlite3_column_int64(stmt, 6);
-		sha256_from_sql(stmt, 7, &peer->remote.next_revocation_hash);
-		log_debug(peer->log, "%s:next_revocation_hash=%s",
+		lnchn->remote.offer_anchor = sqlite3_column_int(stmt, 1);
+		pubkey_from_sql(stmt, 2, &lnchn->remote.commitkey);
+		pubkey_from_sql(stmt, 3, &lnchn->remote.finalkey);
+		lnchn->remote.locktime.locktime = sqlite3_column_int(stmt, 4);
+		lnchn->remote.mindepth = sqlite3_column_int(stmt, 5);
+		lnchn->remote.commit_fee_rate = sqlite3_column_int64(stmt, 6);
+		sha256_from_sql(stmt, 7, &lnchn->remote.next_revocation_hash);
+		log_debug(lnchn->log, "%s:next_revocation_hash=%s",
 			  __func__,
-			  tal_hexstr(ctx, &peer->remote.next_revocation_hash,
-				     sizeof(peer->remote.next_revocation_hash)));
+			  tal_hexstr(ctx, &lnchn->remote.next_revocation_hash,
+				     sizeof(lnchn->remote.next_revocation_hash)));
 
 		/* Now we can fill in anchor witnessscript. */
-		peer->anchor.witnessscript
-			= bitcoin_redeem_2of2(peer,
-					      &peer->local.commitkey,
-					      &peer->remote.commitkey);
+		lnchn->anchor.witnessscript
+			= bitcoin_redeem_2of2(lnchn,
+					      &lnchn->local.commitkey,
+					      &lnchn->remote.commitkey);
 	}
 
 	if (!visible_set)
-		fatal("load_peer_visible_state: no result '%s'", select);
+		fatal("load_lnchn_visible_state: no result '%s'", select);
 
 	err = sqlite3_finalize(stmt);
 	if (err != SQLITE_OK)
-		fatal("load_peer_visible_state:finalize gave %s:%s",
+		fatal("load_lnchn_visible_state:finalize gave %s:%s",
 		      sqlite3_errstr(err), sqlite3_errmsg(sql));
 	tal_free(ctx);
 }
 
-static void load_peer_commit_info(struct peer *peer)
+static void load_lnchn_commit_info(struct LNchannel *lnchn)
 {
 	int err;
 	sqlite3_stmt *stmt;
-	sqlite3 *sql = peer->dstate->db->sql;
-	char *ctx = tal_tmpctx(peer);
+	sqlite3 *sql = lnchn->dstate->db->sql;
+	char *ctx = tal_tmpctx(lnchn);
 	const char *select;
 
 	select = tal_fmt(ctx,
-			 "SELECT * FROM commit_info WHERE peer = x'%s';",
-			 pubkey_to_hexstr(ctx, peer->id));
+			 "SELECT * FROM commit_info WHERE lnchn = x'%s';",
+			 pubkey_to_hexstr(ctx, lnchn->id));
 
 	err = sqlite3_prepare_v2(sql, select, -1, &stmt, NULL);
 	if (err != SQLITE_OK)
-		fatal("load_peer_commit_info:prepare gave %s:%s",
+		fatal("load_lnchn_commit_info:prepare gave %s:%s",
 		      sqlite3_errstr(err), sqlite3_errmsg(sql));
 
 	while ((err = sqlite3_step(stmt)) != SQLITE_DONE) {
 		struct commit_info **cip, *ci;
 
 		if (err != SQLITE_ROW)
-			fatal("load_peer_commit_info:step gave %s:%s",
+			fatal("load_lnchn_commit_info:step gave %s:%s",
 			      sqlite3_errstr(err), sqlite3_errmsg(sql));
 
-		/* peer "SQL_PUBKEY", side TEXT, commit_num INT, revocation_hash "SQL_SHA256", sig "SQL_SIGNATURE", xmit_order INT, prev_revocation_hash "SQL_SHA256",  */
+		/* lnchn "SQL_PUBKEY", side TEXT, commit_num INT, revocation_hash "SQL_SHA256", sig "SQL_SIGNATURE", xmit_order INT, prev_revocation_hash "SQL_SHA256",  */
 		if (sqlite3_column_count(stmt) != 7)
-			fatal("load_peer_commit_info:step gave %i cols, not 7",
+			fatal("load_lnchn_commit_info:step gave %i cols, not 7",
 			      sqlite3_column_count(stmt));
 
 		if (streq(sqlite3_column_str(stmt, 1), "LOCAL"))
-			cip = &peer->local.commit;
+			cip = &lnchn->local.commit;
 		else {
 			if (!streq(sqlite3_column_str(stmt, 1), "REMOTE"))
-				fatal("load_peer_commit_info:bad side %s",
+				fatal("load_lnchn_commit_info:bad side %s",
 				      sqlite3_column_str(stmt, 1));
-			cip = &peer->remote.commit;
+			cip = &lnchn->remote.commit;
 			/* This is a hack where we temporarily store their
 			 * previous revocation hash before we get their
 			 * revocation. */
 			if (sqlite3_column_type(stmt, 6) != SQLITE_NULL) {
-				peer->their_prev_revocation_hash
-					= tal(peer, struct sha256);
+				lnchn->their_prev_revocation_hash
+					= tal(lnchn, struct sha256);
 				sha256_from_sql(stmt, 6,
-						peer->their_prev_revocation_hash);
+						lnchn->their_prev_revocation_hash);
 			}
 		}
 
 		/* Do we already have this one? */
 		if (*cip)
-			fatal("load_peer_commit_info:duplicate side %s",
+			fatal("load_lnchn_commit_info:duplicate side %s",
 			      sqlite3_column_str(stmt, 1));
 
-		*cip = ci = new_commit_info(peer, sqlite3_column_int64(stmt, 2));
+		*cip = ci = new_commit_info(lnchn, sqlite3_column_int64(stmt, 2));
 		sha256_from_sql(stmt, 3, &ci->revocation_hash);
 		ci->order = sqlite3_column_int64(stmt, 4);
 
 		if (sqlite3_column_type(stmt, 5) == SQLITE_NULL)
 			ci->sig = NULL;
 		else {
-			ci->sig = tal(ci, secp256k1_ecdsa_signature);
+			ci->sig = tal(ci, ecdsa_signature);
 			sig_from_sql(stmt, 5, ci->sig);
 		}
 
@@ -480,14 +474,14 @@ static void load_peer_commit_info(struct peer *peer)
 
 	err = sqlite3_finalize(stmt);
 	if (err != SQLITE_OK)
-		fatal("load_peer_commit_info:finalize gave %s:%s",
+		fatal("load_lnchn_commit_info:finalize gave %s:%s",
 		      sqlite3_errstr(err), sqlite3_errmsg(sql));
 	tal_free(ctx);
 
-	if (!peer->local.commit)
-		fatal("load_peer_commit_info:no local commit info found");
-	if (!peer->remote.commit)
-		fatal("load_peer_commit_info:no remote commit info found");
+	if (!lnchn->local.commit)
+		fatal("load_lnchn_commit_info:no local commit info found");
+	if (!lnchn->remote.commit)
+		fatal("load_lnchn_commit_info:no remote commit info found");
 }
 
 /* Because their HTLCs are not ordered wrt to ours, we can go negative
@@ -501,11 +495,11 @@ static void apply_htlc(struct channel_state *cstate, const struct htlc *htlc,
 	if (!htlc_has(htlc, HTLC_FLAG(side,HTLC_F_WAS_COMMITTED)))
 		return;
 
-	log_debug(htlc->peer->log, "  %s committed", sidestr);
+	log_debug(htlc->lnchn->log, "  %s committed", sidestr);
 	force_add_htlc(cstate, htlc);
 
 	if (!htlc_has(htlc, HTLC_FLAG(side, HTLC_F_COMMITTED))) {
-		log_debug(htlc->peer->log, "  %s %s",
+		log_debug(htlc->lnchn->log, "  %s %s",
 			  sidestr, htlc->r ? "resolved" : "failed");
 		if (htlc->r)
 			force_fulfill_htlc(cstate, htlc);
@@ -517,33 +511,33 @@ static void apply_htlc(struct channel_state *cstate, const struct htlc *htlc,
 /* As we load the HTLCs, we apply them to get the final channel_state.
  * We also get the last used htlc id.
  * This is slow, but sure. */
-static void load_peer_htlcs(struct peer *peer)
+static void load_lnchn_htlcs(struct LNchannel *lnchn)
 {
 	int err;
 	sqlite3_stmt *stmt;
-	sqlite3 *sql = peer->dstate->db->sql;
-	char *ctx = tal_tmpctx(peer);
+	sqlite3 *sql = lnchn->dstate->db->sql;
+	char *ctx = tal_tmpctx(lnchn);
 	const char *select;
 	bool to_them_only, to_us_only;
 
 	select = tal_fmt(ctx,
-			 "SELECT * FROM htlcs WHERE peer = x'%s' ORDER BY id;",
-			 pubkey_to_hexstr(ctx, peer->id));
+			 "SELECT * FROM htlcs WHERE lnchn = x'%s' ORDER BY id;",
+			 pubkey_to_hexstr(ctx, lnchn->id));
 
 	err = sqlite3_prepare_v2(sql, select, -1, &stmt, NULL);
 	if (err != SQLITE_OK)
-		fatal("load_peer_htlcs:prepare gave %s:%s",
+		fatal("load_lnchn_htlcs:prepare gave %s:%s",
 		      sqlite3_errstr(err), sqlite3_errmsg(sql));
 
-	peer->local.commit->cstate = initial_cstate(peer->local.commit,
-						    peer->anchor.satoshis,
-						    peer->local.commit_fee_rate,
-						    peer->local.offer_anchor ?
+	lnchn->local.commit->cstate = initial_cstate(lnchn->local.commit,
+						    lnchn->anchor.satoshis,
+						    lnchn->local.commit_fee_rate,
+						    lnchn->local.offer_anchor ?
 						    LOCAL : REMOTE);
-	peer->remote.commit->cstate = initial_cstate(peer->remote.commit,
-						     peer->anchor.satoshis,
-						     peer->remote.commit_fee_rate,
-						     peer->local.offer_anchor ?
+	lnchn->remote.commit->cstate = initial_cstate(lnchn->remote.commit,
+						     lnchn->anchor.satoshis,
+						     lnchn->remote.commit_fee_rate,
+						     lnchn->local.offer_anchor ?
 						     LOCAL : REMOTE);
 
 	/* We rebuild cstate by running *every* HTLC through. */
@@ -553,19 +547,19 @@ static void load_peer_htlcs(struct peer *peer)
 		enum htlc_state hstate;
 
 		if (err != SQLITE_ROW)
-			fatal("load_peer_htlcs:step gave %s:%s",
+			fatal("load_lnchn_htlcs:step gave %s:%s",
 			      sqlite3_errstr(err), sqlite3_errmsg(sql));
 
 		if (sqlite3_column_count(stmt) != 11)
-			fatal("load_peer_htlcs:step gave %i cols, not 11",
+			fatal("load_lnchn_htlcs:step gave %i cols, not 11",
 			      sqlite3_column_count(stmt));
 		sha256_from_sql(stmt, 5, &rhash);
 
 		hstate = htlc_state_from_name(sqlite3_column_str(stmt, 2));
 		if (hstate == HTLC_STATE_INVALID)
-			fatal("load_peer_htlcs:invalid state %s",
+			fatal("load_lnchn_htlcs:invalid state %s",
 			      sqlite3_column_str(stmt, 2));
-		htlc = peer_new_htlc(peer,
+		htlc = lnchn_new_htlc(lnchn,
 				     sqlite3_column_int64(stmt, 1),
 				     sqlite3_column_int64(stmt, 3),
 				     &rhash,
@@ -588,97 +582,97 @@ static void load_peer_htlcs(struct peer *peer)
 			      htlc_owner(htlc) == LOCAL ? "local" : "remote",
 			      htlc->id);
 
-		log_debug(peer->log, "Loaded %s HTLC %"PRIu64" (%s)",
+		log_debug(lnchn->log, "Loaded %s HTLC %"PRIu64" (%s)",
 			  htlc_owner(htlc) == LOCAL ? "local" : "remote",
 			  htlc->id, htlc_state_name(htlc->state));
 
 		if (htlc_owner(htlc) == LOCAL
-		    && htlc->id >= peer->htlc_id_counter)
-			peer->htlc_id_counter = htlc->id + 1;
+		    && htlc->id >= lnchn->htlc_id_counter)
+			lnchn->htlc_id_counter = htlc->id + 1;
 
 		/* Update cstate with this HTLC. */
-		apply_htlc(peer->local.commit->cstate, htlc, LOCAL);
-		apply_htlc(peer->remote.commit->cstate, htlc, REMOTE);
+		apply_htlc(lnchn->local.commit->cstate, htlc, LOCAL);
+		apply_htlc(lnchn->remote.commit->cstate, htlc, REMOTE);
 	}
 
 	err = sqlite3_finalize(stmt);
 	if (err != SQLITE_OK)
-		fatal("load_peer_htlcs:finalize gave %s:%s",
+		fatal("load_lnchn_htlcs:finalize gave %s:%s",
 		      sqlite3_errstr(err), sqlite3_errmsg(sql));
 
 	/* Now set any in-progress fee changes. */
 	select = tal_fmt(ctx,
-			 "SELECT * FROM feechanges WHERE peer = x'%s';",
-			 pubkey_to_hexstr(ctx, peer->id));
+			 "SELECT * FROM feechanges WHERE lnchn = x'%s';",
+			 pubkey_to_hexstr(ctx, lnchn->id));
 
 	err = sqlite3_prepare_v2(sql, select, -1, &stmt, NULL);
 	if (err != SQLITE_OK)
-		fatal("load_peer_htlcs:prepare gave %s:%s",
+		fatal("load_lnchn_htlcs:prepare gave %s:%s",
 		      sqlite3_errstr(err), sqlite3_errmsg(sql));
 
 	while ((err = sqlite3_step(stmt)) != SQLITE_DONE) {
 		enum feechange_state feechange_state;
 
 		if (err != SQLITE_ROW)
-			fatal("load_peer_htlcs:step gave %s:%s",
+			fatal("load_lnchn_htlcs:step gave %s:%s",
 			      sqlite3_errstr(err), sqlite3_errmsg(sql));
 
 		if (sqlite3_column_count(stmt) != 3)
-			fatal("load_peer_htlcs:step gave %i cols, not 3",
+			fatal("load_lnchn_htlcs:step gave %i cols, not 3",
 			      sqlite3_column_count(stmt));
 
 		feechange_state
 			= feechange_state_from_name(sqlite3_column_str(stmt, 1));
 		if (feechange_state == FEECHANGE_STATE_INVALID)
-			fatal("load_peer_htlcs:invalid feechange state %s",
+			fatal("load_lnchn_htlcs:invalid feechange state %s",
 			      sqlite3_column_str(stmt, 1));
-		if (peer->feechanges[feechange_state])
-			fatal("load_peer_htlcs: second feechange in state %s",
+		if (lnchn->feechanges[feechange_state])
+			fatal("load_lnchn_htlcs: second feechange in state %s",
 			      sqlite3_column_str(stmt, 1));
-		peer->feechanges[feechange_state]
-			= new_feechange(peer, sqlite3_column_int64(stmt, 2),
+		lnchn->feechanges[feechange_state]
+			= new_feechange(lnchn, sqlite3_column_int64(stmt, 2),
 					feechange_state);
 	}
 	err = sqlite3_finalize(stmt);
 	if (err != SQLITE_OK)
-		fatal("load_peer_htlcs:finalize gave %s:%s",
+		fatal("load_lnchn_htlcs:finalize gave %s:%s",
 		      sqlite3_errstr(err), sqlite3_errmsg(sql));
 
-	if (!balance_after_force(peer->local.commit->cstate)
-	    || !balance_after_force(peer->remote.commit->cstate))
-		fatal("load_peer_htlcs:channel didn't balance");
+	if (!balance_after_force(lnchn->local.commit->cstate)
+	    || !balance_after_force(lnchn->remote.commit->cstate))
+		fatal("load_lnchn_htlcs:channel didn't balance");
 
 	/* Update commit->tx and commit->map */
-	peer->local.commit->tx = create_commit_tx(peer->local.commit,
-						  peer,
-						  &peer->local.commit->revocation_hash,
-						  peer->local.commit->cstate,
+	lnchn->local.commit->tx = create_commit_tx(lnchn->local.commit,
+						  lnchn,
+						  &lnchn->local.commit->revocation_hash,
+						  lnchn->local.commit->cstate,
 						  LOCAL, &to_them_only);
-	bitcoin_txid(peer->local.commit->tx, &peer->local.commit->txid);
+	bitcoin_txid(lnchn->local.commit->tx, &lnchn->local.commit->txid);
 
-	peer->remote.commit->tx = create_commit_tx(peer->remote.commit,
-						   peer,
-						   &peer->remote.commit->revocation_hash,
-						   peer->remote.commit->cstate,
+	lnchn->remote.commit->tx = create_commit_tx(lnchn->remote.commit,
+						   lnchn,
+						   &lnchn->remote.commit->revocation_hash,
+						   lnchn->remote.commit->cstate,
 						   REMOTE, &to_us_only);
-	bitcoin_txid(peer->remote.commit->tx, &peer->remote.commit->txid);
+	bitcoin_txid(lnchn->remote.commit->tx, &lnchn->remote.commit->txid);
 
-	peer->remote.staging_cstate = copy_cstate(peer, peer->remote.commit->cstate);
-	peer->local.staging_cstate = copy_cstate(peer, peer->local.commit->cstate);
-	log_debug(peer->log, "Local staging: pay %u/%u fee %u/%u htlcs %u/%u",
-		  peer->local.staging_cstate->side[LOCAL].pay_msat,
-		  peer->local.staging_cstate->side[REMOTE].pay_msat,
-		  peer->local.staging_cstate->side[LOCAL].fee_msat,
-		  peer->local.staging_cstate->side[REMOTE].fee_msat,
-		  peer->local.staging_cstate->side[LOCAL].num_htlcs,
-		  peer->local.staging_cstate->side[REMOTE].num_htlcs);
-	log_debug(peer->log, "Remote staging: pay %u/%u fee %u/%u htlcs %u/%u",
-		  peer->remote.staging_cstate->side[LOCAL].pay_msat,
-		  peer->remote.staging_cstate->side[REMOTE].pay_msat,
-		  peer->remote.staging_cstate->side[LOCAL].fee_msat,
-		  peer->remote.staging_cstate->side[REMOTE].fee_msat,
-		  peer->remote.staging_cstate->side[LOCAL].num_htlcs,
-		  peer->remote.staging_cstate->side[REMOTE].num_htlcs);
+	lnchn->remote.staging_cstate = copy_cstate(lnchn, lnchn->remote.commit->cstate);
+	lnchn->local.staging_cstate = copy_cstate(lnchn, lnchn->local.commit->cstate);
+	log_debug(lnchn->log, "Local staging: pay %u/%u fee %u/%u htlcs %u/%u",
+		  lnchn->local.staging_cstate->side[LOCAL].pay_msat,
+		  lnchn->local.staging_cstate->side[REMOTE].pay_msat,
+		  lnchn->local.staging_cstate->side[LOCAL].fee_msat,
+		  lnchn->local.staging_cstate->side[REMOTE].fee_msat,
+		  lnchn->local.staging_cstate->side[LOCAL].num_htlcs,
+		  lnchn->local.staging_cstate->side[REMOTE].num_htlcs);
+	log_debug(lnchn->log, "Remote staging: pay %u/%u fee %u/%u htlcs %u/%u",
+		  lnchn->remote.staging_cstate->side[LOCAL].pay_msat,
+		  lnchn->remote.staging_cstate->side[REMOTE].pay_msat,
+		  lnchn->remote.staging_cstate->side[LOCAL].fee_msat,
+		  lnchn->remote.staging_cstate->side[REMOTE].fee_msat,
+		  lnchn->remote.staging_cstate->side[LOCAL].num_htlcs,
+		  lnchn->remote.staging_cstate->side[REMOTE].num_htlcs);
 
 	tal_free(ctx);
 }
@@ -694,7 +688,7 @@ static void connect_htlc_src(struct lightningd_state *dstate)
 	const char *select;
 
 	select = tal_fmt(ctx,
-			 "SELECT peer,id,state,src_peer,src_id FROM htlcs WHERE src_peer IS NOT NULL AND state <> 'RCVD_REMOVE_ACK_REVOCATION' AND state <> 'SENT_REMOVE_ACK_REVOCATION';");
+			 "SELECT lnchn,id,state,src_lnchn,src_id FROM htlcs WHERE src_lnchn IS NOT NULL AND state <> 'RCVD_REMOVE_ACK_REVOCATION' AND state <> 'SENT_REMOVE_ACK_REVOCATION';");
 
 	err = sqlite3_prepare_v2(sql, select, -1, &stmt, NULL);
 	if (err != SQLITE_OK)
@@ -703,7 +697,7 @@ static void connect_htlc_src(struct lightningd_state *dstate)
 
 	while ((err = sqlite3_step(stmt)) != SQLITE_DONE) {
 		struct pubkey id;
-		struct peer *peer;
+		struct LNchannel *lnchn;
 		struct htlc *htlc;
 		enum htlc_state s;
 
@@ -712,8 +706,8 @@ static void connect_htlc_src(struct lightningd_state *dstate)
 			      sqlite3_errstr(err), sqlite3_errmsg(sql));
 
 		pubkey_from_sql(stmt, 0, &id);
-		peer = find_peer(dstate, &id);
-		if (!peer)
+		lnchn = find_lnchn(dstate, &id);
+		if (!lnchn)
 			continue;
 
 		s = htlc_state_from_name(sqlite3_column_str(stmt, 2));
@@ -721,7 +715,7 @@ static void connect_htlc_src(struct lightningd_state *dstate)
 			fatal("connect_htlc_src:unknown state %s",
 			      sqlite3_column_str(stmt, 2));
 
-		htlc = htlc_get(&peer->htlcs, sqlite3_column_int64(stmt, 1),
+		htlc = htlc_get(&lnchn->htlcs, sqlite3_column_int64(stmt, 1),
 				htlc_state_owner(s));
 		if (!htlc)
 			fatal("connect_htlc_src:unknown htlc %"PRIuSQLITE64" state %s",
@@ -729,13 +723,13 @@ static void connect_htlc_src(struct lightningd_state *dstate)
 			      sqlite3_column_str(stmt, 2));
 
 		pubkey_from_sql(stmt, 4, &id);
-		peer = find_peer(dstate, &id);
-		if (!peer)
-			fatal("connect_htlc_src:unknown src peer %s",
+		lnchn = find_lnchn(dstate, &id);
+		if (!lnchn)
+			fatal("connect_htlc_src:unknown src lnchn %s",
 			      tal_hexstr(dstate, &id, sizeof(id)));
 
 		/* Source must be a HTLC they offered. */
-		htlc->src = htlc_get(&peer->htlcs,
+		htlc->src = htlc_get(&lnchn->htlcs,
 				     sqlite3_column_int64(stmt, 4),
 				     REMOTE);
 		if (!htlc->src)
@@ -744,7 +738,7 @@ static void connect_htlc_src(struct lightningd_state *dstate)
 
 	err = sqlite3_finalize(stmt);
 	if (err != SQLITE_OK)
-		fatal("load_peer_htlcs:finalize gave %s:%s",
+		fatal("load_lnchn_htlcs:finalize gave %s:%s",
 		      sqlite3_errstr(err),
 		      sqlite3_errmsg(dstate->db->sql));
 	tal_free(ctx);
@@ -792,158 +786,158 @@ static bool delinearize_shachain(struct shachain *shachain,
 	return p && len == 0;
 }
 
-static void load_peer_shachain(struct peer *peer)
+static void load_lnchn_shachain(struct LNchannel *lnchn)
 {
 	int err;
 	sqlite3_stmt *stmt;
-	sqlite3 *sql = peer->dstate->db->sql;
-	char *ctx = tal_tmpctx(peer);
+	sqlite3 *sql = lnchn->dstate->db->sql;
+	char *ctx = tal_tmpctx(lnchn);
 	bool shachain_found = false;
 	const char *select;
 
 	select = tal_fmt(ctx,
-			 "SELECT * FROM shachain WHERE peer = x'%s';",
-			 pubkey_to_hexstr(ctx, peer->id));
+			 "SELECT * FROM shachain WHERE lnchn = x'%s';",
+			 pubkey_to_hexstr(ctx, lnchn->id));
 
 	err = sqlite3_prepare_v2(sql, select, -1, &stmt, NULL);
 	if (err != SQLITE_OK)
-		fatal("load_peer_shachain:prepare gave %s:%s",
+		fatal("load_lnchn_shachain:prepare gave %s:%s",
 		      sqlite3_errstr(err), sqlite3_errmsg(sql));
 
 	while ((err = sqlite3_step(stmt)) != SQLITE_DONE) {
 		const char *hexstr;
 
 		if (err != SQLITE_ROW)
-			fatal("load_peer_shachain:step gave %s:%s",
+			fatal("load_lnchn_shachain:step gave %s:%s",
 			      sqlite3_errstr(err), sqlite3_errmsg(sql));
 
-		/* shachain (peer "SQL_PUBKEY", shachain BINARY(%zu) */
+		/* shachain (lnchn "SQL_PUBKEY", shachain BINARY(%zu) */
 		if (sqlite3_column_count(stmt) != 2)
-			fatal("load_peer_shachain:step gave %i cols, not 2",
+			fatal("load_lnchn_shachain:step gave %i cols, not 2",
 			      sqlite3_column_count(stmt));
 
 		if (shachain_found)
-			fatal("load_peer_shachain:multiple shachains?");
+			fatal("load_lnchn_shachain:multiple shachains?");
 
 		hexstr = tal_hexstr(ctx, sqlite3_column_blob(stmt, 1),
 				    sqlite3_column_bytes(stmt, 1));
-		if (!delinearize_shachain(&peer->their_preimages,
+		if (!delinearize_shachain(&lnchn->their_preimages,
 					  sqlite3_column_blob(stmt, 1),
 					  sqlite3_column_bytes(stmt, 1)))
-			fatal("load_peer_shachain:invalid shachain %s",
+			fatal("load_lnchn_shachain:invalid shachain %s",
 			      hexstr);
 		shachain_found = true;
 	}
 
 	if (!shachain_found)
-		fatal("load_peer_shachain:no shachain");
+		fatal("load_lnchn_shachain:no shachain");
 	tal_free(ctx);
 }
 
 /* We may not have one, and that's OK. */
-static void load_peer_closing(struct peer *peer)
+static void load_lnchn_closing(struct LNchannel *lnchn)
 {
 	int err;
 	sqlite3_stmt *stmt;
-	sqlite3 *sql = peer->dstate->db->sql;
-	char *ctx = tal_tmpctx(peer);
+	sqlite3 *sql = lnchn->dstate->db->sql;
+	char *ctx = tal_tmpctx(lnchn);
 	bool closing_found = false;
 	const char *select;
 
 	select = tal_fmt(ctx,
-			 "SELECT * FROM closing WHERE peer = x'%s';",
-			 pubkey_to_hexstr(ctx, peer->id));
+			 "SELECT * FROM closing WHERE lnchn = x'%s';",
+			 pubkey_to_hexstr(ctx, lnchn->id));
 
 	err = sqlite3_prepare_v2(sql, select, -1, &stmt, NULL);
 	if (err != SQLITE_OK)
-		fatal("load_peer_closing:prepare gave %s:%s",
+		fatal("load_lnchn_closing:prepare gave %s:%s",
 		      sqlite3_errstr(err), sqlite3_errmsg(sql));
 
 	while ((err = sqlite3_step(stmt)) != SQLITE_DONE) {
 		if (err != SQLITE_ROW)
-			fatal("load_peer_closing:step gave %s:%s",
+			fatal("load_lnchn_closing:step gave %s:%s",
 			      sqlite3_errstr(err), sqlite3_errmsg(sql));
 
 		if (sqlite3_column_count(stmt) != 9)
-			fatal("load_peer_closing:step gave %i cols, not 9",
+			fatal("load_lnchn_closing:step gave %i cols, not 9",
 			      sqlite3_column_count(stmt));
 
 		if (closing_found)
-			fatal("load_peer_closing:multiple closing?");
+			fatal("load_lnchn_closing:multiple closing?");
 
-		peer->closing.our_fee = sqlite3_column_int64(stmt, 1);
-		peer->closing.their_fee = sqlite3_column_int64(stmt, 2);
+		lnchn->closing.our_fee = sqlite3_column_int64(stmt, 1);
+		lnchn->closing.their_fee = sqlite3_column_int64(stmt, 2);
 		if (sqlite3_column_type(stmt, 3) == SQLITE_NULL)
-			peer->closing.their_sig = NULL;
+			lnchn->closing.their_sig = NULL;
 		else {
-			peer->closing.their_sig = tal(peer,
-						      secp256k1_ecdsa_signature);
-			sig_from_sql(stmt, 3, peer->closing.their_sig);
+			lnchn->closing.their_sig = tal(lnchn,
+						      ecdsa_signature);
+			sig_from_sql(stmt, 3, lnchn->closing.their_sig);
 		}
-		peer->closing.our_script = tal_sql_blob(peer, stmt, 4);
-		peer->closing.their_script = tal_sql_blob(peer, stmt, 5);
-		peer->closing.shutdown_order = sqlite3_column_int64(stmt, 6);
-		peer->closing.closing_order = sqlite3_column_int64(stmt, 7);
-		peer->closing.sigs_in = sqlite3_column_int64(stmt, 8);
+		lnchn->closing.our_script = tal_sql_blob(lnchn, stmt, 4);
+		lnchn->closing.their_script = tal_sql_blob(lnchn, stmt, 5);
+		lnchn->closing.shutdown_order = sqlite3_column_int64(stmt, 6);
+		lnchn->closing.closing_order = sqlite3_column_int64(stmt, 7);
+		lnchn->closing.sigs_in = sqlite3_column_int64(stmt, 8);
 		closing_found = true;
 	}
 	tal_free(ctx);
 }
 
 /* FIXME: much of this is redundant. */
-static void restore_peer_local_visible_state(struct peer *peer)
+static void restore_lnchn_local_visible_state(struct LNchannel *lnchn)
 {
-	assert(peer->local.offer_anchor == !peer->remote.offer_anchor);
+	assert(lnchn->local.offer_anchor == !lnchn->remote.offer_anchor);
 
-	/* peer->local.commitkey and peer->local.finalkey set by
-	 * peer_set_secrets_from_db(). */
-	memcheck(&peer->local.commitkey, sizeof(peer->local.commitkey));
-	memcheck(&peer->local.finalkey, sizeof(peer->local.finalkey));
-	/* These set in new_peer */
-	memcheck(&peer->local.locktime, sizeof(peer->local.locktime));
-	memcheck(&peer->local.mindepth, sizeof(peer->local.mindepth));
-	/* This set in db_load_peers */
-	memcheck(&peer->local.commit_fee_rate,
-		 sizeof(peer->local.commit_fee_rate));
+	/* lnchn->local.commitkey and lnchn->local.finalkey set by
+	 * lnchn_set_secrets_from_db(). */
+	memcheck(&lnchn->local.commitkey, sizeof(lnchn->local.commitkey));
+	memcheck(&lnchn->local.finalkey, sizeof(lnchn->local.finalkey));
+	/* These set in new_lnchn */
+	memcheck(&lnchn->local.locktime, sizeof(lnchn->local.locktime));
+	memcheck(&lnchn->local.mindepth, sizeof(lnchn->local.mindepth));
+	/* This set in db_load_lnchns */
+	memcheck(&lnchn->local.commit_fee_rate,
+		 sizeof(lnchn->local.commit_fee_rate));
 
-	peer_get_revocation_hash(peer,
-				 peer->local.commit->commit_num + 1,
-				 &peer->local.next_revocation_hash);
+	lnchn_get_revocation_hash(lnchn,
+				 lnchn->local.commit->commit_num + 1,
+				 &lnchn->local.next_revocation_hash);
 
-	if (state_is_normal(peer->state))
-		peer->nc = add_connection(peer->dstate->rstate,
-					  &peer->dstate->id, peer->id,
-					  peer->dstate->config.fee_base,
-					  peer->dstate->config.fee_per_satoshi,
-					  peer->dstate->config.min_htlc_expiry,
-					  peer->dstate->config.min_htlc_expiry);
+	if (state_is_normal(lnchn->state))
+		lnchn->nc = add_connection(lnchn->dstate->rstate,
+					  &lnchn->dstate->id, lnchn->id,
+					  lnchn->dstate->config.fee_base,
+					  lnchn->dstate->config.fee_per_satoshi,
+					  lnchn->dstate->config.min_htlc_expiry,
+					  lnchn->dstate->config.min_htlc_expiry);
 
-	peer->their_commitsigs = peer->local.commit->commit_num + 1;
+	lnchn->their_commitsigs = lnchn->local.commit->commit_num + 1;
 	/* If they created anchor, they didn't send a sig for first commit */
-	if (!peer->anchor.ours)
-		peer->their_commitsigs--;
+	if (!lnchn->anchor.ours)
+		lnchn->their_commitsigs--;
 
-	if (peer->local.commit->order + 1 > peer->order_counter)
-		peer->order_counter = peer->local.commit->order + 1;
-	if (peer->remote.commit->order + 1 > peer->order_counter)
-		peer->order_counter = peer->remote.commit->order + 1;
-	if (peer->closing.closing_order + 1 > peer->order_counter)
-		peer->order_counter = peer->closing.closing_order + 1;
-	if (peer->closing.shutdown_order + 1 > peer->order_counter)
-		peer->order_counter = peer->closing.shutdown_order + 1;
+	if (lnchn->local.commit->order + 1 > lnchn->order_counter)
+		lnchn->order_counter = lnchn->local.commit->order + 1;
+	if (lnchn->remote.commit->order + 1 > lnchn->order_counter)
+		lnchn->order_counter = lnchn->remote.commit->order + 1;
+	if (lnchn->closing.closing_order + 1 > lnchn->order_counter)
+		lnchn->order_counter = lnchn->closing.closing_order + 1;
+	if (lnchn->closing.shutdown_order + 1 > lnchn->order_counter)
+		lnchn->order_counter = lnchn->closing.shutdown_order + 1;
 }
 
-static void db_load_peers(struct lightningd_state *dstate)
+static void db_load_lnchns(struct lightningd_state *dstate)
 {
 	int err;
 	sqlite3_stmt *stmt;
-	struct peer *peer;
+	struct LNchannel *lnchn;
 
-	err = sqlite3_prepare_v2(dstate->db->sql, "SELECT * FROM peers;", -1,
+	err = sqlite3_prepare_v2(dstate->db->sql, "SELECT * FROM lnchns;", -1,
 				 &stmt, NULL);
 
 	if (err != SQLITE_OK)
-		fatal("db_load_peers:prepare gave %s:%s",
+		fatal("db_load_lnchns:prepare gave %s:%s",
 		      sqlite3_errstr(err), sqlite3_errmsg(dstate->db->sql));
 
 	while ((err = sqlite3_step(stmt)) != SQLITE_DONE) {
@@ -953,83 +947,83 @@ static void db_load_peers(struct lightningd_state *dstate)
 		const char *idstr;
 
 		if (err != SQLITE_ROW)
-			fatal("db_load_peers:step gave %s:%s",
+			fatal("db_load_lnchns:step gave %s:%s",
 			      sqlite3_errstr(err),
 			      sqlite3_errmsg(dstate->db->sql));
 		if (sqlite3_column_count(stmt) != 4)
-			fatal("db_load_peers:step gave %i cols, not 4",
+			fatal("db_load_lnchns:step gave %i cols, not 4",
 			      sqlite3_column_count(stmt));
 		state = name_to_state(sqlite3_column_str(stmt, 1));
 		if (state == STATE_MAX)
-			fatal("db_load_peers:unknown state %s",
+			fatal("db_load_lnchns:unknown state %s",
 			      sqlite3_column_str(stmt, 1));
 		pubkey_from_sql(stmt, 0, &id);
 		idstr = pubkey_to_hexstr(dstate, &id);
 		l = new_log(dstate, dstate->log_book, "%s:", idstr);
 		tal_free(idstr);
-		peer = new_peer(dstate, l, state, sqlite3_column_int(stmt, 2));
-		peer->htlc_id_counter = 0;
-		peer->id = tal_dup(peer, struct pubkey, &id);
-		peer->local.commit_fee_rate = sqlite3_column_int64(stmt, 3);
-        peer->final_redeemscript = tal_sql_blob(peer, stmt, 4);
-		peer->order_counter = 1;
-		log_debug(peer->log, "%s:%s",
-			  __func__, state_name(peer->state));
+		lnchn = new_lnchn(dstate, l, state, sqlite3_column_int(stmt, 2));
+		lnchn->htlc_id_counter = 0;
+		lnchn->id = tal_dup(lnchn, struct pubkey, &id);
+		lnchn->local.commit_fee_rate = sqlite3_column_int64(stmt, 3);
+        lnchn->final_redeemscript = tal_sql_blob(lnchn, stmt, 4);
+		lnchn->order_counter = 1;
+		log_debug(lnchn->log, "%s:%s",
+			  __func__, state_name(lnchn->state));
 	}
 	err = sqlite3_finalize(stmt);
 	if (err != SQLITE_OK)
-		fatal("db_load_peers:finalize gave %s:%s",
+		fatal("db_load_lnchns:finalize gave %s:%s",
 		      sqlite3_errstr(err),
 		      sqlite3_errmsg(dstate->db->sql));
 
-	list_for_each(&dstate->peers, peer, list) {
-		load_peer_secrets(peer);
-		load_peer_closing(peer);
-		peer->anchor.min_depth = 0;
-		if (peer->state >= STATE_OPEN_WAIT_ANCHORDEPTH_AND_THEIRCOMPLETE
-		    && !state_is_error(peer->state)) {
-			load_peer_anchor(peer);
-			load_peer_visible_state(peer);
-			load_peer_shachain(peer);
-			load_peer_commit_info(peer);
-			load_peer_htlcs(peer);
-			restore_peer_local_visible_state(peer);
+	list_for_each(&dstate->lnchns, lnchn, list) {
+		load_lnchn_secrets(lnchn);
+		load_lnchn_closing(lnchn);
+		lnchn->anchor.min_depth = 0;
+		if (lnchn->state >= STATE_OPEN_WAIT_ANCHORDEPTH_AND_THEIRCOMPLETE
+		    && !state_is_error(lnchn->state)) {
+			load_lnchn_anchor(lnchn);
+			load_lnchn_visible_state(lnchn);
+			load_lnchn_shachain(lnchn);
+			load_lnchn_commit_info(lnchn);
+			load_lnchn_htlcs(lnchn);
+			restore_lnchn_local_visible_state(lnchn);
 		}
-		if (peer->local.offer_anchor)
-			load_peer_anchor_input(peer);
+		if (lnchn->local.offer_anchor)
+			load_lnchn_anchor_input(lnchn);
 	}
 
 	connect_htlc_src(dstate);
 }
 
 
-static const char *pubkeys_to_hex(const tal_t *ctx, const struct pubkey *ids)
-{
-	u8 *ders = tal_arr(ctx, u8, PUBKEY_DER_LEN * tal_count(ids));
-	size_t i;
-
-	for (i = 0; i < tal_count(ids); i++)
-		pubkey_to_der(ders + i * PUBKEY_DER_LEN, &ids[i]);
-
-	return tal_hex(ctx, ders);
-}
-static struct pubkey *pubkeys_from_arr(const tal_t *ctx,
-				       const void *blob, size_t len)
-{
-	struct pubkey *ids;
-	size_t i;
-
-	if (len % PUBKEY_DER_LEN)
-		fatal("ids array bad length %zu", len);
-
-	ids = tal_arr(ctx, struct pubkey, len / PUBKEY_DER_LEN);
-	for (i = 0; i < tal_count(ids); i++) {
-		if (!pubkey_from_der(blob, PUBKEY_DER_LEN, &ids[i]))
-			fatal("ids array invalid %zu", i);
-		blob = (const u8 *)blob + PUBKEY_DER_LEN;
-	}
-	return ids;
-}
+//static const char *pubkeys_to_hex(const tal_t *ctx, const struct pubkey *ids)
+//{
+//	u8 *ders = tal_arr(ctx, u8, PUBKEY_DER_LEN * tal_count(ids));
+//	size_t i;
+//
+//	for (i = 0; i < tal_count(ids); i++)
+//		pubkey_to_der(ders + i * PUBKEY_DER_LEN, &ids[i]);
+//
+//	return tal_hex(ctx, ders);
+//}
+//static struct pubkey *pubkeys_from_arr(const tal_t *ctx,
+//				       const void *blob, size_t len)
+//{
+//	struct pubkey *ids;
+//	size_t i;
+//
+//	if (len % PUBKEY_DER_LEN)
+//		fatal("ids array bad length %zu", len);
+//
+//	ids = tal_arr(ctx, struct pubkey, len / PUBKEY_DER_LEN);
+//	for (i = 0; i < tal_count(ids); i++) {
+//		if (!pubkey_from_der(blob, PUBKEY_DER_LEN, &ids[i]))
+//			fatal("ids array invalid %zu", i);
+//		blob = (const u8 *)blob + PUBKEY_DER_LEN;
+//	}
+//	return ids;
+//}
 
 static void db_load_pay(struct lightningd_state *dstate)
 {
@@ -1047,7 +1041,7 @@ static void db_load_pay(struct lightningd_state *dstate)
 	while ((err = sqlite3_step(stmt)) != SQLITE_DONE) {
 		struct sha256 rhash;
 		struct htlc *htlc;
-		struct pubkey *peer_id;
+		struct pubkey *lnchn_id;
 		u64 htlc_id, msatoshi;
 		struct pubkey *ids;
 		struct preimage *r;
@@ -1067,10 +1061,10 @@ static void db_load_pay(struct lightningd_state *dstate)
 				       sqlite3_column_blob(stmt, 2),
 				       sqlite3_column_bytes(stmt, 2));
 		if (sqlite3_column_type(stmt, 3) == SQLITE_NULL)
-			peer_id = NULL;
+			lnchn_id = NULL;
 		else {
-			peer_id = tal(ctx, struct pubkey);
-			pubkey_from_sql(stmt, 3, peer_id);
+			lnchn_id = tal(ctx, struct pubkey);
+			pubkey_from_sql(stmt, 3, lnchn_id);
 		}
 		htlc_id = sqlite3_column_int64(stmt, 4);
 		if (sqlite3_column_type(stmt, 5) == SQLITE_NULL)
@@ -1081,15 +1075,15 @@ static void db_load_pay(struct lightningd_state *dstate)
 		}
 		fail = tal_sql_blob(ctx, stmt, 6);
 		/* Exactly one of these must be set. */
-		if (!fail + !peer_id + !r != 2)
+		if (!fail + !lnchn_id + !r != 2)
 			fatal("db_load_pay: not exactly one set:"
-			      " fail=%p peer_id=%p r=%p",
-			      fail, peer_id, r);
-		if (peer_id) {
-			struct peer *peer = find_peer(dstate, peer_id);
-			if (!peer)
-				fatal("db_load_pay: unknown peer");
-			htlc = htlc_get(&peer->htlcs, htlc_id, LOCAL);
+			      " fail=%p lnchn_id=%p r=%p",
+			      fail, lnchn_id, r);
+		if (lnchn_id) {
+			struct LNchannel *lnchn = find_lnchn(dstate, lnchn_id);
+			if (!lnchn)
+				fatal("db_load_pay: unknown lnchn");
+			htlc = htlc_get(&lnchn->htlcs, htlc_id, LOCAL);
 			if (!htlc)
 				fatal("db_load_pay: unknown htlc");
 		} else
@@ -1144,28 +1138,28 @@ static void db_load_addresses(struct lightningd_state *dstate)
 	char *ctx = tal_tmpctx(dstate);
 	const char *select;
 
-	select = tal_fmt(ctx, "SELECT * FROM peer_address;");
+	select = tal_fmt(ctx, "SELECT * FROM lnchn_address;");
 
 	err = sqlite3_prepare_v2(sql, select, -1, &stmt, NULL);
 	if (err != SQLITE_OK)
-		fatal("load_peer_addresses:prepare gave %s:%s",
+		fatal("load_lnchn_addresses:prepare gave %s:%s",
 		      sqlite3_errstr(err), sqlite3_errmsg(sql));
 
 	while ((err = sqlite3_step(stmt)) != SQLITE_DONE) {
-		struct peer_address *addr;
+		struct LNchannel_address *addr;
 
 		if (err != SQLITE_ROW)
-			fatal("load_peer_addresses:step gave %s:%s",
+			fatal("load_lnchn_addresses:step gave %s:%s",
 			      sqlite3_errstr(err), sqlite3_errmsg(sql));
-		addr = tal(dstate, struct peer_address);
+		addr = tal(dstate, struct LNchannel_address);
 		pubkey_from_sql(stmt, 0, &addr->id);
 		if (!netaddr_from_blob(sqlite3_column_blob(stmt, 1),
 				       sqlite3_column_bytes(stmt, 1),
 				       &addr->addr))
-			fatal("load_peer_addresses: unparsable addresses for '%s'",
+			fatal("load_lnchn_addresses: unparsable addresses for '%s'",
 			      select);
 		list_add_tail(&dstate->addresses, &addr->list);
-		log_debug(dstate->base_log, "load_peer_addresses:%s",
+		log_debug(dstate->base_log, "load_lnchn_addresses:%s",
 			  pubkey_to_hexstr(ctx, &addr->id));
 	}
 	tal_free(ctx);
@@ -1213,7 +1207,7 @@ static void db_load(struct lightningd_state *dstate)
 	db_check_version(dstate);
 	db_load_wallet(dstate);
 	db_load_addresses(dstate);
-	db_load_peers(dstate);
+	db_load_lnchns(dstate);
 	db_load_pay(dstate);
 	db_load_invoice(dstate);
 }
@@ -1261,7 +1255,7 @@ void db_init(struct lightningd_state *dstate)
 		      SQL_PRIVKEY(privkey))
 		TABLE(pay,
 		      SQL_RHASH(rhash), SQL_U64(msatoshi),
-		      SQL_BLOB(ids), SQL_PUBKEY(htlc_peer),
+		      SQL_BLOB(ids), SQL_PUBKEY(htlc_lnchn),
 		      SQL_U64(htlc_id), SQL_R(r), SQL_FAIL(fail),
 		      "PRIMARY KEY(rhash)")
 		TABLE(invoice,
@@ -1269,67 +1263,67 @@ void db_init(struct lightningd_state *dstate)
 		      SQL_U64(paid_num),
 		      "PRIMARY KEY(label)")
 		TABLE(anchor_inputs,
-		      SQL_PUBKEY(peer),
+		      SQL_PUBKEY(lnchn),
 		      SQL_TXID(txid), SQL_U32(idx),
 		      SQL_U64(in_amount), SQL_U64(out_amount),
 		      SQL_PUBKEY(walletkey))
 		TABLE(anchors,
-		      SQL_PUBKEY(peer),
+		      SQL_PUBKEY(lnchn),
 		      SQL_TXID(txid), SQL_U32(idx), SQL_U64(amount),
 		      SQL_U32(ok_depth), SQL_U32(min_depth),
 		      SQL_BOOL(ours))
 		/* FIXME: state in key is overkill: just need side */
 		TABLE(htlcs,
-		      SQL_PUBKEY(peer), SQL_U64(id),
+		      SQL_PUBKEY(lnchn), SQL_U64(id),
 		      SQL_STATENAME(state), SQL_U64(msatoshi),
 		      SQL_U32(expiry), SQL_RHASH(rhash), SQL_R(r),
-		      SQL_ROUTING(routing), SQL_PUBKEY(src_peer),
+		      SQL_ROUTING(routing), SQL_PUBKEY(src_lnchn),
 		      SQL_U64(src_id), SQL_BLOB(fail),
-		      "PRIMARY KEY(peer, id, state)")
+		      "PRIMARY KEY(lnchn, id, state)")
 		TABLE(feechanges,
-		      SQL_PUBKEY(peer), SQL_STATENAME(state),
+		      SQL_PUBKEY(lnchn), SQL_STATENAME(state),
 		      SQL_U32(fee_rate),
-		      "PRIMARY KEY(peer,state)")
+		      "PRIMARY KEY(lnchn,state)")
 		TABLE(commit_info,
-		      SQL_PUBKEY(peer), SQL_U32(side),
+		      SQL_PUBKEY(lnchn), SQL_U32(side),
 		      SQL_U64(commit_num), SQL_SHA256(revocation_hash),
 		      SQL_U64(xmit_order), SQL_SIGNATURE(sig),
 		      SQL_SHA256(prev_revocation_hash),
-		      "PRIMARY KEY(peer, side)")
+		      "PRIMARY KEY(lnchn, side)")
 		TABLE(shachain,
-		      SQL_PUBKEY(peer), SQL_SHACHAIN(shachain),
-		      "PRIMARY KEY(peer)")
+		      SQL_PUBKEY(lnchn), SQL_SHACHAIN(shachain),
+		      "PRIMARY KEY(lnchn)")
 		TABLE(their_visible_state,
-		      SQL_PUBKEY(peer), SQL_BOOL(offered_anchor),
+		      SQL_PUBKEY(lnchn), SQL_BOOL(offered_anchor),
 		      SQL_PUBKEY(commitkey), SQL_PUBKEY(finalkey),
 		      SQL_U32(locktime), SQL_U32(mindepth),
 		      SQL_U32(commit_fee_rate),
 		      SQL_SHA256(next_revocation_hash),
-		      "PRIMARY KEY(peer)")
+		      "PRIMARY KEY(lnchn)")
 		TABLE(their_commitments,
-		      SQL_PUBKEY(peer), SQL_SHA256(txid),
+		      SQL_PUBKEY(lnchn), SQL_SHA256(txid),
 		      SQL_U64(commit_num),
-		      "PRIMARY KEY(peer, txid)")
-		TABLE(peer_secrets,
-		      SQL_PUBKEY(peer), SQL_PRIVKEY(commitkey),
+		      "PRIMARY KEY(lnchn, txid)")
+		TABLE(lnchn_secrets,
+		      SQL_PUBKEY(lnchn), SQL_PRIVKEY(commitkey),
 		      SQL_PRIVKEY(finalkey),
 		      SQL_SHA256(revocation_seed),
-		      "PRIMARY KEY(peer)")
-		TABLE(peer_address,
-		      SQL_PUBKEY(peer), SQL_BLOB(addr),
-		      "PRIMARY KEY(peer)")
+		      "PRIMARY KEY(lnchn)")
+		TABLE(lnchn_address,
+		      SQL_PUBKEY(lnchn), SQL_BLOB(addr),
+		      "PRIMARY KEY(lnchn)")
 		TABLE(closing,
-		      SQL_PUBKEY(peer), SQL_U64(our_fee),
+		      SQL_PUBKEY(lnchn), SQL_U64(our_fee),
 		      SQL_U64(their_fee), SQL_SIGNATURE(their_sig),
 		      SQL_BLOB(our_script), SQL_BLOB(their_script),
 		      SQL_U64(shutdown_order), SQL_U64(closing_order),
 		      SQL_U64(sigs_in),
-		      "PRIMARY KEY(peer)")
-		TABLE(peers,
-		      SQL_PUBKEY(peer), SQL_STATENAME(state),
+		      "PRIMARY KEY(lnchn)")
+		TABLE(lnchns,
+		      SQL_PUBKEY(lnchn), SQL_STATENAME(state),
 		      SQL_BOOL(offered_anchor), SQL_U32(our_feerate),
               SQL_BLOB(redeem_script),
-		      "PRIMARY KEY(peer)")
+		      "PRIMARY KEY(lnchn)")
 		TABLE(version, "version VARCHAR(100)"));
 	db_exec(__func__, dstate, "INSERT INTO version VALUES ('"VERSION"');");
 	db_exec(__func__, dstate, "COMMIT;");
@@ -1341,204 +1335,204 @@ void db_init(struct lightningd_state *dstate)
 	}
 }
 
-void db_set_anchor(struct peer *peer)
+void db_set_anchor(struct LNchannel *lnchn)
 {
-	const char *ctx = tal_tmpctx(peer);
-	const char *peerid;
+	const char *ctx = tal_tmpctx(lnchn);
+	const char *lnchnid;
 
-	assert(peer->dstate->db->in_transaction);
-	peerid = pubkey_to_hexstr(ctx, peer->id);
-	log_debug(peer->log, "%s(%s)", __func__, peerid);
+	assert(lnchn->dstate->db->in_transaction);
+	lnchnid = pubkey_to_hexstr(ctx, lnchn->id);
+	log_debug(lnchn->log, "%s(%s)", __func__, lnchnid);
 
-	db_exec(__func__, peer->dstate,
+	db_exec(__func__, lnchn->dstate,
 		"INSERT INTO anchors VALUES (x'%s', x'%s', %u, %"PRIu64", %i, %u, %s);",
-		peerid,
-		tal_hexstr(ctx, &peer->anchor.txid, sizeof(peer->anchor.txid)),
-		peer->anchor.index,
-		peer->anchor.satoshis,
-		peer->anchor.ok_depth,
-		peer->anchor.min_depth,
-		sql_bool(peer->anchor.ours));
+		lnchnid,
+		tal_hexstr(ctx, &lnchn->anchor.txid, sizeof(lnchn->anchor.txid)),
+		lnchn->anchor.index,
+		lnchn->anchor.satoshis,
+		lnchn->anchor.ok_depth,
+		lnchn->anchor.min_depth,
+		sql_bool(lnchn->anchor.ours));
 
-	db_exec(__func__, peer->dstate,
+	db_exec(__func__, lnchn->dstate,
 		"INSERT INTO commit_info VALUES(x'%s', '%s', 0, x'%s', %"PRIi64", %s, NULL);",
-		peerid,
+		lnchnid,
 		side_to_str(LOCAL),
-		tal_hexstr(ctx, &peer->local.commit->revocation_hash,
-			   sizeof(peer->local.commit->revocation_hash)),
-		peer->local.commit->order,
-		sig_to_sql(ctx, peer->local.commit->sig));
+		tal_hexstr(ctx, &lnchn->local.commit->revocation_hash,
+			   sizeof(lnchn->local.commit->revocation_hash)),
+		lnchn->local.commit->order,
+		sig_to_sql(ctx, lnchn->local.commit->sig));
 
-	db_exec(__func__, peer->dstate,
+	db_exec(__func__, lnchn->dstate,
 		"INSERT INTO commit_info VALUES(x'%s', '%s', 0, x'%s', %"PRIi64", %s, NULL);",
-		peerid,
+		lnchnid,
 		side_to_str(REMOTE),
-		tal_hexstr(ctx, &peer->remote.commit->revocation_hash,
-			   sizeof(peer->remote.commit->revocation_hash)),
-		peer->remote.commit->order,
-		sig_to_sql(ctx, peer->remote.commit->sig));
+		tal_hexstr(ctx, &lnchn->remote.commit->revocation_hash,
+			   sizeof(lnchn->remote.commit->revocation_hash)),
+		lnchn->remote.commit->order,
+		sig_to_sql(ctx, lnchn->remote.commit->sig));
 
-	db_exec(__func__, peer->dstate,
+	db_exec(__func__, lnchn->dstate,
 		"INSERT INTO shachain VALUES (x'%s', x'%s');",
-		peerid,
-		linearize_shachain(ctx, &peer->their_preimages));
+		lnchnid,
+		linearize_shachain(ctx, &lnchn->their_preimages));
 
 	tal_free(ctx);
 }
 
-void db_set_visible_state(struct peer *peer)
+void db_set_visible_state(struct LNchannel *lnchn)
 {
-	const char *ctx = tal_tmpctx(peer);
-	const char *peerid = pubkey_to_hexstr(ctx, peer->id);
+	const char *ctx = tal_tmpctx(lnchn);
+	const char *lnchnid = pubkey_to_hexstr(ctx, lnchn->id);
 
-	log_debug(peer->log, "%s(%s)", __func__, peerid);
-	assert(peer->dstate->db->in_transaction);
+	log_debug(lnchn->log, "%s(%s)", __func__, lnchnid);
+	assert(lnchn->dstate->db->in_transaction);
 
-	db_exec(__func__, peer->dstate,
+	db_exec(__func__, lnchn->dstate,
 		"INSERT INTO their_visible_state VALUES (x'%s', %s, x'%s', x'%s', %u, %u, %"PRIu64", x'%s');",
-		peerid,
-		sql_bool(peer->remote.offer_anchor),
-		pubkey_to_hexstr(ctx, &peer->remote.commitkey),
-		pubkey_to_hexstr(ctx, &peer->remote.finalkey),
-		peer->remote.locktime.locktime,
-		peer->remote.mindepth,
-		peer->remote.commit_fee_rate,
-		tal_hexstr(ctx, &peer->remote.next_revocation_hash,
-			   sizeof(peer->remote.next_revocation_hash)));
+		lnchnid,
+		sql_bool(lnchn->remote.offer_anchor),
+		pubkey_to_hexstr(ctx, &lnchn->remote.commitkey),
+		pubkey_to_hexstr(ctx, &lnchn->remote.finalkey),
+		lnchn->remote.locktime.locktime,
+		lnchn->remote.mindepth,
+		lnchn->remote.commit_fee_rate,
+		tal_hexstr(ctx, &lnchn->remote.next_revocation_hash,
+			   sizeof(lnchn->remote.next_revocation_hash)));
 
 	tal_free(ctx);
 }
 
-void db_update_next_revocation_hash(struct peer *peer)
+void db_update_next_revocation_hash(struct LNchannel *lnchn)
 {
-	const char *ctx = tal_tmpctx(peer);
-	const char *peerid = pubkey_to_hexstr(ctx, peer->id);
+	const char *ctx = tal_tmpctx(lnchn);
+	const char *lnchnid = pubkey_to_hexstr(ctx, lnchn->id);
 
-	log_debug(peer->log, "%s(%s):%s", __func__, peerid,
-		tal_hexstr(ctx, &peer->remote.next_revocation_hash,
-			   sizeof(peer->remote.next_revocation_hash)));
-	assert(peer->dstate->db->in_transaction);
-	db_exec(__func__, peer->dstate,
-		"UPDATE their_visible_state SET next_revocation_hash=x'%s' WHERE peer=x'%s';",
-		tal_hexstr(ctx, &peer->remote.next_revocation_hash,
-			   sizeof(peer->remote.next_revocation_hash)),
-		peerid);
+	log_debug(lnchn->log, "%s(%s):%s", __func__, lnchnid,
+		tal_hexstr(ctx, &lnchn->remote.next_revocation_hash,
+			   sizeof(lnchn->remote.next_revocation_hash)));
+	assert(lnchn->dstate->db->in_transaction);
+	db_exec(__func__, lnchn->dstate,
+		"UPDATE their_visible_state SET next_revocation_hash=x'%s' WHERE lnchn=x'%s';",
+		tal_hexstr(ctx, &lnchn->remote.next_revocation_hash,
+			   sizeof(lnchn->remote.next_revocation_hash)),
+		lnchnid);
 	tal_free(ctx);
 }
 
-void db_create_peer(struct peer *peer)
+void db_create_lnchn(struct LNchannel *lnchn)
 {
-	const char *ctx = tal_tmpctx(peer);
-	const char *peerid = pubkey_to_hexstr(ctx, peer->id);
+	const char *ctx = tal_tmpctx(lnchn);
+	const char *lnchnid = pubkey_to_hexstr(ctx, lnchn->id);
 
-	log_debug(peer->log, "%s(%s)", __func__, peerid);
-	assert(peer->dstate->db->in_transaction);
-    if(peer->final_redeemscript)
-	    db_exec(__func__, peer->dstate,
-		    "INSERT INTO peers VALUES (x'%s', '%s', %s, %"PRIi64", x'%s');",
-		    peerid,
-		    state_name(peer->state),
-		    sql_bool(peer->local.offer_anchor),
-		    peer->local.commit_fee_rate,
- 		    tal_hexstr(ctx, peer->final_redeemscript,
-			    tal_count(peer->final_redeemscript)));
+	log_debug(lnchn->log, "%s(%s)", __func__, lnchnid);
+	assert(lnchn->dstate->db->in_transaction);
+    if(lnchn->final_redeemscript)
+	    db_exec(__func__, lnchn->dstate,
+		    "INSERT INTO lnchns VALUES (x'%s', '%s', %s, %"PRIi64", x'%s');",
+		    lnchnid,
+		    state_name(lnchn->state),
+		    sql_bool(lnchn->local.offer_anchor),
+		    lnchn->local.commit_fee_rate,
+ 		    tal_hexstr(ctx, lnchn->final_redeemscript,
+			    tal_count(lnchn->final_redeemscript)));
     else
-	    db_exec(__func__, peer->dstate,
-		    "INSERT INTO peers VALUES (x'%s', '%s', %s, %"PRIi64", NULL);",
-		    peerid,
-		    state_name(peer->state),
-		    sql_bool(peer->local.offer_anchor),
-		    peer->local.commit_fee_rate);
+	    db_exec(__func__, lnchn->dstate,
+		    "INSERT INTO lnchns VALUES (x'%s', '%s', %s, %"PRIi64", NULL);",
+		    lnchnid,
+		    state_name(lnchn->state),
+		    sql_bool(lnchn->local.offer_anchor),
+		    lnchn->local.commit_fee_rate);
 
-	db_exec(__func__, peer->dstate,
-		"INSERT INTO peer_secrets VALUES (x'%s', %s);",
-		peerid, peer_secrets_for_db(ctx, peer));
+	db_exec(__func__, lnchn->dstate,
+		"INSERT INTO lnchn_secrets VALUES (x'%s', %s);",
+		lnchnid, lnchn_secrets_for_db(ctx, lnchn));
 
-	if (peer->local.offer_anchor)
-		db_exec(__func__, peer->dstate,
+	if (lnchn->local.offer_anchor)
+		db_exec(__func__, lnchn->dstate,
 			"INSERT INTO anchor_inputs VALUES"
 			" (x'%s', x'%s', %u, %"PRIi64", %"PRIi64", x'%s');",
-			peerid,
-			tal_hexstr(ctx, &peer->anchor.input->txid,
-				   sizeof(peer->anchor.input->txid)),
-			peer->anchor.input->index,
-			peer->anchor.input->in_amount,
-			peer->anchor.input->out_amount,
-			pubkey_to_hexstr(ctx, &peer->anchor.input->walletkey));
+			lnchnid,
+			tal_hexstr(ctx, &lnchn->anchor.input->txid,
+				   sizeof(lnchn->anchor.input->txid)),
+			lnchn->anchor.input->index,
+			lnchn->anchor.input->in_amount,
+			lnchn->anchor.input->out_amount,
+			pubkey_to_hexstr(ctx, &lnchn->anchor.input->walletkey));
 
 
 
 	tal_free(ctx);
 }
 
-void db_start_transaction(struct peer *peer)
+void db_start_transaction(struct LNchannel *lnchn)
 {
-	const char *ctx = tal_tmpctx(peer);
-	const char *peerid = pubkey_to_hexstr(ctx, peer->id);
+	const char *ctx = tal_tmpctx(lnchn);
+	const char *lnchnid = pubkey_to_hexstr(ctx, lnchn->id);
 
-	log_debug(peer->log, "%s(%s)", __func__, peerid);
-	assert(!peer->dstate->db->in_transaction);
-	peer->dstate->db->in_transaction = true;
-	peer->dstate->db->err = tal_free(peer->dstate->db->err);
+	log_debug(lnchn->log, "%s(%s)", __func__, lnchnid);
+	assert(!lnchn->dstate->db->in_transaction);
+	lnchn->dstate->db->in_transaction = true;
+	lnchn->dstate->db->err = tal_free(lnchn->dstate->db->err);
 
-	db_exec(__func__, peer->dstate, "BEGIN IMMEDIATE;");
+	db_exec(__func__, lnchn->dstate, "BEGIN IMMEDIATE;");
 	tal_free(ctx);
 }
 
-void db_abort_transaction(struct peer *peer)
+void db_abort_transaction(struct LNchannel *lnchn)
 {
-	const char *ctx = tal_tmpctx(peer);
-	const char *peerid = pubkey_to_hexstr(ctx, peer->id);
+	const char *ctx = tal_tmpctx(lnchn);
+	const char *lnchnid = pubkey_to_hexstr(ctx, lnchn->id);
 
-	log_debug(peer->log, "%s(%s)", __func__, peerid);
-	assert(peer->dstate->db->in_transaction);
-	peer->dstate->db->in_transaction = false;
-	db_exec(__func__, peer->dstate, "ROLLBACK;");
+	log_debug(lnchn->log, "%s(%s)", __func__, lnchnid);
+	assert(lnchn->dstate->db->in_transaction);
+	lnchn->dstate->db->in_transaction = false;
+	db_exec(__func__, lnchn->dstate, "ROLLBACK;");
 	tal_free(ctx);
 }
 
-const char *db_commit_transaction(struct peer *peer)
+const char *db_commit_transaction(struct LNchannel *lnchn)
 {
-	const char *ctx = tal_tmpctx(peer);
-	const char *peerid = pubkey_to_hexstr(ctx, peer->id);
+	const char *ctx = tal_tmpctx(lnchn);
+	const char *lnchnid = pubkey_to_hexstr(ctx, lnchn->id);
 
-	log_debug(peer->log, "%s(%s)", __func__, peerid);
-	assert(peer->dstate->db->in_transaction);
-	if (!db_exec(__func__, peer->dstate, "COMMIT;"))
-		db_abort_transaction(peer);
+	log_debug(lnchn->log, "%s(%s)", __func__, lnchnid);
+	assert(lnchn->dstate->db->in_transaction);
+	if (!db_exec(__func__, lnchn->dstate, "COMMIT;"))
+		db_abort_transaction(lnchn);
 	else
-		peer->dstate->db->in_transaction = false;
+		lnchn->dstate->db->in_transaction = false;
 	tal_free(ctx);
 
-	return peer->dstate->db->err;
+	return lnchn->dstate->db->err;
 }
 
-void db_new_htlc(struct peer *peer, const struct htlc *htlc)
+void db_new_htlc(struct LNchannel *lnchn, const struct htlc *htlc)
 {
-	const char *ctx = tal_tmpctx(peer);
-	const char *peerid = pubkey_to_hexstr(ctx, peer->id);
+	const char *ctx = tal_tmpctx(lnchn);
+	const char *lnchnid = pubkey_to_hexstr(ctx, lnchn->id);
 
-	log_debug(peer->log, "%s(%s)", __func__, peerid);
-	assert(peer->dstate->db->in_transaction);
+	log_debug(lnchn->log, "%s(%s)", __func__, lnchnid);
+	assert(lnchn->dstate->db->in_transaction);
 
 	if (htlc->src) {
-		db_exec(__func__, peer->dstate,
+		db_exec(__func__, lnchn->dstate,
 			"INSERT INTO htlcs VALUES"
 			" (x'%s', %"PRIu64", '%s', %"PRIu64", %u, x'%s', NULL, x'%s', x'%s', %"PRIu64", NULL);",
-			pubkey_to_hexstr(ctx, peer->id),
+			pubkey_to_hexstr(ctx, lnchn->id),
 			htlc->id,
 			htlc_state_name(htlc->state),
 			htlc->msatoshi,
 			abs_locktime_to_blocks(&htlc->expiry),
 			tal_hexstr(ctx, &htlc->rhash, sizeof(htlc->rhash)),
 			tal_hex(ctx, htlc->routing),
-			peerid,
+			lnchnid,
 			htlc->src->id);
 	} else {
-		db_exec(__func__, peer->dstate,
+		db_exec(__func__, lnchn->dstate,
 			"INSERT INTO htlcs VALUES"
 			" (x'%s', %"PRIu64", '%s', %"PRIu64", %u, x'%s', NULL, x'%s', NULL, NULL, NULL);",
-			peerid,
+			lnchnid,
 			htlc->id,
 			htlc_state_name(htlc->state),
 			htlc->msatoshi,
@@ -1550,205 +1544,205 @@ void db_new_htlc(struct peer *peer, const struct htlc *htlc)
 	tal_free(ctx);
 }
 
-void db_new_feechange(struct peer *peer, const struct feechange *feechange)
+void db_new_feechange(struct LNchannel *lnchn, const struct feechange *feechange)
 {
-	const char *ctx = tal_tmpctx(peer);
-	const char *peerid = pubkey_to_hexstr(ctx, peer->id);
+	const char *ctx = tal_tmpctx(lnchn);
+	const char *lnchnid = pubkey_to_hexstr(ctx, lnchn->id);
 
-	log_debug(peer->log, "%s(%s)", __func__, peerid);
-	assert(peer->dstate->db->in_transaction);
+	log_debug(lnchn->log, "%s(%s)", __func__, lnchnid);
+	assert(lnchn->dstate->db->in_transaction);
 
-	db_exec(__func__, peer->dstate,
+	db_exec(__func__, lnchn->dstate,
 		"INSERT INTO feechanges VALUES"
 		" (x'%s', '%s', %"PRIu64");",
-		peerid,
+		lnchnid,
 		feechange_state_name(feechange->state),
 		feechange->fee_rate);
 
 	tal_free(ctx);
 }
 
-void db_update_htlc_state(struct peer *peer, const struct htlc *htlc,
+void db_update_htlc_state(struct LNchannel *lnchn, const struct htlc *htlc,
 			  enum htlc_state oldstate)
 {
-	const char *ctx = tal_tmpctx(peer);
-	const char *peerid = pubkey_to_hexstr(ctx, peer->id);
+	const char *ctx = tal_tmpctx(lnchn);
+	const char *lnchnid = pubkey_to_hexstr(ctx, lnchn->id);
 
-	log_debug(peer->log, "%s(%s): %"PRIu64" %s->%s", __func__, peerid,
+	log_debug(lnchn->log, "%s(%s): %"PRIu64" %s->%s", __func__, lnchnid,
 		  htlc->id, htlc_state_name(oldstate),
 		  htlc_state_name(htlc->state));
-	assert(peer->dstate->db->in_transaction);
-	db_exec(__func__, peer->dstate,
-		"UPDATE htlcs SET state='%s' WHERE peer=x'%s' AND id=%"PRIu64" AND state='%s';",
-		htlc_state_name(htlc->state), peerid,
+	assert(lnchn->dstate->db->in_transaction);
+	db_exec(__func__, lnchn->dstate,
+		"UPDATE htlcs SET state='%s' WHERE lnchn=x'%s' AND id=%"PRIu64" AND state='%s';",
+		htlc_state_name(htlc->state), lnchnid,
 		htlc->id, htlc_state_name(oldstate));
 
 	tal_free(ctx);
 }
 
-void db_update_feechange_state(struct peer *peer,
+void db_update_feechange_state(struct LNchannel *lnchn,
 			       const struct feechange *f,
 			       enum feechange_state oldstate)
 {
-	const char *ctx = tal_tmpctx(peer);
-	const char *peerid = pubkey_to_hexstr(ctx, peer->id);
+	const char *ctx = tal_tmpctx(lnchn);
+	const char *lnchnid = pubkey_to_hexstr(ctx, lnchn->id);
 
-	log_debug(peer->log, "%s(%s): %s->%s", __func__, peerid,
+	log_debug(lnchn->log, "%s(%s): %s->%s", __func__, lnchnid,
 		  feechange_state_name(oldstate),
 		  feechange_state_name(f->state));
-	assert(peer->dstate->db->in_transaction);
-	db_exec(__func__, peer->dstate,
-		"UPDATE feechanges SET state='%s' WHERE peer=x'%s' AND state='%s';",
-		feechange_state_name(f->state), peerid,
+	assert(lnchn->dstate->db->in_transaction);
+	db_exec(__func__, lnchn->dstate,
+		"UPDATE feechanges SET state='%s' WHERE lnchn=x'%s' AND state='%s';",
+		feechange_state_name(f->state), lnchnid,
 		feechange_state_name(oldstate));
 
 	tal_free(ctx);
 }
 
-void db_remove_feechange(struct peer *peer, const struct feechange *feechange,
+void db_remove_feechange(struct LNchannel *lnchn, const struct feechange *feechange,
 			 enum feechange_state oldstate)
 {
-	const char *ctx = tal(peer, char);
-	const char *peerid = pubkey_to_hexstr(ctx, peer->id);
+	const char *ctx = tal(lnchn, char);
+	const char *lnchnid = pubkey_to_hexstr(ctx, lnchn->id);
 
-	log_debug(peer->log, "%s(%s)", __func__, peerid);
-	assert(peer->dstate->db->in_transaction);
+	log_debug(lnchn->log, "%s(%s)", __func__, lnchnid);
+	assert(lnchn->dstate->db->in_transaction);
 
-	db_exec(__func__, peer->dstate,
-		"DELETE FROM feechanges WHERE peer=x'%s' AND state='%s';",
-		peerid, feechange_state_name(oldstate));
+	db_exec(__func__, lnchn->dstate,
+		"DELETE FROM feechanges WHERE lnchn=x'%s' AND state='%s';",
+		lnchnid, feechange_state_name(oldstate));
 
 	tal_free(ctx);
 }
 
-void db_update_state(struct peer *peer)
+void db_update_state(struct LNchannel *lnchn)
 {
-	const char *ctx = tal_tmpctx(peer);
-	const char *peerid = pubkey_to_hexstr(ctx, peer->id);
+	const char *ctx = tal_tmpctx(lnchn);
+	const char *lnchnid = pubkey_to_hexstr(ctx, lnchn->id);
 
-	log_debug(peer->log, "%s(%s)", __func__, peerid);
+	log_debug(lnchn->log, "%s(%s)", __func__, lnchnid);
 
-	assert(peer->dstate->db->in_transaction);
-	db_exec(__func__, peer->dstate,
-		"UPDATE peers SET state='%s' WHERE peer=x'%s';",
-		state_name(peer->state), peerid);
+	assert(lnchn->dstate->db->in_transaction);
+	db_exec(__func__, lnchn->dstate,
+		"UPDATE lnchns SET state='%s' WHERE lnchn=x'%s';",
+		state_name(lnchn->state), lnchnid);
 	tal_free(ctx);
 }
 
-void db_htlc_fulfilled(struct peer *peer, const struct htlc *htlc)
+void db_htlc_fulfilled(struct LNchannel *lnchn, const struct htlc *htlc)
 {
-	const char *ctx = tal_tmpctx(peer);
-	const char *peerid = pubkey_to_hexstr(ctx, peer->id);
+	const char *ctx = tal_tmpctx(lnchn);
+	const char *lnchnid = pubkey_to_hexstr(ctx, lnchn->id);
 
-	log_debug(peer->log, "%s(%s)", __func__, peerid);
+	log_debug(lnchn->log, "%s(%s)", __func__, lnchnid);
 
-	assert(peer->dstate->db->in_transaction);
-	db_exec(__func__, peer->dstate,
-		"UPDATE htlcs SET r=x'%s' WHERE peer=x'%s' AND id=%"PRIu64" AND state='%s';",
+	assert(lnchn->dstate->db->in_transaction);
+	db_exec(__func__, lnchn->dstate,
+		"UPDATE htlcs SET r=x'%s' WHERE lnchn=x'%s' AND id=%"PRIu64" AND state='%s';",
 		tal_hexstr(ctx, htlc->r, sizeof(*htlc->r)),
-		peerid,
+		lnchnid,
 		htlc->id,
 		htlc_state_name(htlc->state));
 
 	tal_free(ctx);
 }
 
-void db_htlc_failed(struct peer *peer, const struct htlc *htlc)
+void db_htlc_failed(struct LNchannel *lnchn, const struct htlc *htlc)
 {
-	const char *ctx = tal_tmpctx(peer);
-	const char *peerid = pubkey_to_hexstr(ctx, peer->id);
+	const char *ctx = tal_tmpctx(lnchn);
+	const char *lnchnid = pubkey_to_hexstr(ctx, lnchn->id);
 
-	log_debug(peer->log, "%s(%s)", __func__, peerid);
+	log_debug(lnchn->log, "%s(%s)", __func__, lnchnid);
 
-	assert(peer->dstate->db->in_transaction);
-	db_exec(__func__, peer->dstate,
-		"UPDATE htlcs SET fail=x'%s' WHERE peer=x'%s' AND id=%"PRIu64" AND state='%s';",
+	assert(lnchn->dstate->db->in_transaction);
+	db_exec(__func__, lnchn->dstate,
+		"UPDATE htlcs SET fail=x'%s' WHERE lnchn=x'%s' AND id=%"PRIu64" AND state='%s';",
 		tal_hexstr(ctx, htlc->fail, sizeof(*htlc->fail)),
-		peerid,
+		lnchnid,
 		htlc->id,
 		htlc_state_name(htlc->state));
 
 	tal_free(ctx);
 }
 
-void db_new_commit_info(struct peer *peer, enum side side,
+void db_new_commit_info(struct LNchannel *lnchn, enum side side,
 			const struct sha256 *prev_rhash)
 {
 	struct commit_info *ci;
-	const char *ctx = tal_tmpctx(peer);
-	const char *peerid = pubkey_to_hexstr(ctx, peer->id);
+	const char *ctx = tal_tmpctx(lnchn);
+	const char *lnchnid = pubkey_to_hexstr(ctx, lnchn->id);
 
-	log_debug(peer->log, "%s(%s)", __func__, peerid);
+	log_debug(lnchn->log, "%s(%s)", __func__, lnchnid);
 
-	assert(peer->dstate->db->in_transaction);
+	assert(lnchn->dstate->db->in_transaction);
 	if (side == LOCAL) {
-		ci = peer->local.commit;
+		ci = lnchn->local.commit;
 	} else {
-		ci = peer->remote.commit;
+		ci = lnchn->remote.commit;
 	}
 
-	db_exec(__func__, peer->dstate, "UPDATE commit_info SET commit_num=%"PRIu64", revocation_hash=x'%s', sig=%s, xmit_order=%"PRIi64", prev_revocation_hash=%s WHERE peer=x'%s' AND side='%s';",
+	db_exec(__func__, lnchn->dstate, "UPDATE commit_info SET commit_num=%"PRIu64", revocation_hash=x'%s', sig=%s, xmit_order=%"PRIi64", prev_revocation_hash=%s WHERE lnchn=x'%s' AND side='%s';",
 		ci->commit_num,
 		tal_hexstr(ctx, &ci->revocation_hash,
 			   sizeof(ci->revocation_hash)),
 		sig_to_sql(ctx, ci->sig),
 		ci->order,
 		sql_hex_or_null(ctx, prev_rhash, sizeof(*prev_rhash)),
-		peerid, side_to_str(side));
+		lnchnid, side_to_str(side));
 	tal_free(ctx);
 }
 
 /* FIXME: Is this strictly necessary? */
-void db_remove_their_prev_revocation_hash(struct peer *peer)
+void db_remove_their_prev_revocation_hash(struct LNchannel *lnchn)
 {
-	const char *ctx = tal_tmpctx(peer);
-	const char *peerid = pubkey_to_hexstr(ctx, peer->id);
+	const char *ctx = tal_tmpctx(lnchn);
+	const char *lnchnid = pubkey_to_hexstr(ctx, lnchn->id);
 
-	log_debug(peer->log, "%s(%s)", __func__, peerid);
+	log_debug(lnchn->log, "%s(%s)", __func__, lnchnid);
 
-	assert(peer->dstate->db->in_transaction);
+	assert(lnchn->dstate->db->in_transaction);
 
-	db_exec(__func__, peer->dstate, "UPDATE commit_info SET prev_revocation_hash=NULL WHERE peer=x'%s' AND side='REMOTE' and prev_revocation_hash IS NOT NULL;",
-			 peerid);
+	db_exec(__func__, lnchn->dstate, "UPDATE commit_info SET prev_revocation_hash=NULL WHERE lnchn=x'%s' AND side='REMOTE' and prev_revocation_hash IS NOT NULL;",
+			 lnchnid);
 	tal_free(ctx);
 }
 
 
-void db_save_shachain(struct peer *peer)
+void db_save_shachain(struct LNchannel *lnchn)
 {
-	const char *ctx = tal_tmpctx(peer);
-	const char *peerid = pubkey_to_hexstr(ctx, peer->id);
+	const char *ctx = tal_tmpctx(lnchn);
+	const char *lnchnid = pubkey_to_hexstr(ctx, lnchn->id);
 
-	log_debug(peer->log, "%s(%s)", __func__, peerid);
+	log_debug(lnchn->log, "%s(%s)", __func__, lnchnid);
 
-	assert(peer->dstate->db->in_transaction);
-	db_exec(__func__, peer->dstate, "UPDATE shachain SET shachain=x'%s' WHERE peer=x'%s';",
-		linearize_shachain(ctx, &peer->their_preimages),
-		peerid);
+	assert(lnchn->dstate->db->in_transaction);
+	db_exec(__func__, lnchn->dstate, "UPDATE shachain SET shachain=x'%s' WHERE lnchn=x'%s';",
+		linearize_shachain(ctx, &lnchn->their_preimages),
+		lnchnid);
 	tal_free(ctx);
 }
 
-void db_add_commit_map(struct peer *peer,
+void db_add_commit_map(struct LNchannel *lnchn,
 		       const struct sha256_double *txid, u64 commit_num)
 {
-	const char *ctx = tal_tmpctx(peer);
-	const char *peerid = pubkey_to_hexstr(ctx, peer->id);
+	const char *ctx = tal_tmpctx(lnchn);
+	const char *lnchnid = pubkey_to_hexstr(ctx, lnchn->id);
 
-	log_debug(peer->log, "%s(%s),commit_num=%"PRIu64, __func__, peerid,
+	log_debug(lnchn->log, "%s(%s),commit_num=%"PRIu64, __func__, lnchnid,
 		  commit_num);
 
-	assert(peer->dstate->db->in_transaction);
-	db_exec(__func__, peer->dstate,
+	assert(lnchn->dstate->db->in_transaction);
+	db_exec(__func__, lnchn->dstate,
 		"INSERT INTO their_commitments VALUES (x'%s', x'%s', %"PRIu64");",
-		peerid,
+		lnchnid,
 		tal_hexstr(ctx, txid, sizeof(*txid)),
 		commit_num);
 	tal_free(ctx);
 }
 
 /* FIXME: Clean out old ones! */
-bool db_add_peer_address(struct lightningd_state *dstate,
-			 const struct peer_address *addr)
+bool db_add_lnchn_address(struct lightningd_state *dstate,
+			 const struct LNchannel_address *addr)
 {
 	const tal_t *ctx = tal_tmpctx(dstate);
 	bool ok;
@@ -1757,7 +1751,7 @@ bool db_add_peer_address(struct lightningd_state *dstate,
 
 	assert(!dstate->db->in_transaction);
 	ok = db_exec(__func__, dstate,
-		     "INSERT OR REPLACE INTO peer_address VALUES (x'%s', x'%s');",
+		     "INSERT OR REPLACE INTO lnchn_address VALUES (x'%s', x'%s');",
 		     pubkey_to_hexstr(ctx, &addr->id),
 		     netaddr_to_hex(ctx, &addr->addr));
 
@@ -1765,106 +1759,106 @@ bool db_add_peer_address(struct lightningd_state *dstate,
 	return ok;
 }
 
-void db_forget_peer(struct peer *peer)
+void db_forget_lnchn(struct LNchannel *lnchn)
 {
-	const char *ctx = tal_tmpctx(peer);
-	const char *peerid = pubkey_to_hexstr(ctx, peer->id);
+	const char *ctx = tal_tmpctx(lnchn);
+	const char *lnchnid = pubkey_to_hexstr(ctx, lnchn->id);
 	size_t i;
-	const char *const tables[] = { "anchors", "htlcs", "commit_info", "shachain", "their_visible_state", "their_commitments", "peer_secrets", "closing", "peers" };
-	log_debug(peer->log, "%s(%s)", __func__, peerid);
+	const char *const tables[] = { "anchors", "htlcs", "commit_info", "shachain", "their_visible_state", "their_commitments", "lnchn_secrets", "closing", "lnchns" };
+	log_debug(lnchn->log, "%s(%s)", __func__, lnchnid);
 
-	assert(peer->state == STATE_CLOSED);
+	assert(lnchn->state == STATE_CLOSED);
 
-	db_start_transaction(peer);
+	db_start_transaction(lnchn);
 
 	for (i = 0; i < ARRAY_SIZE(tables); i++) {
-		db_exec(__func__, peer->dstate,
-			"DELETE from %s WHERE peer=x'%s';",
-			tables[i], peerid);
+		db_exec(__func__, lnchn->dstate,
+			"DELETE from %s WHERE lnchn=x'%s';",
+			tables[i], lnchnid);
 	}
-	if (db_commit_transaction(peer) != NULL)
+	if (db_commit_transaction(lnchn) != NULL)
 		fatal("%s:db_commi_transaction failed", __func__);
 
 	tal_free(ctx);
 }
 
-void db_begin_shutdown(struct peer *peer)
+void db_begin_shutdown(struct LNchannel *lnchn)
 {
-	const char *ctx = tal_tmpctx(peer);
-	const char *peerid = pubkey_to_hexstr(ctx, peer->id);
+	const char *ctx = tal_tmpctx(lnchn);
+	const char *lnchnid = pubkey_to_hexstr(ctx, lnchn->id);
 
-	log_debug(peer->log, "%s(%s)", __func__, peerid);
+	log_debug(lnchn->log, "%s(%s)", __func__, lnchnid);
 
-	assert(peer->dstate->db->in_transaction);
-	db_exec(__func__, peer->dstate,
+	assert(lnchn->dstate->db->in_transaction);
+	db_exec(__func__, lnchn->dstate,
 		"INSERT INTO closing VALUES (x'%s', 0, 0, NULL, NULL, NULL, 0, 0, 0);",
-		peerid);
+		lnchnid);
 	tal_free(ctx);
 }
 
-void db_set_our_closing_script(struct peer *peer)
+void db_set_our_closing_script(struct LNchannel *lnchn)
 {
-	const char *ctx = tal_tmpctx(peer);
-	const char *peerid = pubkey_to_hexstr(ctx, peer->id);
+	const char *ctx = tal_tmpctx(lnchn);
+	const char *lnchnid = pubkey_to_hexstr(ctx, lnchn->id);
 
-	log_debug(peer->log, "%s(%s)", __func__, peerid);
+	log_debug(lnchn->log, "%s(%s)", __func__, lnchnid);
 
-	assert(peer->dstate->db->in_transaction);
-	db_exec(__func__, peer->dstate, "UPDATE closing SET our_script=x'%s',shutdown_order=%"PRIu64" WHERE peer=x'%s';",
-		tal_hex(ctx, peer->closing.our_script),
-		peer->closing.shutdown_order,
-		peerid);
+	assert(lnchn->dstate->db->in_transaction);
+	db_exec(__func__, lnchn->dstate, "UPDATE closing SET our_script=x'%s',shutdown_order=%"PRIu64" WHERE lnchn=x'%s';",
+		tal_hex(ctx, lnchn->closing.our_script),
+		lnchn->closing.shutdown_order,
+		lnchnid);
 	tal_free(ctx);
 }
 
-void db_set_their_closing_script(struct peer *peer)
+void db_set_their_closing_script(struct LNchannel *lnchn)
 {
-	const char *ctx = tal_tmpctx(peer);
-	const char *peerid = pubkey_to_hexstr(ctx, peer->id);
+	const char *ctx = tal_tmpctx(lnchn);
+	const char *lnchnid = pubkey_to_hexstr(ctx, lnchn->id);
 
-	log_debug(peer->log, "%s(%s)", __func__, peerid);
+	log_debug(lnchn->log, "%s(%s)", __func__, lnchnid);
 
-	assert(peer->dstate->db->in_transaction);
-	db_exec(__func__, peer->dstate,
-		"UPDATE closing SET their_script=x'%s' WHERE peer=x'%s';",
-		tal_hex(ctx, peer->closing.their_script),
-		peerid);
+	assert(lnchn->dstate->db->in_transaction);
+	db_exec(__func__, lnchn->dstate,
+		"UPDATE closing SET their_script=x'%s' WHERE lnchn=x'%s';",
+		tal_hex(ctx, lnchn->closing.their_script),
+		lnchnid);
 	tal_free(ctx);
 }
 
-/* For first time, we are in transaction to make it atomic with peer->state
+/* For first time, we are in transaction to make it atomic with lnchn->state
  * update.  Later calls are not. */
 /* FIXME: make caller wrap in transaction. */
-void db_update_our_closing(struct peer *peer)
+void db_update_our_closing(struct LNchannel *lnchn)
 {
-	const char *ctx = tal_tmpctx(peer);
-	const char *peerid = pubkey_to_hexstr(ctx, peer->id);
+	const char *ctx = tal_tmpctx(lnchn);
+	const char *lnchnid = pubkey_to_hexstr(ctx, lnchn->id);
 
-	log_debug(peer->log, "%s(%s)", __func__, peerid);
+	log_debug(lnchn->log, "%s(%s)", __func__, lnchnid);
 
-	db_exec(__func__, peer->dstate,
-		"UPDATE closing SET our_fee=%"PRIu64", closing_order=%"PRIi64" WHERE peer=x'%s';",
-		peer->closing.our_fee,
-		peer->closing.closing_order,
-		peerid);
+	db_exec(__func__, lnchn->dstate,
+		"UPDATE closing SET our_fee=%"PRIu64", closing_order=%"PRIi64" WHERE lnchn=x'%s';",
+		lnchn->closing.our_fee,
+		lnchn->closing.closing_order,
+		lnchnid);
 	tal_free(ctx);
 }
 
-bool db_update_their_closing(struct peer *peer)
+bool db_update_their_closing(struct LNchannel *lnchn)
 {
-	const char *ctx = tal_tmpctx(peer);
+	const char *ctx = tal_tmpctx(lnchn);
 	bool ok;
-	const char *peerid = pubkey_to_hexstr(ctx, peer->id);
+	const char *lnchnid = pubkey_to_hexstr(ctx, lnchn->id);
 
-	log_debug(peer->log, "%s(%s)", __func__, peerid);
+	log_debug(lnchn->log, "%s(%s)", __func__, lnchnid);
 
-	assert(!peer->dstate->db->in_transaction);
-	ok = db_exec(__func__, peer->dstate,
-		     "UPDATE closing SET their_fee=%"PRIu64", their_sig=%s, sigs_in=%u WHERE peer=x'%s';",
-		     peer->closing.their_fee,
-		     sig_to_sql(ctx, peer->closing.their_sig),
-		     peer->closing.sigs_in,
-		     peerid);
+	assert(!lnchn->dstate->db->in_transaction);
+	ok = db_exec(__func__, lnchn->dstate,
+		     "UPDATE closing SET their_fee=%"PRIu64", their_sig=%s, sigs_in=%u WHERE lnchn=x'%s';",
+		     lnchn->closing.their_fee,
+		     sig_to_sql(ctx, lnchn->closing.their_sig),
+		     lnchn->closing.sigs_in,
+		     lnchnid);
 	tal_free(ctx);
 	return ok;
 }
@@ -1887,7 +1881,7 @@ bool db_new_pay_command(struct lightningd_state *dstate,
 		     tal_hexstr(ctx, rhash, sizeof(*rhash)),
 		     msatoshi,
 		     pubkeys_to_hex(ctx, ids),
-		     pubkey_to_hexstr(ctx, htlc->peer->id),
+		     pubkey_to_hexstr(ctx, htlc->lnchn->id),
 		     htlc->id);
 	tal_free(ctx);
 	return ok;
@@ -1907,10 +1901,10 @@ bool db_replace_pay_command(struct lightningd_state *dstate,
 
 	assert(!dstate->db->in_transaction);
 	ok = db_exec(__func__, dstate,
-		     "UPDATE pay SET msatoshi=%"PRIu64", ids=x'%s', htlc_peer=x'%s', htlc_id=%"PRIu64", r=NULL, fail=NULL WHERE rhash=x'%s';",
+		     "UPDATE pay SET msatoshi=%"PRIu64", ids=x'%s', htlc_lnchn=x'%s', htlc_id=%"PRIu64", r=NULL, fail=NULL WHERE rhash=x'%s';",
 		     msatoshi,
 		     pubkeys_to_hex(ctx, ids),
-		     pubkey_to_hexstr(ctx, htlc->peer->id),
+		     pubkey_to_hexstr(ctx, htlc->lnchn->id),
 		     htlc->id,
 		     tal_hexstr(ctx, rhash, sizeof(*rhash)));
 	tal_free(ctx);
@@ -1928,12 +1922,12 @@ void db_complete_pay_command(struct lightningd_state *dstate,
 	assert(dstate->db->in_transaction);
 	if (htlc->r)
 		db_exec(__func__, dstate,
-			"UPDATE pay SET r=x'%s', htlc_peer=NULL WHERE rhash=x'%s';",
+			"UPDATE pay SET r=x'%s', htlc_lnchn=NULL WHERE rhash=x'%s';",
 			tal_hexstr(ctx, htlc->r, sizeof(*htlc->r)),
 			tal_hexstr(ctx, &htlc->rhash, sizeof(htlc->rhash)));
 	else
 		db_exec(__func__, dstate,
-			"UPDATE pay SET fail=x'%s', htlc_peer=NULL WHERE rhash=x'%s';",
+			"UPDATE pay SET fail=x'%s', htlc_lnchn=NULL WHERE rhash=x'%s';",
 			tal_hex(ctx, htlc->fail),
 			tal_hexstr(ctx, &htlc->rhash, sizeof(htlc->rhash)));
 

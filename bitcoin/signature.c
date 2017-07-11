@@ -276,4 +276,4 @@ static char *signature_to_hexstr(const tal_t *ctx,
 
 	return tal_hexstr(ctx, der, len);
 }
-REGISTER_TYPE_TO_STRING(ecdsa_signature, signature_to_hexstr);
+REGISTER_TYPE_TO_STRING(ecdsa_signature_, signature_to_hexstr);

@@ -17,7 +17,7 @@ enum sighash_type {
     SIGHASH_ANYONECANPAY = 0x80
 };
 
-typedef struct {
+typedef struct ecdsa_signature_ {
     unsigned char data[64];
 } ecdsa_signature;
 

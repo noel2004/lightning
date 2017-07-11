@@ -16,12 +16,11 @@ union printable_types {
 	const struct preimage *preimage;
 	const struct channel_state *channel_state;
 	const struct channel_oneside *channel_oneside;
-//	const secp256k1_pubkey *secp256k1_pubkey;
 	const struct channel_id *channel_id;
 	const struct short_channel_id *short_channel_id;
 	const struct secret *secret;
 	const struct privkey *privkey;
-	const struct ecdsa_signature_ *ecdsa_signature;
+	const struct ecdsa_signature_ *ecdsa_signature_;
 	const struct channel *channel;
 	const char *charp_;
 };

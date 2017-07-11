@@ -96,6 +96,9 @@
     <ClCompile Include="..\..\ccan\ccan\crypto\siphash24\siphash24.c">
       <Filter>源文件\crypto</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\ccan\ccan\noerr\noerr.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\ccan_config.h">

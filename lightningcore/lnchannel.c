@@ -4,10 +4,10 @@
 #include "commit_tx.h"
 #include "db.h"
 #include "find_p2sh_out.h"
-#include "invoice.h"
+//#include "invoice.h"
 #include "log.h"
 #include "output_to_htlc.h"
-#include "pay.h"
+//#include "pay.h"
 #include "lnchannel.h"
 #include "lnchannel_internal.h"
 #include "permute_tx.h"
@@ -23,7 +23,6 @@
 #include <bitcoin/tx.h>
 #include <ccan/array_size/array_size.h>
 #include <ccan/cast/cast.h>
-#include <ccan/io/io.h>
 #include <ccan/list/list.h>
 #include <ccan/mem/mem.h>
 #include <ccan/noerr/noerr.h>
@@ -36,13 +35,6 @@
 #include <inttypes.h>
 #include <stdlib.h>
 #include <sys/types.h>
-
-struct json_connecting {
-	/* This owns us, so we're freed after command_fail or command_success */
-	struct command *cmd;
-	const char *name, *port;
-	struct anchor_input *input;
-};
 
 static bool command_htlc_set_fail(struct LNchannel *lnchn, struct htlc *htlc,
 				  enum fail_error error_code, const char *why);
