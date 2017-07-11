@@ -4,7 +4,7 @@
 #include "shadouble.h"
 #include "signature.h"
 #include "tx.h"
-#include "type_to_string.h"
+#include "utils/type_to_string.h"
 #include "include/wally_crypto.h"
 #include "utils/utils.h"
 #include <assert.h>

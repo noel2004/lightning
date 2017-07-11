@@ -1,7 +1,7 @@
 #include "channel.h"
 #include "htlc.h"
 #include "remove_dust.h"
-#include "type_to_string.h"
+#include "utils/type_to_string.h"
 #include <assert.h>
 #include <ccan/array_size/array_size.h>
 #include <ccan/mem/mem.h>

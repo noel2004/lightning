@@ -1,35 +1,33 @@
 #include "bitcoin/privkey.h"
 #include "bitcoin/shadouble.h"
 #include "bitcoin/signature.h"
-#include "lightningd.h"
+#include "state.h"
 #include "log.h"
 #include "lnchannel.h"
 #include "lnchannel_internal.h"
 #include "secrets.h"
-#include "utils.h"
+#include "utils/utils.h"
+#include "utils/sodium/randombytes.h"
 #include <ccan/crypto/sha256/sha256.h>
 #include <ccan/crypto/shachain/shachain.h>
 #include <ccan/mem/mem.h>
 #include <ccan/noerr/noerr.h>
-#include <ccan/read_write_all/read_write_all.h>
 #include <ccan/short_types/short_types.h>
 #include <ccan/tal/str/str.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <secp256k1.h>
-#include <sodium/randombytes.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
 
-void privkey_sign(struct lightningd_state *dstate, const void *src, size_t len,
-		  secp256k1_ecdsa_signature *sig)
-{
-	struct sha256_double h;
-
-	sha256_double(&h, memcheck(src, len), len);
-	sign_hash(dstate->privkey, &h, sig);
-}
+//void privkey_sign(struct lightningd_state *dstate, const void *src, size_t len,
+//		  ecdsa_signature *sig)
+//{
+//	struct sha256_double h;
+//
+//	sha256_double(&h, memcheck(src, len), len);
+//	sign_hash(dstate->privkey, &h, sig);
+//}
 
 struct channel_secrets {
 	/* Two private keys, one for commit txs, one for final output. */
@@ -40,7 +38,7 @@ struct channel_secrets {
 
 void lnchn_sign_theircommit(const struct LNchannel *lnchn,
 			   struct bitcoin_tx *commit,
-			   secp256k1_ecdsa_signature *sig)
+			   ecdsa_signature *sig)
 {
 	/* Commit tx only has one input: that of the anchor. */
 	sign_tx_input(commit, 0,
@@ -53,7 +51,7 @@ void lnchn_sign_theircommit(const struct LNchannel *lnchn,
 
 void lnchn_sign_ourcommit(const struct LNchannel *lnchn,
 			 struct bitcoin_tx *commit,
-			 secp256k1_ecdsa_signature *sig)
+			 ecdsa_signature *sig)
 {
 	/* Commit tx only has one input: that of the anchor. */
 	sign_tx_input(commit, 0,
@@ -67,7 +65,7 @@ void lnchn_sign_ourcommit(const struct LNchannel *lnchn,
 void lnchn_sign_spend(const struct LNchannel *lnchn,
 		     struct bitcoin_tx *spend,
 		     const u8 *commit_witnessscript,
-		     secp256k1_ecdsa_signature *sig)
+		     ecdsa_signature *sig)
 {
 	/* Spend tx only has one input: that of the commit tx. */
 	sign_tx_input(spend, 0,
@@ -81,7 +79,7 @@ void lnchn_sign_spend(const struct LNchannel *lnchn,
 void lnchn_sign_htlc_refund(const struct LNchannel *lnchn,
 			   struct bitcoin_tx *spend,
 			   const u8 *htlc_witnessscript,
-			   secp256k1_ecdsa_signature *sig)
+			   ecdsa_signature *sig)
 {
 	/* Spend tx only has one input: that of the commit tx. */
 	sign_tx_input(spend, 0,
@@ -95,7 +93,7 @@ void lnchn_sign_htlc_refund(const struct LNchannel *lnchn,
 void lnchn_sign_htlc_fulfill(const struct LNchannel *lnchn,
 			    struct bitcoin_tx *spend,
 			    const u8 *htlc_witnessscript,
-			    secp256k1_ecdsa_signature *sig)
+			    ecdsa_signature *sig)
 {
 	/* Spend tx only has one input: that of the commit tx. */
 	sign_tx_input(spend, 0,
@@ -108,7 +106,7 @@ void lnchn_sign_htlc_fulfill(const struct LNchannel *lnchn,
 
 void lnchn_sign_mutual_close(const struct LNchannel *lnchn,
 			    struct bitcoin_tx *close,
-			    secp256k1_ecdsa_signature *sig)
+			    ecdsa_signature *sig)
 {
 	sign_tx_input(close, 0,
 		      NULL,
@@ -122,7 +120,7 @@ void lnchn_sign_steal_input(const struct LNchannel *lnchn,
 			   struct bitcoin_tx *spend,
 			   size_t i,
 			   const u8 *witnessscript,
-			   secp256k1_ecdsa_signature *sig)
+			   ecdsa_signature *sig)
 {
 	/* Spend tx only has one input: that of the commit tx. */
 	sign_tx_input(spend, i,
@@ -144,7 +142,7 @@ static void new_keypair(struct lightningd_state *dstate,
 
 void lnchn_secrets_init(struct LNchannel *lnchn)
 {
-	lnchn->secrets = tal(lnchn, struct LNchannel_secrets);
+	lnchn->secrets = tal(lnchn, struct channel_secrets);
 
 	new_keypair(lnchn->dstate, &lnchn->secrets->commit, &lnchn->local.commitkey);
 	new_keypair(lnchn->dstate, &lnchn->secrets->final, &lnchn->local.finalkey);
@@ -169,7 +167,7 @@ void lnchn_get_revocation_hash(const struct LNchannel *lnchn, u64 index,
 
 const char *lnchn_secrets_for_db(const tal_t *ctx, struct LNchannel *lnchn)
 {
-	const struct LNchannel_secrets *ps = lnchn->secrets;
+	const struct channel_secrets *ps = lnchn->secrets;
 	return tal_fmt(ctx, "x'%s', x'%s', x'%s'",
 		       tal_hexstr(ctx, &ps->commit, sizeof(ps->commit)),
 		       tal_hexstr(ctx, &ps->final, sizeof(ps->final)),
@@ -185,7 +183,7 @@ void lnchn_set_secrets_from_db(struct LNchannel *lnchn,
 			      const void *revocation_seed,
 			      size_t revocation_seed_len)
 {
-	struct LNchannel_secrets *ps = tal(lnchn, struct LNchannel_secrets);
+	struct channel_secrets *ps = tal(lnchn, struct channel_secrets);
 
 	assert(!lnchn->secrets);
 	lnchn->secrets = ps;
@@ -207,45 +205,45 @@ void lnchn_set_secrets_from_db(struct LNchannel *lnchn,
 		fatal("lnchn_set_secrets_from_db:bad final privkey");
 }
 
-void secrets_init(struct lightningd_state *dstate)
-{
-	int fd;
-
-	dstate->privkey = tal(dstate, struct privkey);
-
-	fd = open("privkey", O_RDONLY);
-	if (fd < 0) {
-		if (errno != ENOENT)
-			fatal("Failed to open privkey: %s", strerror(errno));
-
-		log_unusual(dstate->base_log, "Creating privkey file");
-		new_keypair(dstate, dstate->privkey, &dstate->id);
-
-		fd = open("privkey", O_CREAT|O_EXCL|O_WRONLY, 0400);
-		if (fd < 0)
-		 	fatal("Failed to create privkey file: %s",
-			      strerror(errno));
-		if (!write_all(fd, &dstate->privkey->secret,
-			       sizeof(dstate->privkey->secret))) {
-			unlink_noerr("privkey");
-		 	fatal("Failed to write to privkey file: %s",
-			      strerror(errno));
-		}
-		if (fsync(fd) != 0)
-		 	fatal("Failed to sync to privkey file: %s",
-			      strerror(errno));
-		close(fd);
-
-		fd = open("privkey", O_RDONLY);
-		if (fd < 0)
-			fatal("Failed to reopen privkey: %s", strerror(errno));
-	}
-	if (!read_all(fd, &dstate->privkey->secret,
-		      sizeof(dstate->privkey->secret)))
-		fatal("Failed to read privkey: %s", strerror(errno));
-	close(fd);
-	if (!pubkey_from_privkey(dstate->privkey, &dstate->id))
-		fatal("Invalid privkey");
-
-	log_info_struct(dstate->base_log, "ID: %s", struct pubkey, &dstate->id);
-}
+//void secrets_init(struct lightningd_state *dstate)
+//{
+//	int fd;
+//
+//	dstate->privkey = tal(dstate, struct privkey);
+//
+//	fd = open("privkey", O_RDONLY);
+//	if (fd < 0) {
+//		if (errno != ENOENT)
+//			fatal("Failed to open privkey: %s", strerror(errno));
+//
+//		log_unusual(dstate->base_log, "Creating privkey file");
+//		new_keypair(dstate, dstate->privkey, &dstate->id);
+//
+//		fd = open("privkey", O_CREAT|O_EXCL|O_WRONLY, 0400);
+//		if (fd < 0)
+//		 	fatal("Failed to create privkey file: %s",
+//			      strerror(errno));
+//		if (!write_all(fd, &dstate->privkey->secret,
+//			       sizeof(dstate->privkey->secret))) {
+//			unlink_noerr("privkey");
+//		 	fatal("Failed to write to privkey file: %s",
+//			      strerror(errno));
+//		}
+//		if (fsync(fd) != 0)
+//		 	fatal("Failed to sync to privkey file: %s",
+//			      strerror(errno));
+//		close(fd);
+//
+//		fd = open("privkey", O_RDONLY);
+//		if (fd < 0)
+//			fatal("Failed to reopen privkey: %s", strerror(errno));
+//	}
+//	if (!read_all(fd, &dstate->privkey->secret,
+//		      sizeof(dstate->privkey->secret)))
+//		fatal("Failed to read privkey: %s", strerror(errno));
+//	close(fd);
+//	if (!pubkey_from_privkey(dstate->privkey, &dstate->id))
+//		fatal("Invalid privkey");
+//
+//	log_info_struct(dstate->base_log, "ID: %s", struct pubkey, &dstate->id);
+//}

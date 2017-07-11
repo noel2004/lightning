@@ -21,15 +21,31 @@ union printable_types {
 	const struct short_channel_id *short_channel_id;
 	const struct secret *secret;
 	const struct privkey *privkey;
-//	const secp256k1_ecdsa_signature *secp256k1_ecdsa_signature;
+	const struct ecdsa_signature_ *ecdsa_signature;
 	const struct channel *channel;
 	const char *charp_;
 };
 
+#if _MSC_VER <= 1900
+
+static inline union printable_types to_printable_types_(const void* p) {
+    union printable_types ret;
+    memcpy(&ret, p, sizeof(p));
+    return ret;
+}
+
+#define to_printable_types(type, ptr) to_printable_types_(ptr)
+
+#else
+
+#define to_printable_types(type, ptr) ((union printable_types)((const type *)ptr))
+
+#endif
+
 #define type_to_string(ctx, type, ptr)					\
 	type_to_string_((ctx), stringify(type),				\
 			((void)sizeof((ptr) == (type *)NULL),		\
-			 ((union printable_types)((const type *)ptr))))
+			 to_printable_types(type, ptr)))
 
 char *type_to_string_(const tal_t *ctx, const char *typename,
 		      union printable_types u);

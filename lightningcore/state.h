@@ -75,9 +75,6 @@ struct lightningd_state {
     /* A default redeem address*/
     char *default_redeem_address;
 
-    /* Port we're listening on */
-    u16 portnum;
-
     /* We're on testnet. */
     bool testnet;
 
@@ -102,11 +99,11 @@ struct lightningd_state {
     /* Any outstanding "pay" commands. */
     struct list_head pay_commands;
 
-    /* Our private key */
-    struct privkey *privkey;
+    ///* Our private key for communication and peer identify*/
+    //struct privkey *privkey;
 
-    /* This is us. */
-    struct pubkey id;
+    ///* This is us. */
+    //struct pubkey id;
 
     /* Our tame bitcoind. */
     struct bitcoind *bitcoind;
@@ -125,9 +122,6 @@ struct lightningd_state {
 
     /* Re-exec hack for testing. */
     char **reexec;
-
-    /* IP/hostname to be announced for incoming connections */
-    char *external_ip;
 
     /* Announce timer. */
     struct oneshot *announce;

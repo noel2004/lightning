@@ -1,7 +1,7 @@
 /* This header holds structure definitions for struct peer, which must
  * not be exposed to ../lightningd/ */
-#ifndef LIGHTNING_DAEMON_PEER_INTERNAL_H
-#define LIGHTNING_DAEMON_PEER_INTERNAL_H
+#ifndef LIGHTNING_CORE_LNCHANNEL_INTERNAL_H
+#define LIGHTNING_CORE_LNCHANNEL_INTERNAL_H
 #include "config.h"
 
 struct anchor_input {
@@ -165,7 +165,7 @@ struct LNchannel {
 	struct oneshot *commit_timer;
 
 	/* Private keys for dealing with this peer. */
-	struct peer_secrets *secrets;
+	struct channel_secrets *secrets;
 
 	/* For testing. */
 	bool fake_close;
@@ -183,4 +183,4 @@ struct LNchannel {
 	/* High water mark for the staggered broadcast */
 	u64 broadcast_index;
 };
-#endif /* LIGHTNING_DAEMON_PEER_INTERNAL_H */
+#endif /* LIGHTNING_CORE_LNCHANNEL_INTERNAL_H */

@@ -19,9 +19,6 @@ struct log;
 struct lightningd_state;
 struct LNchannel;
 
-void peer_debug(struct LNchannel *chn, const char *fmt, ...)
-	PRINTF_FMT(2,3);
-
 struct LNchannel *new_LNChannel(struct lightningd_state *dstate,
 		      struct log *log,
 		      enum state state,

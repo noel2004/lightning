@@ -12,18 +12,24 @@
     <Filter Include="proto">
       <UniqueIdentifier>{76ea604c-c374-48cf-afe6-524d82d0f449}</UniqueIdentifier>
     </Filter>
-    <Filter Include="源文件\LNChannel">
-      <UniqueIdentifier>{bd641c98-cf88-491f-a6ac-a7e1453db211}</UniqueIdentifier>
-    </Filter>
     <Filter Include="头文件\LNChannel">
       <UniqueIdentifier>{a56caea5-38ae-42b6-a5b9-f962b20c0840}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="源文件\LNChannel">
+      <UniqueIdentifier>{714c6266-3525-43c8-a45d-746203f2b501}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\protos\peer.pb.cc">
       <Filter>proto</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\lightningcore\chaintopology.c">
+    <ClCompile Include="..\..\lightningcore\channel.c">
+      <Filter>源文件\LNChannel</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\lightningcore\close_tx.c">
+      <Filter>源文件\LNChannel</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\lightningcore\commit_tx.c">
       <Filter>源文件\LNChannel</Filter>
     </ClCompile>
     <ClCompile Include="..\..\lightningcore\db.c">
@@ -35,19 +41,31 @@
     <ClCompile Include="..\..\lightningcore\htlc.c">
       <Filter>源文件\LNChannel</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\lightningcore\invoice.c">
+    <ClCompile Include="..\..\lightningcore\lnchannel.c">
       <Filter>源文件\LNChannel</Filter>
     </ClCompile>
     <ClCompile Include="..\..\lightningcore\log.c">
-      <Filter>源文件\LNChannel</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\lightningcore\lnchannel.c">
       <Filter>源文件\LNChannel</Filter>
     </ClCompile>
     <ClCompile Include="..\..\lightningcore\pseudorand.c">
       <Filter>源文件\LNChannel</Filter>
     </ClCompile>
     <ClCompile Include="..\..\lightningcore\version.c">
+      <Filter>源文件\LNChannel</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\lightningcore\feechange.c">
+      <Filter>源文件\LNChannel</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\lightningcore\permute_tx.c">
+      <Filter>源文件\LNChannel</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\lightningcore\secrets.c">
+      <Filter>源文件\LNChannel</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\lightningcore\output_to_htlc.c">
+      <Filter>源文件\LNChannel</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\lightningcore\find_p2sh_out.c">
       <Filter>源文件\LNChannel</Filter>
     </ClCompile>
   </ItemGroup>
@@ -86,6 +104,30 @@
       <Filter>头文件\LNChannel</Filter>
     </ClInclude>
     <ClInclude Include="..\..\lightningcore\version.h">
+      <Filter>头文件\LNChannel</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\lightningcore\close_tx.h">
+      <Filter>头文件\LNChannel</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\lightningcore\commit_tx.h">
+      <Filter>头文件\LNChannel</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\lightningcore\feechange.h">
+      <Filter>头文件\LNChannel</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\lightningcore\channel.h">
+      <Filter>头文件\LNChannel</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\lightningcore\remove_dust.h">
+      <Filter>头文件\LNChannel</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\lightningcore\secrets.h">
+      <Filter>头文件\LNChannel</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\lightningcore\output_to_htlc.h">
+      <Filter>头文件\LNChannel</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\lightningcore\find_p2sh_out.h">
       <Filter>头文件\LNChannel</Filter>
     </ClInclude>
   </ItemGroup>

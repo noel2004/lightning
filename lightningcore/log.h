@@ -65,7 +65,7 @@ void log_blob_(struct log *log, int level, const char *fmt,
 #define log_struct_check_(log, loglevel, fmt, structtype, ptr)		\
 	log_struct_((log), (loglevel), stringify(structtype), (fmt), 	\
 		    ((void)sizeof((ptr) == (structtype *)NULL),		\
-		     ((union printable_types)((const structtype *)ptr)).charp_))
+		     to_printable_types(type, ptr).charp_))
 
 /* These must have %s where the struct is to go. */
 #define log_add_struct(log, fmt, structtype, ptr)			\
