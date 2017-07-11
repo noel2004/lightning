@@ -1,4 +1,5 @@
 #include "bitcoin/pullpush.h"
+#include "bitcoin/preimage.h"
 #include "commit_tx.h"
 #include "db.h"
 #include "feechange.h"
@@ -6,7 +7,6 @@
 #include "htlc.h"
 #include "state.h"
 #include "log.h"
-#include "pay.h"
 #include "lnchannel_internal.h"
 #include "secrets.h"
 #include "utils/utils.h"
@@ -21,7 +21,7 @@
 #include <stdarg.h>
 #include <unistd.h>
 
-#define DB_FILE "lightning.sqlite3"
+#define DB_FILE "lightning_core.sqlite3"
 
 /* They don't use stdint types. */
 #define PRIuSQLITE64 "llu"
@@ -178,50 +178,6 @@ static char *sig_to_sql(const tal_t *ctx,
 	return sql_hex_or_null(ctx, sig->data, sizeof(sig->data));
 }
 
-static void db_load_wallet(struct lightningd_state *dstate)
-{
-	int err;
-	sqlite3_stmt *stmt;
-
-	err = sqlite3_prepare_v2(dstate->db->sql, "SELECT * FROM wallet;", -1,
-				 &stmt, NULL);
-
-	if (err != SQLITE_OK)
-		fatal("db_load_wallet:prepare gave %s:%s",
-		      sqlite3_errstr(err), sqlite3_errmsg(dstate->db->sql));
-
-	while ((err = sqlite3_step(stmt)) != SQLITE_DONE) {
-		struct privkey privkey;
-		if (err != SQLITE_ROW)
-			fatal("db_load_wallet:step gave %s:%s",
-			      sqlite3_errstr(err),
-			      sqlite3_errmsg(dstate->db->sql));
-		if (sqlite3_column_count(stmt) != 1)
-			fatal("db_load_wallet:step gave %i cols, not 1",
-			      sqlite3_column_count(stmt));
-		from_sql_blob(stmt, 0, &privkey, sizeof(privkey));
-		if (!restore_wallet_address(dstate, &privkey))
-			fatal("db_load_wallet:bad privkey");
-	}
-	err = sqlite3_finalize(stmt);
-	if (err != SQLITE_OK)
-		fatal("db_load_wallet:finalize gave %s:%s",
-		      sqlite3_errstr(err),
-		      sqlite3_errmsg(dstate->db->sql));
-}
-
-void db_add_wallet_privkey(struct lightningd_state *dstate,
-			   const struct privkey *privkey)
-{
-	char *ctx = tal_tmpctx(dstate);
-
-	log_debug(dstate->base_log, "%s", __func__);
-	if (!db_exec(__func__, dstate,
-		      "INSERT INTO wallet VALUES (x'%s');",
-		     tal_hexstr(ctx, privkey, sizeof(*privkey))))
-		fatal("db_add_wallet_privkey failed");
-	tal_free(ctx);
-}
 
 static void load_lnchn_secrets(struct LNchannel *lnchn)
 {
@@ -997,174 +953,6 @@ static void db_load_lnchns(struct lightningd_state *dstate)
 }
 
 
-//static const char *pubkeys_to_hex(const tal_t *ctx, const struct pubkey *ids)
-//{
-//	u8 *ders = tal_arr(ctx, u8, PUBKEY_DER_LEN * tal_count(ids));
-//	size_t i;
-//
-//	for (i = 0; i < tal_count(ids); i++)
-//		pubkey_to_der(ders + i * PUBKEY_DER_LEN, &ids[i]);
-//
-//	return tal_hex(ctx, ders);
-//}
-//static struct pubkey *pubkeys_from_arr(const tal_t *ctx,
-//				       const void *blob, size_t len)
-//{
-//	struct pubkey *ids;
-//	size_t i;
-//
-//	if (len % PUBKEY_DER_LEN)
-//		fatal("ids array bad length %zu", len);
-//
-//	ids = tal_arr(ctx, struct pubkey, len / PUBKEY_DER_LEN);
-//	for (i = 0; i < tal_count(ids); i++) {
-//		if (!pubkey_from_der(blob, PUBKEY_DER_LEN, &ids[i]))
-//			fatal("ids array invalid %zu", i);
-//		blob = (const u8 *)blob + PUBKEY_DER_LEN;
-//	}
-//	return ids;
-//}
-
-static void db_load_pay(struct lightningd_state *dstate)
-{
-	int err;
-	sqlite3_stmt *stmt;
-	char *ctx = tal_tmpctx(dstate);
-
-	err = sqlite3_prepare_v2(dstate->db->sql, "SELECT * FROM pay;", -1,
-				 &stmt, NULL);
-
-	if (err != SQLITE_OK)
-		fatal("db_load_pay:prepare gave %s:%s",
-		      sqlite3_errstr(err), sqlite3_errmsg(dstate->db->sql));
-
-	while ((err = sqlite3_step(stmt)) != SQLITE_DONE) {
-		struct sha256 rhash;
-		struct htlc *htlc;
-		struct pubkey *lnchn_id;
-		u64 htlc_id, msatoshi;
-		struct pubkey *ids;
-		struct preimage *r;
-		void *fail;
-
-		if (err != SQLITE_ROW)
-			fatal("db_load_pay:step gave %s:%s",
-			      sqlite3_errstr(err),
-			      sqlite3_errmsg(dstate->db->sql));
-		if (sqlite3_column_count(stmt) != 7)
-			fatal("db_load_pay:step gave %i cols, not 7",
-			      sqlite3_column_count(stmt));
-
-		sha256_from_sql(stmt, 0, &rhash);
-		msatoshi = sqlite3_column_int64(stmt, 1);
-		ids = pubkeys_from_arr(ctx,
-				       sqlite3_column_blob(stmt, 2),
-				       sqlite3_column_bytes(stmt, 2));
-		if (sqlite3_column_type(stmt, 3) == SQLITE_NULL)
-			lnchn_id = NULL;
-		else {
-			lnchn_id = tal(ctx, struct pubkey);
-			pubkey_from_sql(stmt, 3, lnchn_id);
-		}
-		htlc_id = sqlite3_column_int64(stmt, 4);
-		if (sqlite3_column_type(stmt, 5) == SQLITE_NULL)
-			r = NULL;
-		else {
-			r = tal(ctx, struct preimage);
-			from_sql_blob(stmt, 5, r, sizeof(*r));
-		}
-		fail = tal_sql_blob(ctx, stmt, 6);
-		/* Exactly one of these must be set. */
-		if (!fail + !lnchn_id + !r != 2)
-			fatal("db_load_pay: not exactly one set:"
-			      " fail=%p lnchn_id=%p r=%p",
-			      fail, lnchn_id, r);
-		if (lnchn_id) {
-			struct LNchannel *lnchn = find_lnchn(dstate, lnchn_id);
-			if (!lnchn)
-				fatal("db_load_pay: unknown lnchn");
-			htlc = htlc_get(&lnchn->htlcs, htlc_id, LOCAL);
-			if (!htlc)
-				fatal("db_load_pay: unknown htlc");
-		} else
-			htlc = NULL;
-
-		if (!pay_add(dstate, &rhash, msatoshi, ids, htlc, fail, r))
-			fatal("db_load_pay: could not add pay");
-	}
-	tal_free(ctx);
-}
-
-static void db_load_invoice(struct lightningd_state *dstate)
-{
-	int err;
-	sqlite3_stmt *stmt;
-	char *ctx = tal_tmpctx(dstate);
-
-	err = sqlite3_prepare_v2(dstate->db->sql, "SELECT * FROM invoice;", -1,
-				 &stmt, NULL);
-
-	if (err != SQLITE_OK)
-		fatal("db_load_invoice:prepare gave %s:%s",
-		      sqlite3_errstr(err), sqlite3_errmsg(dstate->db->sql));
-
-	while ((err = sqlite3_step(stmt)) != SQLITE_DONE) {
-		struct preimage r;
-		u64 msatoshi, paid_num;
-		const char *label;
-
-		if (err != SQLITE_ROW)
-			fatal("db_load_invoice:step gave %s:%s",
-			      sqlite3_errstr(err),
-			      sqlite3_errmsg(dstate->db->sql));
-		if (sqlite3_column_count(stmt) != 4)
-			fatal("db_load_invoice:step gave %i cols, not 4",
-			      sqlite3_column_count(stmt));
-
-		from_sql_blob(stmt, 0, &r, sizeof(r));
-		msatoshi = sqlite3_column_int64(stmt, 1);
-		label = (const char *)sqlite3_column_text(stmt, 2);
-		paid_num = sqlite3_column_int64(stmt, 3);
-		invoice_add(dstate->invoices, &r, msatoshi, label, paid_num);
-	}
-	tal_free(ctx);
-}
-
-static void db_load_addresses(struct lightningd_state *dstate)
-{
-	int err;
-	sqlite3_stmt *stmt;
-	sqlite3 *sql = dstate->db->sql;
-	char *ctx = tal_tmpctx(dstate);
-	const char *select;
-
-	select = tal_fmt(ctx, "SELECT * FROM lnchn_address;");
-
-	err = sqlite3_prepare_v2(sql, select, -1, &stmt, NULL);
-	if (err != SQLITE_OK)
-		fatal("load_lnchn_addresses:prepare gave %s:%s",
-		      sqlite3_errstr(err), sqlite3_errmsg(sql));
-
-	while ((err = sqlite3_step(stmt)) != SQLITE_DONE) {
-		struct LNchannel_address *addr;
-
-		if (err != SQLITE_ROW)
-			fatal("load_lnchn_addresses:step gave %s:%s",
-			      sqlite3_errstr(err), sqlite3_errmsg(sql));
-		addr = tal(dstate, struct LNchannel_address);
-		pubkey_from_sql(stmt, 0, &addr->id);
-		if (!netaddr_from_blob(sqlite3_column_blob(stmt, 1),
-				       sqlite3_column_bytes(stmt, 1),
-				       &addr->addr))
-			fatal("load_lnchn_addresses: unparsable addresses for '%s'",
-			      select);
-		list_add_tail(&dstate->addresses, &addr->list);
-		log_debug(dstate->base_log, "load_lnchn_addresses:%s",
-			  pubkey_to_hexstr(ctx, &addr->id));
-	}
-	tal_free(ctx);
-}
-
 static void db_check_version(struct lightningd_state *dstate)
 {
 	int err;
@@ -1205,11 +993,11 @@ static void db_check_version(struct lightningd_state *dstate)
 static void db_load(struct lightningd_state *dstate)
 {
 	db_check_version(dstate);
-	db_load_wallet(dstate);
-	db_load_addresses(dstate);
+//	db_load_wallet(dstate);
+//	db_load_addresses(dstate);
 	db_load_lnchns(dstate);
-	db_load_pay(dstate);
-	db_load_invoice(dstate);
+//	db_load_pay(dstate);
+//	db_load_invoice(dstate);
 }
 
 void db_init(struct lightningd_state *dstate)
@@ -1420,7 +1208,7 @@ void db_update_next_revocation_hash(struct LNchannel *lnchn)
 	tal_free(ctx);
 }
 
-void db_create_lnchn(struct LNchannel *lnchn)
+void db_create_lnchannel(struct LNchannel *lnchn)
 {
 	const char *ctx = tal_tmpctx(lnchn);
 	const char *lnchnid = pubkey_to_hexstr(ctx, lnchn->id);
@@ -1759,7 +1547,7 @@ bool db_add_lnchn_address(struct lightningd_state *dstate,
 	return ok;
 }
 
-void db_forget_lnchn(struct LNchannel *lnchn)
+void db_forget_lnchannel(struct LNchannel *lnchn)
 {
 	const char *ctx = tal_tmpctx(lnchn);
 	const char *lnchnid = pubkey_to_hexstr(ctx, lnchn->id);
@@ -1863,126 +1651,5 @@ bool db_update_their_closing(struct LNchannel *lnchn)
 	return ok;
 }
 
-bool db_new_pay_command(struct lightningd_state *dstate,
-			const struct sha256 *rhash,
-			const struct pubkey *ids,
-			u64 msatoshi,
-			const struct htlc *htlc)
-{
-	const tal_t *ctx = tal_tmpctx(dstate);
-	bool ok;
 
-	log_debug(dstate->base_log, "%s", __func__);
-	log_add_struct(dstate->base_log, "(%s)", struct sha256, rhash);
 
-	assert(!dstate->db->in_transaction);
-	ok = db_exec(__func__, dstate,
-		     "INSERT INTO pay VALUES (x'%s', %"PRIu64", x'%s', x'%s', %"PRIu64", NULL, NULL);",
-		     tal_hexstr(ctx, rhash, sizeof(*rhash)),
-		     msatoshi,
-		     pubkeys_to_hex(ctx, ids),
-		     pubkey_to_hexstr(ctx, htlc->lnchn->id),
-		     htlc->id);
-	tal_free(ctx);
-	return ok;
-}
-
-bool db_replace_pay_command(struct lightningd_state *dstate,
-			    const struct sha256 *rhash,
-			    const struct pubkey *ids,
-			    u64 msatoshi,
-			    const struct htlc *htlc)
-{
-	const tal_t *ctx = tal_tmpctx(dstate);
-	bool ok;
-
-	log_debug(dstate->base_log, "%s", __func__);
-	log_add_struct(dstate->base_log, "(%s)", struct sha256, rhash);
-
-	assert(!dstate->db->in_transaction);
-	ok = db_exec(__func__, dstate,
-		     "UPDATE pay SET msatoshi=%"PRIu64", ids=x'%s', htlc_lnchn=x'%s', htlc_id=%"PRIu64", r=NULL, fail=NULL WHERE rhash=x'%s';",
-		     msatoshi,
-		     pubkeys_to_hex(ctx, ids),
-		     pubkey_to_hexstr(ctx, htlc->lnchn->id),
-		     htlc->id,
-		     tal_hexstr(ctx, rhash, sizeof(*rhash)));
-	tal_free(ctx);
-	return ok;
-}
-
-void db_complete_pay_command(struct lightningd_state *dstate,
-			     const struct htlc *htlc)
-{
-	const tal_t *ctx = tal_tmpctx(dstate);
-
-	log_debug(dstate->base_log, "%s", __func__);
-	log_add_struct(dstate->base_log, "(%s)", struct sha256, &htlc->rhash);
-
-	assert(dstate->db->in_transaction);
-	if (htlc->r)
-		db_exec(__func__, dstate,
-			"UPDATE pay SET r=x'%s', htlc_lnchn=NULL WHERE rhash=x'%s';",
-			tal_hexstr(ctx, htlc->r, sizeof(*htlc->r)),
-			tal_hexstr(ctx, &htlc->rhash, sizeof(htlc->rhash)));
-	else
-		db_exec(__func__, dstate,
-			"UPDATE pay SET fail=x'%s', htlc_lnchn=NULL WHERE rhash=x'%s';",
-			tal_hex(ctx, htlc->fail),
-			tal_hexstr(ctx, &htlc->rhash, sizeof(htlc->rhash)));
-
-	tal_free(ctx);
-}
-
-bool db_new_invoice(struct lightningd_state *dstate,
-		    u64 msatoshi,
-		    const char *label,
-		    const struct preimage *r)
-{
-	const tal_t *ctx = tal_tmpctx(dstate);
-	bool ok;
-
-	log_debug(dstate->base_log, "%s", __func__);
-
-	assert(!dstate->db->in_transaction);
-
-	/* Insert label as hex; suspect injection attacks. */
-	ok = db_exec(__func__, dstate,
-		     "INSERT INTO invoice VALUES (x'%s', %"PRIu64", x'%s', %s);",
-		     tal_hexstr(ctx, r, sizeof(*r)),
-		     msatoshi,
-		     tal_hexstr(ctx, label, strlen(label)),
-		     sql_bool(false));
-	tal_free(ctx);
-	return ok;
-}
-
-void db_resolve_invoice(struct lightningd_state *dstate,
-			const char *label, u64 paid_num)
-{
-	const tal_t *ctx = tal_tmpctx(dstate);
-
-	log_debug(dstate->base_log, "%s", __func__);
-
-	assert(dstate->db->in_transaction);
-
-	db_exec(__func__, dstate, "UPDATE invoice SET paid_num=%"PRIu64" WHERE label=x'%s';",
-		paid_num, tal_hexstr(ctx, label, strlen(label)));
-	tal_free(ctx);
-}
-
-bool db_remove_invoice(struct lightningd_state *dstate,
-		       const char *label)
-{
-	const tal_t *ctx = tal_tmpctx(dstate);
-	bool ok;
-
-	log_debug(dstate->base_log, "%s", __func__);
-
-	assert(!dstate->db->in_transaction);
-
-	ok = db_exec(__func__, dstate, "DELETE FROM invoice WHERE label=x'%s';",
-			 tal_hexstr(ctx, label, strlen(label)));
-	tal_free(ctx);
-	return ok;
-}
