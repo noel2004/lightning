@@ -49,7 +49,6 @@
     <ClInclude Include="..\..\lightningcore\feechange.h" />
     <ClInclude Include="..\..\lightningcore\find_p2sh_out.h" />
     <ClInclude Include="..\..\lightningcore\htlc.h" />
-    <ClInclude Include="..\..\lightningcore\invoice.h" />
     <ClInclude Include="..\..\lightningcore\log.h" />
     <ClInclude Include="..\..\lightningcore\lnchannel.h" />
     <ClInclude Include="..\..\lightningcore\lnchannel_internal.h" />

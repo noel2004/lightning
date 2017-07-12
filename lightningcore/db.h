@@ -10,31 +10,14 @@ void db_start_transaction(struct LNchannel *lnchn);
 void db_abort_transaction(struct LNchannel *lnchn);
 const char *db_commit_transaction(struct LNchannel *lnchn);
 
-void db_add_wallet_privkey(struct lightningd_state *dstate,
-			   const struct privkey *privkey);
+//void db_add_wallet_privkey(struct lightningd_state *dstate,
+//			   const struct privkey *privkey);
 
-bool db_add_lnchn_address(struct lightningd_state *dstate,
-			 const struct LNchannel_address *addr);
+//bool db_add_lnchn_address(struct lightningd_state *dstate,
+//			 const struct LNchannel_address *addr);
 
 /* Must NOT be inside transaction. */
 bool db_update_their_closing(struct LNchannel *lnchn);
-bool db_new_pay_command(struct lightningd_state *dstate,
-			const struct sha256 *rhash,
-			const struct pubkey *ids,
-			u64 msatoshi,
-			const struct htlc *htlc);
-bool db_replace_pay_command(struct lightningd_state *dstate,
-			    const struct sha256 *rhash,
-			    const struct pubkey *ids,
-			    u64 msatoshi,
-			    const struct htlc *htlc);
-bool db_new_invoice(struct lightningd_state *dstate,
-		    u64 msatoshi,
-		    const char *label,
-		    const struct preimage *r);
-
-bool db_remove_invoice(struct lightningd_state *dstate,
-		       const char *label);
 
 /* FIXME: save error handling until db_commit_transaction for calls
  * which have to be inside transaction anyway. */
@@ -49,10 +32,6 @@ void db_htlc_fulfilled(struct LNchannel *lnchn, const struct htlc *htlc);
 void db_htlc_failed(struct LNchannel *lnchn, const struct htlc *htlc);
 void db_update_htlc_state(struct LNchannel *lnchn, const struct htlc *htlc,
 				 enum htlc_state oldstate);
-void db_complete_pay_command(struct lightningd_state *dstate,
-			     const struct htlc *htlc);
-void db_resolve_invoice(struct lightningd_state *dstate,
-			const char *label, u64 paid_num);
 void db_update_feechange_state(struct LNchannel *lnchn,
 			       const struct feechange *f,
 			       enum feechange_state oldstate);

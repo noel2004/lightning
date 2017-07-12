@@ -85,9 +85,6 @@
     <ClInclude Include="..\..\lightningcore\htlc.h">
       <Filter>头文件\LNChannel</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\lightningcore\invoice.h">
-      <Filter>头文件\LNChannel</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\lightningcore\log.h">
       <Filter>头文件\LNChannel</Filter>
     </ClInclude>

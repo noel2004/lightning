@@ -90,8 +90,8 @@ struct lightningd_state {
     /* Cached block topology. */
     struct chain_topology *topology;
 
-    /* Our peers. */
-    struct list_head peers;
+    /* Channel manager register interface*/
+    struct LNchannels *channels;
 
     /* Addresses to contact peers. */
     struct list_head addresses;
