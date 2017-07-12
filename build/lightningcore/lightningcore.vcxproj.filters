@@ -68,6 +68,9 @@
     <ClCompile Include="..\..\lightningcore\find_p2sh_out.c">
       <Filter>源文件\LNChannel</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\lightningcore\names.c">
+      <Filter>源文件\LNChannel</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\protos\peer.pb.h">
@@ -83,9 +86,6 @@
       <Filter>头文件\LNChannel</Filter>
     </ClInclude>
     <ClInclude Include="..\..\lightningcore\htlc.h">
-      <Filter>头文件\LNChannel</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\lightningcore\invoice.h">
       <Filter>头文件\LNChannel</Filter>
     </ClInclude>
     <ClInclude Include="..\..\lightningcore\log.h">
@@ -128,6 +128,9 @@
       <Filter>头文件\LNChannel</Filter>
     </ClInclude>
     <ClInclude Include="..\..\lightningcore\find_p2sh_out.h">
+      <Filter>头文件\LNChannel</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\lightningcore\names.h">
       <Filter>头文件\LNChannel</Filter>
     </ClInclude>
   </ItemGroup>

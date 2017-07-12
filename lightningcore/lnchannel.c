@@ -2800,7 +2800,7 @@ static bool lnchn_reconnected(struct LNchannel *lnchn,
 	return true;
 }
 
-struct LNchannel *new_lnchn(struct lightningd_state *dstate,
+struct LNchannel *new_LNChannel(struct lightningd_state *dstate,
 		      struct log *log,
 		      enum state state,
 		      bool offer_anchor)

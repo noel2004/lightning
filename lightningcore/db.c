@@ -6,10 +6,12 @@
 #include "gen_version.h"
 #include "htlc.h"
 #include "state.h"
+#include "names.h"
 #include "log.h"
 #include "lnchannel_internal.h"
 #include "secrets.h"
 #include "utils/utils.h"
+#include "lightninglite/c/manager.h"
 #include <ccan/array_size/array_size.h>
 #include <ccan/cast/cast.h>
 #include <ccan/cppmagic/cppmagic.h>
@@ -21,7 +23,7 @@
 #include <stdarg.h>
 #include <unistd.h>
 
-#define DB_FILE "lightning_core.sqlite3"
+#define DB_FILE "lightning.core.sqlite3"
 
 /* They don't use stdint types. */
 #define PRIuSQLITE64 "llu"
@@ -178,6 +180,50 @@ static char *sig_to_sql(const tal_t *ctx,
 	return sql_hex_or_null(ctx, sig->data, sizeof(sig->data));
 }
 
+//static void db_load_wallet(struct lightningd_state *dstate)
+//{
+//	int err;
+//	sqlite3_stmt *stmt;
+//
+//	err = sqlite3_prepare_v2(dstate->db->sql, "SELECT * FROM wallet;", -1,
+//				 &stmt, NULL);
+//
+//	if (err != SQLITE_OK)
+//		fatal("db_load_wallet:prepare gave %s:%s",
+//		      sqlite3_errstr(err), sqlite3_errmsg(dstate->db->sql));
+//
+//	while ((err = sqlite3_step(stmt)) != SQLITE_DONE) {
+//		struct privkey privkey;
+//		if (err != SQLITE_ROW)
+//			fatal("db_load_wallet:step gave %s:%s",
+//			      sqlite3_errstr(err),
+//			      sqlite3_errmsg(dstate->db->sql));
+//		if (sqlite3_column_count(stmt) != 1)
+//			fatal("db_load_wallet:step gave %i cols, not 1",
+//			      sqlite3_column_count(stmt));
+//		from_sql_blob(stmt, 0, &privkey, sizeof(privkey));
+//		if (!restore_wallet_address(dstate, &privkey))
+//			fatal("db_load_wallet:bad privkey");
+//	}
+//	err = sqlite3_finalize(stmt);
+//	if (err != SQLITE_OK)
+//		fatal("db_load_wallet:finalize gave %s:%s",
+//		      sqlite3_errstr(err),
+//		      sqlite3_errmsg(dstate->db->sql));
+//}
+
+//void db_add_wallet_privkey(struct lightningd_state *dstate,
+//			   const struct privkey *privkey)
+//{
+//	char *ctx = tal_tmpctx(dstate);
+//
+//	log_debug(dstate->base_log, "%s", __func__);
+//	if (!db_exec(__func__, dstate,
+//		      "INSERT INTO wallet VALUES (x'%s');",
+//		     tal_hexstr(ctx, privkey, sizeof(*privkey))))
+//		fatal("db_add_wallet_privkey failed");
+//	tal_free(ctx);
+//}
 
 static void load_lnchn_secrets(struct LNchannel *lnchn)
 {
@@ -214,6 +260,11 @@ static void load_lnchn_secrets(struct LNchannel *lnchn)
 		secrets_set = true;
 	}
 
+	err = sqlite3_finalize(stmt);
+	if (err != SQLITE_OK)
+		fatal("load_lnchn_visible_state:finalize gave %s:%s",
+		      sqlite3_errstr(err), sqlite3_errmsg(sql));
+
 	if (!secrets_set)
 		fatal("load_lnchn_secrets: no secrets for '%s'", select);
 	tal_free(ctx);
@@ -249,10 +300,15 @@ static void load_lnchn_anchor(struct LNchannel *lnchn)
 		lnchn->anchor.index = sqlite3_column_int64(stmt, 2);
 		lnchn->anchor.satoshis = sqlite3_column_int64(stmt, 3);
 		lnchn->anchor.ours = sqlite3_column_int(stmt, 6);
-		lnchn_watch_anchor(lnchn, sqlite3_column_int(stmt, 4));
+//		lnchn_watch_anchor(lnchn, sqlite3_column_int(stmt, 4));
 		lnchn->anchor.min_depth = sqlite3_column_int(stmt, 5);
 		anchor_set = true;
 	}
+
+	err = sqlite3_finalize(stmt);
+	if (err != SQLITE_OK)
+		fatal("load_lnchn_visible_state:finalize gave %s:%s",
+		      sqlite3_errstr(err), sqlite3_errmsg(sql));
 
 	if (!anchor_set)
 		fatal("load_lnchn_anchor: no anchor for '%s'", select);
@@ -294,6 +350,11 @@ static void load_lnchn_anchor_input(struct LNchannel *lnchn)
 		pubkey_from_sql(stmt, 5, &lnchn->anchor.input->walletkey);
 		anchor_input_set = true;
 	}
+
+	err = sqlite3_finalize(stmt);
+	if (err != SQLITE_OK)
+		fatal("load_lnchn_visible_state:finalize gave %s:%s",
+		      sqlite3_errstr(err), sqlite3_errmsg(sql));
 
 	if (!anchor_input_set)
 		fatal("load_lnchn_anchor_input: no inputs for '%s'", select);
@@ -443,7 +504,7 @@ static void load_lnchn_commit_info(struct LNchannel *lnchn)
 /* Because their HTLCs are not ordered wrt to ours, we can go negative
  * and do normally-impossible things in intermediate states.  So we
  * mangle cstate balances manually. */
-static void apply_htlc(struct channel_state *cstate, const struct htlc *htlc,
+static void apply_htlc(struct log *log, struct channel_state *cstate, const struct htlc *htlc,
 		       enum side side)
 {
 	const char *sidestr = side_to_str(side);
@@ -451,11 +512,11 @@ static void apply_htlc(struct channel_state *cstate, const struct htlc *htlc,
 	if (!htlc_has(htlc, HTLC_FLAG(side,HTLC_F_WAS_COMMITTED)))
 		return;
 
-	log_debug(htlc->lnchn->log, "  %s committed", sidestr);
+	log_debug(log, "  %s committed", sidestr);
 	force_add_htlc(cstate, htlc);
 
 	if (!htlc_has(htlc, HTLC_FLAG(side, HTLC_F_COMMITTED))) {
-		log_debug(htlc->lnchn->log, "  %s %s",
+		log_debug(log, "  %s %s",
 			  sidestr, htlc->r ? "resolved" : "failed");
 		if (htlc->r)
 			force_fulfill_htlc(cstate, htlc);
@@ -547,8 +608,8 @@ static void load_lnchn_htlcs(struct LNchannel *lnchn)
 			lnchn->htlc_id_counter = htlc->id + 1;
 
 		/* Update cstate with this HTLC. */
-		apply_htlc(lnchn->local.commit->cstate, htlc, LOCAL);
-		apply_htlc(lnchn->remote.commit->cstate, htlc, REMOTE);
+		apply_htlc(lnchn->log, lnchn->local.commit->cstate, htlc, LOCAL);
+		apply_htlc(lnchn->log, lnchn->remote.commit->cstate, htlc, REMOTE);
 	}
 
 	err = sqlite3_finalize(stmt);
@@ -633,72 +694,72 @@ static void load_lnchn_htlcs(struct LNchannel *lnchn)
 	tal_free(ctx);
 }
 
-/* FIXME: A real database person would do this in a single clause along
- * with loading the htlcs in the first place! */
-static void connect_htlc_src(struct lightningd_state *dstate)
-{
-	sqlite3 *sql = dstate->db->sql;
-	int err;
-	sqlite3_stmt *stmt;
-	char *ctx = tal_tmpctx(dstate);
-	const char *select;
-
-	select = tal_fmt(ctx,
-			 "SELECT lnchn,id,state,src_lnchn,src_id FROM htlcs WHERE src_lnchn IS NOT NULL AND state <> 'RCVD_REMOVE_ACK_REVOCATION' AND state <> 'SENT_REMOVE_ACK_REVOCATION';");
-
-	err = sqlite3_prepare_v2(sql, select, -1, &stmt, NULL);
-	if (err != SQLITE_OK)
-		fatal("connect_htlc_src:%s gave %s:%s",
-		      select, sqlite3_errstr(err), sqlite3_errmsg(sql));
-
-	while ((err = sqlite3_step(stmt)) != SQLITE_DONE) {
-		struct pubkey id;
-		struct LNchannel *lnchn;
-		struct htlc *htlc;
-		enum htlc_state s;
-
-		if (err != SQLITE_ROW)
-			fatal("connect_htlc_src:step gave %s:%s",
-			      sqlite3_errstr(err), sqlite3_errmsg(sql));
-
-		pubkey_from_sql(stmt, 0, &id);
-		lnchn = find_lnchn(dstate, &id);
-		if (!lnchn)
-			continue;
-
-		s = htlc_state_from_name(sqlite3_column_str(stmt, 2));
-		if (s == HTLC_STATE_INVALID)
-			fatal("connect_htlc_src:unknown state %s",
-			      sqlite3_column_str(stmt, 2));
-
-		htlc = htlc_get(&lnchn->htlcs, sqlite3_column_int64(stmt, 1),
-				htlc_state_owner(s));
-		if (!htlc)
-			fatal("connect_htlc_src:unknown htlc %"PRIuSQLITE64" state %s",
-			      sqlite3_column_int64(stmt, 1),
-			      sqlite3_column_str(stmt, 2));
-
-		pubkey_from_sql(stmt, 4, &id);
-		lnchn = find_lnchn(dstate, &id);
-		if (!lnchn)
-			fatal("connect_htlc_src:unknown src lnchn %s",
-			      tal_hexstr(dstate, &id, sizeof(id)));
-
-		/* Source must be a HTLC they offered. */
-		htlc->src = htlc_get(&lnchn->htlcs,
-				     sqlite3_column_int64(stmt, 4),
-				     REMOTE);
-		if (!htlc->src)
-			fatal("connect_htlc_src:unknown src htlc");
-	}
-
-	err = sqlite3_finalize(stmt);
-	if (err != SQLITE_OK)
-		fatal("load_lnchn_htlcs:finalize gave %s:%s",
-		      sqlite3_errstr(err),
-		      sqlite3_errmsg(dstate->db->sql));
-	tal_free(ctx);
-}
+///* FIXME: A real database person would do this in a single clause along
+// * with loading the htlcs in the first place! */
+//static void connect_htlc_src(struct lightningd_state *dstate)
+//{
+//	sqlite3 *sql = dstate->db->sql;
+//	int err;
+//	sqlite3_stmt *stmt;
+//	char *ctx = tal_tmpctx(dstate);
+//	const char *select;
+//
+//	select = tal_fmt(ctx,
+//			 "SELECT lnchn,id,state,src_lnchn,src_id FROM htlcs WHERE src_lnchn IS NOT NULL AND state <> 'RCVD_REMOVE_ACK_REVOCATION' AND state <> 'SENT_REMOVE_ACK_REVOCATION';");
+//
+//	err = sqlite3_prepare_v2(sql, select, -1, &stmt, NULL);
+//	if (err != SQLITE_OK)
+//		fatal("connect_htlc_src:%s gave %s:%s",
+//		      select, sqlite3_errstr(err), sqlite3_errmsg(sql));
+//
+//	while ((err = sqlite3_step(stmt)) != SQLITE_DONE) {
+//		struct pubkey id;
+//		struct LNchannel *lnchn;
+//		struct htlc *htlc;
+//		enum htlc_state s;
+//
+//		if (err != SQLITE_ROW)
+//			fatal("connect_htlc_src:step gave %s:%s",
+//			      sqlite3_errstr(err), sqlite3_errmsg(sql));
+//
+//		pubkey_from_sql(stmt, 0, &id);
+//		lnchn = find_lnchn(dstate, &id);
+//		if (!lnchn)
+//			continue;
+//
+//		s = htlc_state_from_name(sqlite3_column_str(stmt, 2));
+//		if (s == HTLC_STATE_INVALID)
+//			fatal("connect_htlc_src:unknown state %s",
+//			      sqlite3_column_str(stmt, 2));
+//
+//		htlc = htlc_get(&lnchn->htlcs, sqlite3_column_int64(stmt, 1),
+//				htlc_state_owner(s));
+//		if (!htlc)
+//			fatal("connect_htlc_src:unknown htlc %"PRIuSQLITE64" state %s",
+//			      sqlite3_column_int64(stmt, 1),
+//			      sqlite3_column_str(stmt, 2));
+//
+//		pubkey_from_sql(stmt, 4, &id);
+//		lnchn = find_lnchn(dstate, &id);
+//		if (!lnchn)
+//			fatal("connect_htlc_src:unknown src lnchn %s",
+//			      tal_hexstr(dstate, &id, sizeof(id)));
+//
+//		/* Source must be a HTLC they offered. */
+//		htlc->src = htlc_get(&lnchn->htlcs,
+//				     sqlite3_column_int64(stmt, 4),
+//				     REMOTE);
+//		if (!htlc->src)
+//			fatal("connect_htlc_src:unknown src htlc");
+//	}
+//
+//	err = sqlite3_finalize(stmt);
+//	if (err != SQLITE_OK)
+//		fatal("load_lnchn_htlcs:finalize gave %s:%s",
+//		      sqlite3_errstr(err),
+//		      sqlite3_errmsg(dstate->db->sql));
+//	tal_free(ctx);
+//}
 
 static const char *linearize_shachain(const tal_t *ctx,
 				      const struct shachain *shachain)
@@ -860,13 +921,13 @@ static void restore_lnchn_local_visible_state(struct LNchannel *lnchn)
 				 lnchn->local.commit->commit_num + 1,
 				 &lnchn->local.next_revocation_hash);
 
-	if (state_is_normal(lnchn->state))
-		lnchn->nc = add_connection(lnchn->dstate->rstate,
-					  &lnchn->dstate->id, lnchn->id,
-					  lnchn->dstate->config.fee_base,
-					  lnchn->dstate->config.fee_per_satoshi,
-					  lnchn->dstate->config.min_htlc_expiry,
-					  lnchn->dstate->config.min_htlc_expiry);
+	//if (state_is_normal(lnchn->state))
+	//	lnchn->nc = add_connection(lnchn->dstate->rstate,
+	//				  &lnchn->dstate->id, lnchn->id,
+	//				  lnchn->dstate->config.fee_base,
+	//				  lnchn->dstate->config.fee_per_satoshi,
+	//				  lnchn->dstate->config.min_htlc_expiry,
+	//				  lnchn->dstate->config.min_htlc_expiry);
 
 	lnchn->their_commitsigs = lnchn->local.commit->commit_num + 1;
 	/* If they created anchor, they didn't send a sig for first commit */
@@ -917,22 +978,15 @@ static void db_load_lnchns(struct lightningd_state *dstate)
 		idstr = pubkey_to_hexstr(dstate, &id);
 		l = new_log(dstate, dstate->log_book, "%s:", idstr);
 		tal_free(idstr);
-		lnchn = new_lnchn(dstate, l, state, sqlite3_column_int(stmt, 2));
+		lnchn = new_LNChannel(dstate, l, state, sqlite3_column_int(stmt, 2));
 		lnchn->htlc_id_counter = 0;
 		lnchn->id = tal_dup(lnchn, struct pubkey, &id);
 		lnchn->local.commit_fee_rate = sqlite3_column_int64(stmt, 3);
-        lnchn->final_redeemscript = tal_sql_blob(lnchn, stmt, 4);
+        pubkey_from_sql(stmt, 4, &lnchn->local.finalkey);
 		lnchn->order_counter = 1;
 		log_debug(lnchn->log, "%s:%s",
 			  __func__, state_name(lnchn->state));
-	}
-	err = sqlite3_finalize(stmt);
-	if (err != SQLITE_OK)
-		fatal("db_load_lnchns:finalize gave %s:%s",
-		      sqlite3_errstr(err),
-		      sqlite3_errmsg(dstate->db->sql));
 
-	list_for_each(&dstate->lnchns, lnchn, list) {
 		load_lnchn_secrets(lnchn);
 		load_lnchn_closing(lnchn);
 		lnchn->anchor.min_depth = 0;
@@ -947,10 +1001,46 @@ static void db_load_lnchns(struct lightningd_state *dstate)
 		}
 		if (lnchn->local.offer_anchor)
 			load_lnchn_anchor_input(lnchn);
-	}
 
-	connect_htlc_src(dstate);
+        lite_reg_channel(dstate->channels, lnchn);
+	}
+	err = sqlite3_finalize(stmt);
+	if (err != SQLITE_OK)
+		fatal("db_load_lnchns:finalize gave %s:%s",
+		      sqlite3_errstr(err),
+		      sqlite3_errmsg(dstate->db->sql));
+
+//	connect_htlc_src(dstate);
 }
+
+
+//static const char *pubkeys_to_hex(const tal_t *ctx, const struct pubkey *ids)
+//{
+//	u8 *ders = tal_arr(ctx, u8, PUBKEY_DER_LEN * tal_count(ids));
+//	size_t i;
+//
+//	for (i = 0; i < tal_count(ids); i++)
+//		pubkey_to_der(ders + i * PUBKEY_DER_LEN, &ids[i]);
+//
+//	return tal_hex(ctx, ders);
+//}
+//static struct pubkey *pubkeys_from_arr(const tal_t *ctx,
+//				       const void *blob, size_t len)
+//{
+//	struct pubkey *ids;
+//	size_t i;
+//
+//	if (len % PUBKEY_DER_LEN)
+//		fatal("ids array bad length %zu", len);
+//
+//	ids = tal_arr(ctx, struct pubkey, len / PUBKEY_DER_LEN);
+//	for (i = 0; i < tal_count(ids); i++) {
+//		if (!pubkey_from_der(blob, PUBKEY_DER_LEN, &ids[i]))
+//			fatal("ids array invalid %zu", i);
+//		blob = (const u8 *)blob + PUBKEY_DER_LEN;
+//	}
+//	return ids;
+//}
 
 
 static void db_check_version(struct lightningd_state *dstate)
@@ -1039,17 +1129,17 @@ void db_init(struct lightningd_state *dstate)
 	dstate->db->in_transaction = true;
 	db_exec(__func__, dstate, "BEGIN IMMEDIATE;");
 	db_exec(__func__, dstate,
-		TABLE(wallet,
-		      SQL_PRIVKEY(privkey))
-		TABLE(pay,
-		      SQL_RHASH(rhash), SQL_U64(msatoshi),
-		      SQL_BLOB(ids), SQL_PUBKEY(htlc_lnchn),
-		      SQL_U64(htlc_id), SQL_R(r), SQL_FAIL(fail),
-		      "PRIMARY KEY(rhash)")
-		TABLE(invoice,
-		      SQL_R(r), SQL_U64(msatoshi), SQL_INVLABEL(label),
-		      SQL_U64(paid_num),
-		      "PRIMARY KEY(label)")
+		//TABLE(wallet,
+		//      SQL_PRIVKEY(privkey))
+		//TABLE(pay,
+		//      SQL_RHASH(rhash), SQL_U64(msatoshi),
+		//      SQL_BLOB(ids), SQL_PUBKEY(htlc_lnchn),
+		//      SQL_U64(htlc_id), SQL_R(r), SQL_FAIL(fail),
+		//      "PRIMARY KEY(rhash)")
+		//TABLE(invoice,
+		//      SQL_R(r), SQL_U64(msatoshi), SQL_INVLABEL(label),
+		//      SQL_U64(paid_num),
+		//      "PRIMARY KEY(label)")
 		TABLE(anchor_inputs,
 		      SQL_PUBKEY(lnchn),
 		      SQL_TXID(txid), SQL_U32(idx),
@@ -1097,9 +1187,9 @@ void db_init(struct lightningd_state *dstate)
 		      SQL_PRIVKEY(finalkey),
 		      SQL_SHA256(revocation_seed),
 		      "PRIMARY KEY(lnchn)")
-		TABLE(lnchn_address,
-		      SQL_PUBKEY(lnchn), SQL_BLOB(addr),
-		      "PRIMARY KEY(lnchn)")
+		//TABLE(lnchn_address,
+		//      SQL_PUBKEY(lnchn), SQL_BLOB(addr),
+		//      "PRIMARY KEY(lnchn)")
 		TABLE(closing,
 		      SQL_PUBKEY(lnchn), SQL_U64(our_fee),
 		      SQL_U64(their_fee), SQL_SIGNATURE(their_sig),
@@ -1110,7 +1200,7 @@ void db_init(struct lightningd_state *dstate)
 		TABLE(lnchns,
 		      SQL_PUBKEY(lnchn), SQL_STATENAME(state),
 		      SQL_BOOL(offered_anchor), SQL_U32(our_feerate),
-              SQL_BLOB(redeem_script),
+              SQL_PUBKEY(finalkey),
 		      "PRIMARY KEY(lnchn)")
 		TABLE(version, "version VARCHAR(100)"));
 	db_exec(__func__, dstate, "INSERT INTO version VALUES ('"VERSION"');");
@@ -1208,29 +1298,21 @@ void db_update_next_revocation_hash(struct LNchannel *lnchn)
 	tal_free(ctx);
 }
 
-void db_create_lnchannel(struct LNchannel *lnchn)
+void db_create_lnchn(struct LNchannel *lnchn)
 {
 	const char *ctx = tal_tmpctx(lnchn);
 	const char *lnchnid = pubkey_to_hexstr(ctx, lnchn->id);
 
 	log_debug(lnchn->log, "%s(%s)", __func__, lnchnid);
 	assert(lnchn->dstate->db->in_transaction);
-    if(lnchn->final_redeemscript)
-	    db_exec(__func__, lnchn->dstate,
-		    "INSERT INTO lnchns VALUES (x'%s', '%s', %s, %"PRIi64", x'%s');",
-		    lnchnid,
-		    state_name(lnchn->state),
-		    sql_bool(lnchn->local.offer_anchor),
-		    lnchn->local.commit_fee_rate,
- 		    tal_hexstr(ctx, lnchn->final_redeemscript,
-			    tal_count(lnchn->final_redeemscript)));
-    else
-	    db_exec(__func__, lnchn->dstate,
-		    "INSERT INTO lnchns VALUES (x'%s', '%s', %s, %"PRIi64", NULL);",
-		    lnchnid,
-		    state_name(lnchn->state),
-		    sql_bool(lnchn->local.offer_anchor),
-		    lnchn->local.commit_fee_rate);
+
+	db_exec(__func__, lnchn->dstate,
+		"INSERT INTO lnchns VALUES (x'%s', '%s', %s, %"PRIi64", x'%s');",
+		lnchnid,
+		state_name(lnchn->state),
+		sql_bool(lnchn->local.offer_anchor),
+		lnchn->local.commit_fee_rate,
+        pubkey_to_hexstr(ctx, &lnchn->local.finalkey));
 
 	db_exec(__func__, lnchn->dstate,
 		"INSERT INTO lnchn_secrets VALUES (x'%s', %s);",
@@ -1303,7 +1385,7 @@ void db_new_htlc(struct LNchannel *lnchn, const struct htlc *htlc)
 	log_debug(lnchn->log, "%s(%s)", __func__, lnchnid);
 	assert(lnchn->dstate->db->in_transaction);
 
-	if (htlc->src) {
+	if (htlc->src_channelid) {
 		db_exec(__func__, lnchn->dstate,
 			"INSERT INTO htlcs VALUES"
 			" (x'%s', %"PRIu64", '%s', %"PRIu64", %u, x'%s', NULL, x'%s', x'%s', %"PRIu64", NULL);",
@@ -1315,7 +1397,7 @@ void db_new_htlc(struct LNchannel *lnchn, const struct htlc *htlc)
 			tal_hexstr(ctx, &htlc->rhash, sizeof(htlc->rhash)),
 			tal_hex(ctx, htlc->routing),
 			lnchnid,
-			htlc->src->id);
+            htlc->src_channelid);
 	} else {
 		db_exec(__func__, lnchn->dstate,
 			"INSERT INTO htlcs VALUES"
@@ -1528,26 +1610,26 @@ void db_add_commit_map(struct LNchannel *lnchn,
 	tal_free(ctx);
 }
 
-/* FIXME: Clean out old ones! */
-bool db_add_lnchn_address(struct lightningd_state *dstate,
-			 const struct LNchannel_address *addr)
-{
-	const tal_t *ctx = tal_tmpctx(dstate);
-	bool ok;
+///* FIXME: Clean out old ones! */
+//bool db_add_lnchn_address(struct lightningd_state *dstate,
+//			 const struct LNchannel_address *addr)
+//{
+//	const tal_t *ctx = tal_tmpctx(dstate);
+//	bool ok;
+//
+//	log_debug(dstate->base_log, "%s", __func__);
+//
+//	assert(!dstate->db->in_transaction);
+//	ok = db_exec(__func__, dstate,
+//		     "INSERT OR REPLACE INTO lnchn_address VALUES (x'%s', x'%s');",
+//		     pubkey_to_hexstr(ctx, &addr->id),
+//		     netaddr_to_hex(ctx, &addr->addr));
+//
+//	tal_free(ctx);
+//	return ok;
+//}
 
-	log_debug(dstate->base_log, "%s", __func__);
-
-	assert(!dstate->db->in_transaction);
-	ok = db_exec(__func__, dstate,
-		     "INSERT OR REPLACE INTO lnchn_address VALUES (x'%s', x'%s');",
-		     pubkey_to_hexstr(ctx, &addr->id),
-		     netaddr_to_hex(ctx, &addr->addr));
-
-	tal_free(ctx);
-	return ok;
-}
-
-void db_forget_lnchannel(struct LNchannel *lnchn)
+void db_forget_lnchn(struct LNchannel *lnchn)
 {
 	const char *ctx = tal_tmpctx(lnchn);
 	const char *lnchnid = pubkey_to_hexstr(ctx, lnchn->id);
@@ -1650,6 +1732,4 @@ bool db_update_their_closing(struct LNchannel *lnchn)
 	tal_free(ctx);
 	return ok;
 }
-
-
 
