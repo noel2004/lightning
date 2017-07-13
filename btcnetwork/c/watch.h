@@ -2,6 +2,7 @@
 #define LIGHTNING_BTCNETWORK_OUTSOURCING_C_INTERFACE_H
 #include "config.h"
 #include "bitcoin/shadouble.h"
+#include "bitcoin/signature.h"
 #include <ccan/short_types/short_types.h>
 
 struct bitcoin_tx;
@@ -15,12 +16,20 @@ enum outsourcing_result {
     OUTSOURCING_FAIL = -3,    //valid transaction but stale
 };
 
+struct witnessgroup {
+    
+    u8 *wscript;
+    ecdsa_signature* sig;
+};
+
 /* outsourcing an output from committx*/
 struct txowatch {
 
     struct bitcoin_tx *committx;
     unsigned int index;
-    struct bitcoin_tx *delive_tx;
+    bool need_secret;
+    struct bitcoin_tx *deliver_tx;
+    struct witnessgroup witness;
 
 	void (*notify)(enum outsourcing_result, struct sha256_double *delivered_txid, void *cbdata);
 	void *cbdata;
@@ -28,7 +37,8 @@ struct txowatch {
 
 struct txdeliver {
 
-    struct bitcoin_tx *delive_tx;
+    struct bitcoin_tx *deliver_tx;
+    struct witnessgroup witness;
 
     void(*notify)(enum outsourcing_result, struct sha256_double *delivered_txid, void *cbdata);
     void *cbdata;
