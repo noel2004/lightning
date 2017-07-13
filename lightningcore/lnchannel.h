@@ -4,6 +4,7 @@
 #include "bitcoin/locktime.h"
 #include "bitcoin/privkey.h"
 #include "bitcoin/pubkey.h"
+#include "bitcoin/address.h"
 #include "bitcoin/script.h"
 #include "bitcoin/shadouble.h"
 #include "failure.h"
@@ -66,7 +67,9 @@ u32 get_peer_min_block(struct lightningd_state *dstate);
 void debug_dump_lnchn(struct LNchannel *chn);
 
 //watch message ...
+void lnchn_notify_txo_delivered(struct LNchannel *chn, const struct bitcoin_tx *tx);
 
+void lnchn_notify_tx_delivered(struct LNchannel *chn, const struct bitcoin_tx *tx);
 
 void cleanup_lnchn(struct lightningd_state *dstate, struct LNchannel *chn);
 

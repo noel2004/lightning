@@ -2,6 +2,7 @@
 #define LIGHTNING_BTCNETWORK_OUTSOURCING_C_INTERFACE_H
 #include "config.h"
 #include "bitcoin/shadouble.h"
+#include <ccan/short_types/short_types.h>
 
 struct bitcoin_tx;
 struct outsourcing;

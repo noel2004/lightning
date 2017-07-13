@@ -1,5 +1,6 @@
 #include "bitcoin/pullpush.h"
 #include "bitcoin/preimage.h"
+#include "bitcoin/address.h"
 #include "commit_tx.h"
 #include "db.h"
 #include "feechange.h"
@@ -142,6 +143,18 @@ static u8 *tal_sql_blob(const tal_t *ctx, sqlite3_stmt *stmt, int idx)
 	p = tal_arr(ctx, u8, sqlite3_column_bytes(stmt, idx));
 	from_sql_blob(stmt, idx, p, tal_count(p));
 	return p;
+}
+
+static void address_from_sql(sqlite3_stmt *stmt, int idx, struct bitcoin_address *addr)
+{
+    int len = sqlite3_column_bytes(stmt, idx);
+
+    if (len == sizeof(addr->addr)) {
+        memcpy(addr->addr, sqlite3_column_blob(stmt, idx), len);
+    }
+    else {
+        fatal("db:bad address length %i", len);
+    }
 }
 
 static void pubkey_from_sql(sqlite3_stmt *stmt, int idx, struct pubkey *pk)
@@ -982,7 +995,7 @@ static void db_load_lnchns(struct lightningd_state *dstate)
 		lnchn->htlc_id_counter = 0;
 		lnchn->id = tal_dup(lnchn, struct pubkey, &id);
 		lnchn->local.commit_fee_rate = sqlite3_column_int64(stmt, 3);
-        pubkey_from_sql(stmt, 4, &lnchn->redeem_key);
+        address_from_sql(stmt, 4, &lnchn->redeem_addr);
 		lnchn->order_counter = 1;
 		log_debug(lnchn->log, "%s:%s",
 			  __func__, state_name(lnchn->state));
@@ -1200,7 +1213,7 @@ void db_init(struct lightningd_state *dstate)
 		TABLE(lnchns,
 		      SQL_PUBKEY(lnchn), SQL_STATENAME(state),
 		      SQL_BOOL(offered_anchor), SQL_U32(our_feerate),
-              SQL_PUBKEY(finalkey),
+              SQL_BLOB(redeemaddr),
 		      "PRIMARY KEY(lnchn)")
 		TABLE(version, "version VARCHAR(100)"));
 	db_exec(__func__, dstate, "INSERT INTO version VALUES ('"VERSION"');");
@@ -1306,13 +1319,13 @@ void db_create_lnchn(struct LNchannel *lnchn)
 	log_debug(lnchn->log, "%s(%s)", __func__, lnchnid);
 	assert(lnchn->dstate->db->in_transaction);
 
-	db_exec(__func__, lnchn->dstate,
-		"INSERT INTO lnchns VALUES (x'%s', '%s', %s, %"PRIi64", x'%s');",
-		lnchnid,
-		state_name(lnchn->state),
-		sql_bool(lnchn->local.offer_anchor),
-		lnchn->local.commit_fee_rate,
-        pubkey_to_hexstr(ctx, &lnchn->redeem_key));
+    db_exec(__func__, lnchn->dstate,
+        "INSERT INTO lnchns VALUES (x'%s', '%s', %s, %"PRIi64", x'%s');",
+        lnchnid,
+        state_name(lnchn->state),
+        sql_bool(lnchn->local.offer_anchor),
+        lnchn->local.commit_fee_rate,
+        tal_hexstr(ctx, &lnchn->redeem_addr, sizeof(lnchn->redeem_addr.addr)));
 
 	db_exec(__func__, lnchn->dstate,
 		"INSERT INTO lnchn_secrets VALUES (x'%s', %s);",
