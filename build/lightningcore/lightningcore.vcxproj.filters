@@ -71,13 +71,13 @@
     <ClCompile Include="..\..\lightningcore\names.c">
       <Filter>源文件\LNChannel</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\lightningcore\lnchannel_redeem.c">
+      <Filter>源文件\LNChannel</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\protos\peer.pb.h">
       <Filter>proto</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\lightningcore\chaintopology.h">
-      <Filter>头文件\LNChannel</Filter>
     </ClInclude>
     <ClInclude Include="..\..\lightningcore\db.h">
       <Filter>头文件\LNChannel</Filter>

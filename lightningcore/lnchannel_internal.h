@@ -149,6 +149,8 @@ struct LNchannel {
 		const struct bitcoin_tx **resolved;
 	} onchain;
 
+    struct pubkey redeem_key;
+
 	/* All HTLCs. */
 	struct htlc_map htlcs;
 

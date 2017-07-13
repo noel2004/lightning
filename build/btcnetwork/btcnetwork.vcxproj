@@ -133,10 +133,12 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\btcnetwork\c\bitcoind.c" />
+    <ClCompile Include="..\..\btcnetwork\c\chaintopology.c" />
     <ClCompile Include="..\..\btcnetwork\c\watch.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\btcnetwork\c\bitcoind.h" />
+    <ClInclude Include="..\..\btcnetwork\c\chaintopology.h" />
     <ClInclude Include="..\..\btcnetwork\c\watch.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

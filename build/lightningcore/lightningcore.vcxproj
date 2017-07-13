@@ -28,6 +28,7 @@
     <ClCompile Include="..\..\lightningcore\find_p2sh_out.c" />
     <ClCompile Include="..\..\lightningcore\htlc.c" />
     <ClCompile Include="..\..\lightningcore\lnchannel.c" />
+    <ClCompile Include="..\..\lightningcore\lnchannel_redeem.c" />
     <ClCompile Include="..\..\lightningcore\log.c" />
     <ClCompile Include="..\..\lightningcore\names.c" />
     <ClCompile Include="..\..\lightningcore\output_to_htlc.c" />
@@ -41,7 +42,6 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\lightningcore\chaintopology.h" />
     <ClInclude Include="..\..\lightningcore\channel.h" />
     <ClInclude Include="..\..\lightningcore\close_tx.h" />
     <ClInclude Include="..\..\lightningcore\commit_tx.h" />

@@ -93,6 +93,9 @@ struct lightningd_state {
     /* Channel manager register interface*/
     struct LNchannels *channels;
 
+    /* Server for out-sourcing transactions*/
+    struct outsourcing *outsourcing_svr;
+
     /* Addresses to contact peers. */
     struct list_head addresses;
 

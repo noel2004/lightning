@@ -65,6 +65,9 @@ u32 get_peer_min_block(struct lightningd_state *dstate);
 
 void debug_dump_lnchn(struct LNchannel *chn);
 
+//watch message ...
+
+
 void cleanup_lnchn(struct lightningd_state *dstate, struct LNchannel *chn);
 
 #endif /* LIGHTNING_CORE_LNCHANNEL_H */

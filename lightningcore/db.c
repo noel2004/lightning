@@ -982,7 +982,7 @@ static void db_load_lnchns(struct lightningd_state *dstate)
 		lnchn->htlc_id_counter = 0;
 		lnchn->id = tal_dup(lnchn, struct pubkey, &id);
 		lnchn->local.commit_fee_rate = sqlite3_column_int64(stmt, 3);
-        pubkey_from_sql(stmt, 4, &lnchn->local.finalkey);
+        pubkey_from_sql(stmt, 4, &lnchn->redeem_key);
 		lnchn->order_counter = 1;
 		log_debug(lnchn->log, "%s:%s",
 			  __func__, state_name(lnchn->state));
@@ -1312,7 +1312,7 @@ void db_create_lnchn(struct LNchannel *lnchn)
 		state_name(lnchn->state),
 		sql_bool(lnchn->local.offer_anchor),
 		lnchn->local.commit_fee_rate,
-        pubkey_to_hexstr(ctx, &lnchn->local.finalkey));
+        pubkey_to_hexstr(ctx, &lnchn->redeem_key));
 
 	db_exec(__func__, lnchn->dstate,
 		"INSERT INTO lnchn_secrets VALUES (x'%s', %s);",

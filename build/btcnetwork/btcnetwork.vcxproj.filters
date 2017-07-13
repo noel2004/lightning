@@ -27,12 +27,18 @@
     <ClCompile Include="..\..\btcnetwork\c\watch.c">
       <Filter>c</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\btcnetwork\c\chaintopology.c">
+      <Filter>c</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\btcnetwork\c\bitcoind.h">
       <Filter>c</Filter>
     </ClInclude>
     <ClInclude Include="..\..\btcnetwork\c\watch.h">
+      <Filter>c</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\btcnetwork\c\chaintopology.h">
       <Filter>c</Filter>
     </ClInclude>
   </ItemGroup>
