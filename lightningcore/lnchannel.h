@@ -66,8 +66,11 @@ u32 get_peer_min_block(struct lightningd_state *dstate);
 
 void debug_dump_lnchn(struct LNchannel *chn);
 
-//watch message ...
-void lnchn_notify_txo_delivered(struct LNchannel *chn, const struct bitcoin_tx *tx);
+/*check outsourcing pending, should not closed or you may lost something...*/
+bool lnchn_has_pending_outsourcing(struct LNchannel *chn);
+
+/*watch message ...*/
+void lnchn_notify_txo_delivered(struct LNchannel *chn, const struct txowatch *txo);
 
 void lnchn_notify_tx_delivered(struct LNchannel *chn, const struct bitcoin_tx *tx);
 

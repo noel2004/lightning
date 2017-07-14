@@ -56,42 +56,4 @@ enum state {
 	STATE_MAX
 };
 
-//enum state_input {
-//	/*
-//	 * Packet inputs.
-//	 */
-//	PKT_OPEN = PKT__PKT_OPEN,
-//	PKT_OPEN_ANCHOR = PKT__PKT_OPEN_ANCHOR,
-//	PKT_OPEN_COMMIT_SIG = PKT__PKT_OPEN_COMMIT_SIG,
-//	PKT_OPEN_COMPLETE = PKT__PKT_OPEN_COMPLETE,
-//
-//	/* Updating the commit transaction: new HTLC */
-//	PKT_UPDATE_ADD_HTLC = PKT__PKT_UPDATE_ADD_HTLC,
-//	/* Updating the commit transaction: I have your R value! */
-//	PKT_UPDATE_FULFILL_HTLC = PKT__PKT_UPDATE_FULFILL_HTLC,
-//	/* Updating the commit transaction: your HTLC failed upstream */
-//	PKT_UPDATE_FAIL_HTLC = PKT__PKT_UPDATE_FAIL_HTLC,
-//
-//	/* Committing updates */
-//	PKT_UPDATE_COMMIT = PKT__PKT_UPDATE_COMMIT,
-//	PKT_UPDATE_REVOCATION = PKT__PKT_UPDATE_REVOCATION,
-//
-//	/* If they want to close. */
-//	PKT_CLOSE_SHUTDOWN = PKT__PKT_CLOSE_SHUTDOWN,
-//
-//	/* Something unexpected went wrong. */
-//	PKT_ERROR = PKT__PKT_ERROR,
-//
-//	/*
-//	 * Non-packet inputs.
-//	 */
-//	INPUT_NONE,
-//
-//	/*
-//	 * Timeouts.
-//	 */
-//	INPUT_CLOSE_COMPLETE_TIMEOUT,
-//
-//	INPUT_MAX
-//};
 #endif /* LIGHTNING_STATE_TYPES_H */

@@ -44,6 +44,7 @@ struct txdeliver {
     void *cbdata;
 };
 
+
 struct txverify {
     struct sha256_double *txid;
     unsigned int depth;
