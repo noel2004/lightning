@@ -2971,6 +2971,8 @@ struct htlc *lnchn_new_htlc(struct LNchannel *lnchn,
 	htlc_map_add(&lnchn->htlcs, h);
 	tal_add_destructor(h, htlc_destroy);
 
+    lite_reg_htlc(lnchn->dstate->channels, lnchn, h);
+
 	return h;
 }
 

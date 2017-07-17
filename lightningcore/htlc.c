@@ -234,15 +234,14 @@ void htlc_undostate(struct htlc *h,
 
 static char *fmt_htlc(const tal_t *ctx, const struct htlc *h)
 {
-	return tal_fmt(ctx, "{ id=%"PRIu64
+	return tal_fmt(ctx, " rhash=%s"
 		       " msatoshi=%"PRIu64
 		       " expiry=%s"
-		       " rhash=%s"
 		       " rval=%s"
 		       " src=%s }",
-		       h->id, h->msatoshi,
-               type_to_string(ctx, struct abs_locktime, &h->expiry),
-               type_to_string(ctx, struct sha256, &h->rhash),
+               type_to_string(ctx, struct sha256, &h->rhash), 
+               h->msatoshi,
+               type_to_string(ctx, struct abs_locktime, &h->expiry),               
 		       h->r ? tal_hexstr(ctx, h->r, sizeof(*h->r))
 		       : "UNKNOWN",
 		       h->src_channelid ? h->src_channelid

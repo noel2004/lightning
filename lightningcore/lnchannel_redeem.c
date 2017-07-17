@@ -414,6 +414,45 @@ static const struct bitcoin_tx *htlc_fulfill_tx(const struct LNchannel *lnchn,
 	return tx;
 }
 
+/* create a watch task from visible state (current commit)*/
+struct lnwatch_task* lnchn_inner_create_watch_task(const tal_t *ctx,
+    struct LNchannel *lnchn, enum side side)
+{
+    struct htlc_map_iter it;
+    struct htlc *h;
+    int committed_flag = HTLC_FLAG(side, HTLC_F_COMMITTED);
+    struct lnwatch_task *task = tal(ctx, struct lnwatch_task);
+    struct commit_info *cip;
+
+    if (side == LOCAL) {
+        cip = lnchn->local.commit;
+    }
+    else {
+        cip = lnchn->remote.commit;
+    }
+
+    if (cip == NULL || tal_count(cip) < 1) {
+        log_broken(lnchn->log, "no commit info for side: %d", (int) side);
+        tal_free(task);
+        return NULL;
+    }
+
+    //always take the last (current) item
+    cip = cip + (tal_count(cip) - 1);
+    task->commitid = tal_dup(task, struct sha256_double, &cip->txid);
+
+    //check htlc ...
+    for (h = htlc_map_first(&lnchn->htlcs, &it);
+        h;
+        h = htlc_map_next(&lnchn->htlcs, &it)) {
+
+        if (!htlc_has(h, committed_flag))
+            continue;
+
+
+    }
+}
+
 void lnchn_notify_txo_delivered(struct LNchannel *chn, const struct txowatch *txo)
 {
     struct sha256 ctxid;

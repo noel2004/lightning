@@ -113,8 +113,8 @@ struct LNchannel {
 		//struct txwatch *watch;
 	} cur_commit;
 
-	/* Counter to make unique HTLC ids. */
-	u64 htlc_id_counter;
+	///* Counter to make unique HTLC ids. */
+	//u64 htlc_id_counter;
 
 	/* Mutual close info. */
 	struct {

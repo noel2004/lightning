@@ -590,7 +590,6 @@ static void load_lnchn_htlcs(struct LNchannel *lnchn)
 			fatal("load_lnchn_htlcs:invalid state %s",
 			      sqlite3_column_str(stmt, 2));
 		htlc = lnchn_new_htlc(lnchn,
-				     sqlite3_column_int64(stmt, 1),
 				     sqlite3_column_int64(stmt, 3),
 				     &rhash,
 				     sqlite3_column_int64(stmt, 4),
@@ -608,17 +607,13 @@ static void load_lnchn_htlcs(struct LNchannel *lnchn)
 		}
 
 		if (htlc->r && htlc->fail)
-			fatal("%s HTLC %"PRIu64" has failed and fulfilled?",
+			fatal("%s HTLC %s has failed and fulfilled?",
 			      htlc_owner(htlc) == LOCAL ? "local" : "remote",
-			      htlc->id);
+                  tal_hexstr(ctx, &htlc->rhash, sizeof(htlc->rhash)));
 
-		log_debug(lnchn->log, "Loaded %s HTLC %"PRIu64" (%s)",
+		log_debug(lnchn->log, "Loaded %s HTLC %s (%s)",
 			  htlc_owner(htlc) == LOCAL ? "local" : "remote",
-			  htlc->id, htlc_state_name(htlc->state));
-
-		if (htlc_owner(htlc) == LOCAL
-		    && htlc->id >= lnchn->htlc_id_counter)
-			lnchn->htlc_id_counter = htlc->id + 1;
+              tal_hexstr(ctx, &htlc->rhash, sizeof(htlc->rhash)), htlc_state_name(htlc->state));
 
 		/* Update cstate with this HTLC. */
 		apply_htlc(lnchn->log, lnchn->local.commit->cstate, htlc, LOCAL);
@@ -962,6 +957,8 @@ static void db_load_lnchns(struct lightningd_state *dstate)
 	int err;
 	sqlite3_stmt *stmt;
 	struct LNchannel *lnchn;
+    struct htlc_map_iter it;
+    struct htlc *h;
 
 	err = sqlite3_prepare_v2(dstate->db->sql, "SELECT * FROM lnchns;", -1,
 				 &stmt, NULL);
@@ -992,7 +989,6 @@ static void db_load_lnchns(struct lightningd_state *dstate)
 		l = new_log(dstate, dstate->log_book, "%s:", idstr);
 		tal_free(idstr);
 		lnchn = new_LNChannel(dstate, l, state, sqlite3_column_int(stmt, 2));
-		lnchn->htlc_id_counter = 0;
 		lnchn->id = tal_dup(lnchn, struct pubkey, &id);
 		lnchn->local.commit_fee_rate = sqlite3_column_int64(stmt, 3);
         address_from_sql(stmt, 4, &lnchn->redeem_addr);
@@ -1016,6 +1012,12 @@ static void db_load_lnchns(struct lightningd_state *dstate)
 			load_lnchn_anchor_input(lnchn);
 
         lite_reg_channel(dstate->channels, lnchn);
+
+        for (h = htlc_map_first(&lnchn->htlcs, &it);
+            h;
+            h = htlc_map_next(&lnchn->htlcs, &it)) {
+            lite_reg_htlc(dstate->channels, lnchn, h);
+        }        
 	}
 	err = sqlite3_finalize(stmt);
 	if (err != SQLITE_OK)
@@ -1165,12 +1167,12 @@ void db_init(struct lightningd_state *dstate)
 		      SQL_BOOL(ours))
 		/* FIXME: state in key is overkill: just need side */
 		TABLE(htlcs,
-		      SQL_PUBKEY(lnchn), SQL_U64(id),
+		      SQL_PUBKEY(lnchn), SQL_U64(id) /* we keep this dummy item to avoid changing too much codes*/,
 		      SQL_STATENAME(state), SQL_U64(msatoshi),
 		      SQL_U32(expiry), SQL_RHASH(rhash), SQL_R(r),
 		      SQL_ROUTING(routing), SQL_PUBKEY(src_lnchn),
 		      SQL_U64(src_id), SQL_BLOB(fail),
-		      "PRIMARY KEY(lnchn, id, state)")
+		      "PRIMARY KEY(lnchn, rhash)")
 		TABLE(feechanges,
 		      SQL_PUBKEY(lnchn), SQL_STATENAME(state),
 		      SQL_U32(fee_rate),
@@ -1403,7 +1405,7 @@ void db_new_htlc(struct LNchannel *lnchn, const struct htlc *htlc)
 			"INSERT INTO htlcs VALUES"
 			" (x'%s', %"PRIu64", '%s', %"PRIu64", %u, x'%s', NULL, x'%s', x'%s', %"PRIu64", NULL);",
 			pubkey_to_hexstr(ctx, lnchn->id),
-			htlc->id,
+			0,
 			htlc_state_name(htlc->state),
 			htlc->msatoshi,
 			abs_locktime_to_blocks(&htlc->expiry),
@@ -1416,7 +1418,7 @@ void db_new_htlc(struct LNchannel *lnchn, const struct htlc *htlc)
 			"INSERT INTO htlcs VALUES"
 			" (x'%s', %"PRIu64", '%s', %"PRIu64", %u, x'%s', NULL, x'%s', NULL, NULL, NULL);",
 			lnchnid,
-			htlc->id,
+			0,
 			htlc_state_name(htlc->state),
 			htlc->msatoshi,
 			abs_locktime_to_blocks(&htlc->expiry),
@@ -1451,14 +1453,14 @@ void db_update_htlc_state(struct LNchannel *lnchn, const struct htlc *htlc,
 	const char *ctx = tal_tmpctx(lnchn);
 	const char *lnchnid = pubkey_to_hexstr(ctx, lnchn->id);
 
-	log_debug(lnchn->log, "%s(%s): %"PRIu64" %s->%s", __func__, lnchnid,
-		  htlc->id, htlc_state_name(oldstate),
+	log_debug(lnchn->log, "%s(%s): %s %s->%s", __func__, lnchnid,
+          tal_hexstr(ctx, &htlc->rhash, sizeof(htlc->rhash)), htlc_state_name(oldstate),
 		  htlc_state_name(htlc->state));
 	assert(lnchn->dstate->db->in_transaction);
 	db_exec(__func__, lnchn->dstate,
-		"UPDATE htlcs SET state='%s' WHERE lnchn=x'%s' AND id=%"PRIu64" AND state='%s';",
+		"UPDATE htlcs SET state='%s' WHERE lnchn=x'%s' AND rhash=x'%s';",
 		htlc_state_name(htlc->state), lnchnid,
-		htlc->id, htlc_state_name(oldstate));
+        tal_hexstr(ctx, &htlc->rhash, sizeof(htlc->rhash)));
 
 	tal_free(ctx);
 }
@@ -1521,11 +1523,10 @@ void db_htlc_fulfilled(struct LNchannel *lnchn, const struct htlc *htlc)
 
 	assert(lnchn->dstate->db->in_transaction);
 	db_exec(__func__, lnchn->dstate,
-		"UPDATE htlcs SET r=x'%s' WHERE lnchn=x'%s' AND id=%"PRIu64" AND state='%s';",
+		"UPDATE htlcs SET r=x'%s' WHERE lnchn=x'%s' AND rhash=x'%s';",
 		tal_hexstr(ctx, htlc->r, sizeof(*htlc->r)),
 		lnchnid,
-		htlc->id,
-		htlc_state_name(htlc->state));
+        tal_hexstr(ctx, &htlc->rhash, sizeof(htlc->rhash)));
 
 	tal_free(ctx);
 }
@@ -1539,11 +1540,10 @@ void db_htlc_failed(struct LNchannel *lnchn, const struct htlc *htlc)
 
 	assert(lnchn->dstate->db->in_transaction);
 	db_exec(__func__, lnchn->dstate,
-		"UPDATE htlcs SET fail=x'%s' WHERE lnchn=x'%s' AND id=%"PRIu64" AND state='%s';",
+		"UPDATE htlcs SET fail=x'%s' WHERE lnchn=x'%s' AND rhash=x'%s';",
 		tal_hexstr(ctx, htlc->fail, sizeof(*htlc->fail)),
 		lnchnid,
-		htlc->id,
-		htlc_state_name(htlc->state));
+        tal_hexstr(ctx, &htlc->rhash, sizeof(htlc->rhash)));
 
 	tal_free(ctx);
 }

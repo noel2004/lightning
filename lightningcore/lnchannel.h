@@ -37,7 +37,6 @@ struct commit_info *new_commit_info(const tal_t *ctx, u64 commit_num);
 
 /* Freeing removes from map, too */
 struct htlc *lnchn_new_htlc(struct LNchannel *chn,
-			   u64 id,
 			   u64 msatoshi,
 			   const struct sha256 *rhash,
 			   u32 expiry,

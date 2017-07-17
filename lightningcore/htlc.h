@@ -84,8 +84,8 @@ struct htlc {
 	u32 deadline;
 	/* What's the status. */
 	enum htlc_state state;
-	/* The unique ID for this peer and this direction (LOCAL or REMOTE) */
-	u64 id;
+	///* The unique ID for this peer and this direction (LOCAL or REMOTE) */
+	//u64 id;
 	/* The amount in millisatoshi. */
 	u64 msatoshi;
 	/* When the HTLC can no longer be redeemed. */
@@ -104,6 +104,10 @@ struct htlc {
 	const u8 *fail;
 	/* FIXME: actually an enum onion_type */
 	u8 malformed;
+
+    /* the "life" history of a htlc: that is, the commit number at which */
+    /* it was added to the number it was resolved (commited or revoked) */
+    u64 history[2];
 };
 
 const char *htlc_state_name(enum htlc_state s);
@@ -142,36 +146,44 @@ void htlc_undostate(struct htlc *h,
 		    enum htlc_state oldstate, enum htlc_state newstate);
 
 /* htlc_map: ID -> htlc mapping. */
-static inline u64 htlc_key(const struct htlc *h)
+static inline const struct sha256* htlc_key(const struct htlc *h)
 {
-	return h->id;
+	return &h->rhash;
 }
-static inline bool htlc_cmp(const struct htlc *h, u64 id)
+static inline bool htlc_cmp(const struct htlc *h, const struct sha256* hash)
 {
-	return h->id == id;
+    return memcmp(h->rhash.u.u8, hash->u.u8, sizeof(hash->u.u8)) == 0;
 }
-static inline size_t htlc_hash(u64 id)
+static inline size_t htlc_hash(const struct sha256* hash)
 {
-	return siphash24(siphash_seed(), &id, sizeof(id));
+    size_t ret = 0;
+    int i;
+
+    for (i = 0; i < sizeof(hash->u.u32) / sizeof(hash->u.u32[0]); ++i)
+    {
+        ret += hash->u.u32[i];
+    }
+
+    return ret;
 }
 
 #if !HAVE_TYPEOF
 #undef HTABLE_KTYPE
-#define HTABLE_KTYPE(keyof, type) u64
+#define HTABLE_KTYPE(keyof, type) struct sha256*
 #endif
 
 HTABLE_DEFINE_TYPE(struct htlc, htlc_key, htlc_hash, htlc_cmp, htlc_map);
 
 
-static inline struct htlc *htlc_get(struct htlc_map *htlcs, u64 id, enum side owner)
+static inline struct htlc *htlc_get(struct htlc_map *htlcs, struct sha256* hash, enum side owner)
 {
 	struct htlc *h;
 	struct htlc_map_iter it;
 
-	for (h = htlc_map_getfirst(htlcs, id, &it);
+	for (h = htlc_map_getfirst(htlcs, hash, &it);
 	     h;
-	     h = htlc_map_getnext(htlcs, id, &it)) {
-		if (h->id == id && htlc_has(h, HTLC_FLAG(owner,HTLC_F_OWNER)))
+	     h = htlc_map_getnext(htlcs, hash, &it)) {
+		if (htlc_cmp(h, hash) && htlc_has(h, HTLC_FLAG(owner,HTLC_F_OWNER)))
 			return h;
 	}
 	return NULL;
