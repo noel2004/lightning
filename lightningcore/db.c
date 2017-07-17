@@ -1416,14 +1416,13 @@ void db_new_htlc(struct LNchannel *lnchn, const struct htlc *htlc)
 	} else {
 		db_exec(__func__, lnchn->dstate,
 			"INSERT INTO htlcs VALUES"
-			" (x'%s', %"PRIu64", '%s', %"PRIu64", %u, x'%s', NULL, x'%s', NULL, NULL, NULL);",
+			" (x'%s', %"PRIu64", '%s', %"PRIu64", %u, x'%s', NULL, NULL, NULL, NULL, NULL);",
 			lnchnid,
 			0,
 			htlc_state_name(htlc->state),
 			htlc->msatoshi,
 			abs_locktime_to_blocks(&htlc->expiry),
-			tal_hexstr(ctx, &htlc->rhash, sizeof(htlc->rhash)),
-			tal_hex(ctx, htlc->routing));
+			tal_hexstr(ctx, &htlc->rhash, sizeof(htlc->rhash)));
 	}
 
 	tal_free(ctx);

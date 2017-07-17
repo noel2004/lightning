@@ -2121,9 +2121,7 @@ const char *command_htlc_add(struct LNchannel *lnchn, u64 msatoshi,
 		return "lnchn not available";
 	}
 
-	*htlc = lnchn_new_htlc(lnchn, lnchn->htlc_id_counter,
-			      msatoshi, rhash, expiry, route, tal_count(route),
-			      src, SENT_ADD_HTLC);
+	*htlc = lnchn_new_htlc(lnchn, msatoshi, rhash, expiry, SENT_ADD_HTLC);
 
 	/* FIXME-OLD #2:
 	 *
@@ -2936,27 +2934,19 @@ static void htlc_destroy(struct htlc *htlc)
 }
 
 struct htlc *lnchn_new_htlc(struct LNchannel *lnchn,
-			   u64 id,
 			   u64 msatoshi,
 			   const struct sha256 *rhash,
 			   u32 expiry,
-			   const u8 *route,
-			   size_t routelen,
-			   struct htlc *src,
 			   enum htlc_state state)
 {
 	struct htlc *h = tal(lnchn, struct htlc);
-	h->lnchn = lnchn;
 	h->state = state;
-	h->id = id;
 	h->msatoshi = msatoshi;
 	h->rhash = *rhash;
 	h->r = NULL;
 	h->fail = NULL;
 	if (!blocks_to_abs_locktime(expiry, &h->expiry))
 		fatal("Invalid HTLC expiry %u", expiry);
-	h->routing = tal_dup_arr(h, u8, route, routelen, 0);
-	h->src = src;
 	if (htlc_owner(h) == LOCAL) {
 		if (src) {
 			h->deadline = abs_locktime_to_blocks(&src->expiry)

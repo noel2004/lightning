@@ -40,9 +40,6 @@ struct htlc *lnchn_new_htlc(struct LNchannel *chn,
 			   u64 msatoshi,
 			   const struct sha256 *rhash,
 			   u32 expiry,
-			   const u8 *route,
-			   size_t route_len,
-			   struct htlc *src,
 			   enum htlc_state state);
 
 const char *command_htlc_add(struct LNchannel *chn, u64 msatoshi,

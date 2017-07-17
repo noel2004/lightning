@@ -204,8 +204,8 @@ struct bitcoin_tx *create_commit_tx(const tal_t *ctx,
 		if (add_output(tx, scriptpubkey_p2wsh(tmpctx, wscript),
 			       h->msatoshi / 1000, &output_count, &total)) {
 			*otherside_only = false;
-			log_debug(lnchn->log, "Pays %"PRIu64" to htlc %"PRIu64,
-				  h->msatoshi / 1000, h->id);
+			log_debug(lnchn->log, "Pays %"PRIu64" to htlc %s",
+				  h->msatoshi / 1000, tal_hexstr(tmpctx, &h->rhash, sizeof(h->rhash)));
 			log_add_struct(lnchn->log, " expiry %s",
 				       struct abs_locktime, &h->expiry);
 			log_add_struct(lnchn->log, " rhash %s", struct sha256,
@@ -213,8 +213,8 @@ struct bitcoin_tx *create_commit_tx(const tal_t *ctx,
 			log_debug(lnchn->log, "Script: %s",
 				  tal_hex(tmpctx, wscript));
 		} else
-			log_debug(lnchn->log, "DOES NOT pay %"PRIu64" to htlc %"PRIu64,
-				  h->msatoshi / 1000, h->id);
+			log_debug(lnchn->log, "DOES NOT pay %"PRIu64" to htlc %s",
+				  h->msatoshi / 1000, tal_hexstr(tmpctx, &h->rhash, sizeof(h->rhash)));
 	}
 	assert(total <= lnchn->anchor.satoshis);
 

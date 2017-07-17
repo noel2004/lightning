@@ -4,7 +4,6 @@
 #include "bitcoin/shadouble.h"
 #include "bitcoin/signature.h"
 #include <ccan/short_types/short_types.h>
-#include <ccan/crypto/sha256/sha256.h>
 
 struct bitcoin_tx;
 struct outsourcing;
@@ -17,27 +16,26 @@ enum outsourcing_result {
     OUTSOURCING_FAIL = -3,    //valid transaction but stale
 };
 
-struct witnessgroup
-{
-    u8 *wscript;
-    ecdsa_signature sig;
-};
-
 /* outsourcing an output for htlc from committx*/
 struct txowatch {
-    struct bitcoin_tx *committx;
+    struct sha256_double *commitid;
     u8 *outscript;
 };
 
-struct txdeliver {
-    /* can be resolved by a pending txo */
-    struct txowatch *wait_txo;
-    /* can be resolved after locktime */
-    unsigned int lockeddepth;
-    /* data required for broadcasting tx*/
-    struct witnessgroup witness;
+
+struct lnwatch_htlc_task {
+    struct sha256 rhash;
 
     struct bitcoin_tx *deliver_tx;
+
+    /* data to build witness */
+    u8 *wscript;
+    ecdsa_signature sig;
+    /* lock-time must be clear to apply this signature*/
+    ecdsa_signature sig_nolocked;
+
+    //additional trigger
+    struct txowatch*  txowatch;    
 };
 
 struct lnwatch_task {
@@ -53,7 +51,7 @@ struct lnwatch_task {
     struct txdeliver *redeem_tx;
 
     /* htlcs we sent and should try to redeem if it is expired*/
-    struct txdeliver* htlctxs;
+    struct lnwatch_htlc_task* htlctxs;
 };
 
 /* a verify-only task, finished if corresponding txid reach expected depth*/
@@ -72,15 +70,15 @@ void outsourcing_clear(struct outsourcing* svr, const struct LNchannel* lnchn);
    task with same commitid will be updated (e.g. switch a commit from up-to-date to expired) 
    any member is not NULL will be replaced while NULL members is just omited (not deleted)
 */
-void outsourcing_task(struct outsourcing* svr, const struct LNchannel* lnchn, 
-    const struct lnwatch_task *task, 
-    void(*notify)(enum outsourcing_result, struct sha256_double *ctxid, void *cbdata),
+void outsourcing_tasks(struct outsourcing* svr, const struct LNchannel* lnchn, 
+    const struct lnwatch_task *tasks, //array of tasks
+    void(*notify)(const struct LNchannel* lnchn, enum outsourcing_result, void *cbdata),
     void *cbdata
     );
 
 void outsourcing_verifytask(struct outsourcing* svr, const struct LNchannel* lnchn, 
-    const struct lnwatch_verifytask *task, 
-    void(*notify)(enum outsourcing_result, struct sha256_double *txid, void *cbdata),
+    const struct lnwatch_verifytask *tasks, 
+    void(*notify)(const struct LNchannel* lnchn, enum outsourcing_result, void *cbdata),
     void *cbdata
     );
 

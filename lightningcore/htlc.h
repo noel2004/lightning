@@ -94,16 +94,16 @@ struct htlc {
 	struct sha256 rhash;
 	/* The preimage which hashes to rhash (if known) */
 	struct preimage *r;
-
-	/* FIXME: We could union these together: */
-	/* Routing information sent with this HTLC. */
-	const u8 *routing;
+    const u8 *fail;
+	///* FIXME: We could union these together: */
+	///* Routing information sent with this HTLC. */
+	//const u8 *routing;
 	/* Previous HTLC (if any) which made us offer this (LOCAL only) */
 	//struct htlc *src;
-    const char *src_channelid;
-	const u8 *fail;
+    //const char *src_channelid;
+
 	/* FIXME: actually an enum onion_type */
-	u8 malformed;
+	//u8 malformed;
 
     /* the "life" history of a htlc: that is, the commit number at which */
     /* it was added to the number it was resolved (commited or revoked) */
