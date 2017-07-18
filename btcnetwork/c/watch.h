@@ -22,19 +22,25 @@ struct txowatch {
     u8 *outscript;
 };
 
-
-struct lnwatch_htlc_task {
-    struct sha256 rhash;
-
+struct txdeliver {
     struct bitcoin_tx *deliver_tx;
 
     /* data to build witness */
     u8 *wscript;
-    ecdsa_signature sig;
+
     /* lock-time must be clear to apply this signature*/
     ecdsa_signature sig_nolocked;
 
-    //additional trigger
+    /* sign with lock-time, no needed for "their" HTLC */
+    ecdsa_signature* sig;
+};
+
+struct lnwatch_htlc_task {
+    struct sha256 rhash;
+
+    struct txdeliver* txdeliver;    
+
+    /* additional trigger */
     struct txowatch*  txowatch;    
 };
 

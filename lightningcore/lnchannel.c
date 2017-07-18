@@ -2936,7 +2936,7 @@ static void htlc_destroy(struct htlc *htlc)
 struct htlc *lnchn_new_htlc(struct LNchannel *lnchn,
 			   u64 msatoshi,
 			   const struct sha256 *rhash,
-			   u32 expiry,
+			   u32 expiry, u32 src_expiry,
 			   enum htlc_state state)
 {
 	struct htlc *h = tal(lnchn, struct htlc);
@@ -2945,12 +2945,16 @@ struct htlc *lnchn_new_htlc(struct LNchannel *lnchn,
 	h->rhash = *rhash;
 	h->r = NULL;
 	h->fail = NULL;
+    h->src_expiry = NULL;
 	if (!blocks_to_abs_locktime(expiry, &h->expiry))
 		fatal("Invalid HTLC expiry %u", expiry);
 	if (htlc_owner(h) == LOCAL) {
-		if (src) {
-			h->deadline = abs_locktime_to_blocks(&src->expiry)
-				- lnchn->dstate->config.deadline_blocks;
+		if (src_expiry != 0) {
+            h->src_expiry = tal(h, struct abs_locktime);
+	        if (!blocks_to_abs_locktime(src_expiry, h->src_expiry))
+		        fatal("Invalid source HTLC expiry %u", src_expiry);
+			h->deadline = abs_locktime_to_blocks(src_expiry)
+				- lnchn->dstate->config.deadline_blocks;            
 		} else
 			/* If we're paying, give it a little longer. */
 			h->deadline = expiry

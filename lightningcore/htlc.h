@@ -79,7 +79,6 @@ enum side {
 #define HTLC_LOCAL_F_WAS_COMMITTED	HTLC_FLAG(LOCAL,HTLC_F_WAS_COMMITTED)
 
 struct htlc {
-    const char* channelId;
 	/* Block number where we abort if it's still live (LOCAL only) */
 	u32 deadline;
 	/* What's the status. */
@@ -101,7 +100,7 @@ struct htlc {
 	/* Previous HTLC (if any) which made us offer this (LOCAL only) */
 	//struct htlc *src;
     //const char *src_channelid;
-
+    struct abs_locktime *src_expiry;
 	/* FIXME: actually an enum onion_type */
 	//u8 malformed;
 

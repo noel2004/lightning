@@ -39,7 +39,7 @@ struct commit_info *new_commit_info(const tal_t *ctx, u64 commit_num);
 struct htlc *lnchn_new_htlc(struct LNchannel *chn,
 			   u64 msatoshi,
 			   const struct sha256 *rhash,
-			   u32 expiry,
+			   u32 expiry, u32 src_expiry, /* 0 if no source*/
 			   enum htlc_state state);
 
 const char *command_htlc_add(struct LNchannel *chn, u64 msatoshi,

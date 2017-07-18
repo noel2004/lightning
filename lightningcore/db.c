@@ -593,16 +593,14 @@ static void load_lnchn_htlcs(struct LNchannel *lnchn)
 				     sqlite3_column_int64(stmt, 3),
 				     &rhash,
 				     sqlite3_column_int64(stmt, 4),
-				     sqlite3_column_blob(stmt, 7),
-				     sqlite3_column_bytes(stmt, 7),
-				     NULL,
+                     sqlite3_column_int64(stmt, 5),
 				     hstate);
 
 		if (sqlite3_column_type(stmt, 6) != SQLITE_NULL) {
 			htlc->r = tal(htlc, struct preimage);
 			from_sql_blob(stmt, 6, htlc->r, sizeof(*htlc->r));
 		}
-		if (sqlite3_column_type(stmt, 10) != SQLITE_NULL) {
+		if (sqlite3_column_type(stmt, 8) != SQLITE_NULL) {
 			htlc->fail = tal_sql_blob(htlc, stmt, 10);
 		}
 
@@ -1170,8 +1168,8 @@ void db_init(struct lightningd_state *dstate)
 		      SQL_PUBKEY(lnchn), SQL_U64(id) /* we keep this dummy item to avoid changing too much codes*/,
 		      SQL_STATENAME(state), SQL_U64(msatoshi),
 		      SQL_U32(expiry), SQL_RHASH(rhash), SQL_R(r),
-		      SQL_ROUTING(routing), SQL_PUBKEY(src_lnchn),
-		      SQL_U64(src_id), SQL_BLOB(fail),
+		      SQL_U32(src_expiry), SQL_BLOB(fail),/*SQL_PUBKEY(src_lnchn),
+		      SQL_U64(src_id), SQL_BLOB(fail),*/
 		      "PRIMARY KEY(lnchn, rhash)")
 		TABLE(feechanges,
 		      SQL_PUBKEY(lnchn), SQL_STATENAME(state),
@@ -1400,30 +1398,16 @@ void db_new_htlc(struct LNchannel *lnchn, const struct htlc *htlc)
 	log_debug(lnchn->log, "%s(%s)", __func__, lnchnid);
 	assert(lnchn->dstate->db->in_transaction);
 
-	if (htlc->src_channelid) {
-		db_exec(__func__, lnchn->dstate,
-			"INSERT INTO htlcs VALUES"
-			" (x'%s', %"PRIu64", '%s', %"PRIu64", %u, x'%s', NULL, x'%s', x'%s', %"PRIu64", NULL);",
-			pubkey_to_hexstr(ctx, lnchn->id),
-			0,
-			htlc_state_name(htlc->state),
-			htlc->msatoshi,
-			abs_locktime_to_blocks(&htlc->expiry),
-			tal_hexstr(ctx, &htlc->rhash, sizeof(htlc->rhash)),
-			tal_hex(ctx, htlc->routing),
-			lnchnid,
-            htlc->src_channelid);
-	} else {
-		db_exec(__func__, lnchn->dstate,
-			"INSERT INTO htlcs VALUES"
-			" (x'%s', %"PRIu64", '%s', %"PRIu64", %u, x'%s', NULL, NULL, NULL, NULL, NULL);",
-			lnchnid,
-			0,
-			htlc_state_name(htlc->state),
-			htlc->msatoshi,
-			abs_locktime_to_blocks(&htlc->expiry),
-			tal_hexstr(ctx, &htlc->rhash, sizeof(htlc->rhash)));
-	}
+	db_exec(__func__, lnchn->dstate,
+		"INSERT INTO htlcs VALUES"
+		" (x'%s', %"PRIu64", '%s', %"PRIu64", %u, x'%s', NULL, %u, NULL);",
+		lnchnid,
+		0,
+		htlc_state_name(htlc->state),
+		htlc->msatoshi,
+		abs_locktime_to_blocks(&htlc->expiry),
+		tal_hexstr(ctx, &htlc->rhash, sizeof(htlc->rhash)),
+        htlc->src_expiry ? abs_locktime_to_blocks(htlc->src_expiry) : 0);
 
 	tal_free(ctx);
 }
