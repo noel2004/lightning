@@ -8,6 +8,7 @@ struct channel_state;
 struct sha256;
 struct pubkey;
 struct LNchannel;
+struct bition_tx;
 
 u8 *wscript_for_htlc(const tal_t *ctx,
 		     const struct LNchannel *lnchn,
@@ -37,4 +38,8 @@ struct bitcoin_tx *create_commit_tx(const tal_t *ctx,
 				    const struct channel_state *cstate,
 				    enum side side,
 				    bool *otherside_only);
+
+size_t find_output_from_commit_tx(const struct bitcoin_tx* commit_tx,
+    u8* wscript, size_t* indicate_pos);
+
 #endif

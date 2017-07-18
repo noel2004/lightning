@@ -26,12 +26,8 @@ void lnchn_sign_spend(const struct LNchannel *lnchn,
 		     const u8 *commit_witnessscript,
 		     ecdsa_signature *sig);
 
-void lnchn_sign_htlc_refund(const struct LNchannel *lnchn,
-			   struct bitcoin_tx *spend,
-			   const u8 *htlc_witnessscript,
-			   ecdsa_signature *sig);
 
-void lnchn_sign_htlc_fulfill(const struct LNchannel *lnchn,
+void lnchn_sign_htlc(const struct LNchannel *lnchn,
 			    struct bitcoin_tx *spend,
 			    const u8 *htlc_witnessscript,
 			    ecdsa_signature *sig);

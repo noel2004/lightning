@@ -18,8 +18,8 @@ enum outsourcing_result {
 
 /* outsourcing an output for htlc from committx*/
 struct txowatch {
-    struct sha256_double *commitid;
-    u8 *outscript;
+    struct sha256_double commitid;
+    size_t output_num;
 };
 
 struct txdeliver {
@@ -47,9 +47,12 @@ struct lnwatch_htlc_task {
 struct lnwatch_task {
 
     /* txid which may be broadcasted from other side*/
-    struct sha256_double *commitid;
+    struct sha256_double commitid;
 
-    /* if NULL, can be expried by later call*/
+    /* the tx needed to be trigger and broadcasted by txowatch task*/
+    struct bitcoin_tx *trigger_tx;
+
+    /* the revocation preimage used in htlctxs/redeem_tx */
     struct sha256* preimage;
 
     /* if delivered by us, required additional tx to redeem the delayed part*/
@@ -77,13 +80,13 @@ void outsourcing_clear(struct outsourcing* svr, const struct LNchannel* lnchn);
    any member is not NULL will be replaced while NULL members is just omited (not deleted)
 */
 void outsourcing_tasks(struct outsourcing* svr, const struct LNchannel* lnchn, 
-    const struct lnwatch_task *tasks, //array of tasks
+    const struct lnwatch_task *tasks, unsigned int taskcnt,//array of tasks
     void(*notify)(const struct LNchannel* lnchn, enum outsourcing_result, void *cbdata),
     void *cbdata
     );
 
 void outsourcing_verifytask(struct outsourcing* svr, const struct LNchannel* lnchn, 
-    const struct lnwatch_verifytask *tasks, 
+    const struct lnwatch_verifytask *tasks, unsigned int taskcnt,//array of tasks
     void(*notify)(const struct LNchannel* lnchn, enum outsourcing_result, void *cbdata),
     void *cbdata
     );

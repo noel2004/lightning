@@ -223,3 +223,40 @@ struct bitcoin_tx *create_commit_tx(const tal_t *ctx,
 	tal_free(tmpctx);
 	return tx;
 }
+
+//follow the possible sequence which we form the commit_tx so
+//we can find the corresponding output as fast as possible
+//when we iterate from the htlcmap
+size_t find_output_from_commit_tx(const struct bitcoin_tx* commit_tx,
+    u8* wscript, size_t *indicate_pos)
+{
+    const tal_t *tmpctx = tal_tmpctx(commit_tx);
+    size_t last = tal_count(commit_tx->output);
+    u8* script = scriptpubkey_p2wsh(tmpctx, wscript);
+    size_t i;
+
+    if (*indicate_pos > last) *indicate_pos = 0;
+
+    for (i = *indicate_pos; i < last; ++i)
+    {
+        if (memcmp(commit_tx->output[i].script, script, tal_count(script)) == 0) {
+            tal_free(tmpctx);
+            *indicate_pos = i + 1;
+            return i;
+        }
+    }
+
+    if (*indicate_pos != 0) {
+        for (i = 0; i < *indicate_pos; ++i)
+        {
+            if (memcmp(commit_tx->output[i].script, script, tal_count(script)) == 0) {
+                tal_free(tmpctx);
+                *indicate_pos = i + 1;
+                return i;
+            }
+        }
+    }
+
+    tal_free(tmpctx);
+    return last;
+}

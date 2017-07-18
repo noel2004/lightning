@@ -25,12 +25,12 @@ struct htlc_output_map *get_htlc_output_map(const tal_t *ctx,
 	size_t i;
 	struct htlc_output_map *omap = tal(ctx, struct htlc_output_map);
 
-	/* FIXME: use commit_num to filter htlcs. */
 	if (side == LOCAL)
 		assert(commit_num <= lnchn->local.commit->commit_num);
 	else
 		assert(commit_num <= lnchn->remote.commit->commit_num);
 
+    /* TODO: use commit_num to filter htlcs. */
 	omap->wpkh = tal_arr(omap, struct wscript_by_wpkh,
 			     htlc_map_count(&lnchn->htlcs));
 

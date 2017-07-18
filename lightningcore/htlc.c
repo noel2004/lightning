@@ -238,13 +238,13 @@ static char *fmt_htlc(const tal_t *ctx, const struct htlc *h)
 		       " msatoshi=%"PRIu64
 		       " expiry=%s"
 		       " rval=%s"
-		       " src=%s }",
+		       " src_expiry=%s }",
                type_to_string(ctx, struct sha256, &h->rhash), 
                h->msatoshi,
                type_to_string(ctx, struct abs_locktime, &h->expiry),               
 		       h->r ? tal_hexstr(ctx, h->r, sizeof(*h->r))
 		       : "UNKNOWN",
-		       h->src_channelid ? h->src_channelid
-		       : "local");
+		       h->src_expiry ? type_to_string(ctx, struct abs_locktime, h->src_expiry)
+		       : "<local>");
 }
 REGISTER_TYPE_TO_STRING(htlc, fmt_htlc);
