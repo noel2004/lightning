@@ -39,7 +39,10 @@ struct bitcoin_tx *create_commit_tx(const tal_t *ctx,
 				    enum side side,
 				    bool *otherside_only);
 
-size_t find_output_from_commit_tx(const struct bitcoin_tx* commit_tx,
+size_t find_redeem_output_from_commit_tx(const struct bitcoin_tx* commit_tx,
+    u8* script, size_t* indicate_pos);
+
+size_t find_htlc_output_from_commit_tx(const struct bitcoin_tx* commit_tx,
     u8* wscript, size_t* indicate_pos);
 
 #endif

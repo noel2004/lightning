@@ -9,6 +9,12 @@ struct bitcoin_tx;
 struct outsourcing;
 struct LNchannel;
 
+enum outsourcing_tasktype {
+    OUTSOURCING_PASSIVE,
+    OUTSOURCING_AGGRESSIVE,
+    OUTSOURCING_DELETE,
+};
+
 enum outsourcing_result {
 	OUTSOURCING_OK,
     OUTSOURCING_DENY = -1,    //server unavailiable
@@ -46,10 +52,12 @@ struct lnwatch_htlc_task {
 
 struct lnwatch_task {
 
+    enum outsourcing_tasktype tasktype;
+
     /* txid which may be broadcasted from other side*/
     struct sha256_double commitid;
 
-    /* the tx needed to be trigger and broadcasted by txowatch task*/
+    /* the tx needed to be trigger and broadcasted by txowatch task in aggresive mode*/
     struct bitcoin_tx *trigger_tx;
 
     /* the revocation preimage used in htlctxs/redeem_tx */
@@ -58,6 +66,9 @@ struct lnwatch_task {
     /* if delivered by us, required additional tx to redeem the delayed part*/
     /* if delivered by theirs and is up-to-date, no action is needed except the htlc part */
     struct txdeliver *redeem_tx;
+
+    /* if specifed, must be trigger after deadline even no txowatch */
+    u32* trigger_deadline;
 
     /* htlcs we sent and should try to redeem if it is expired*/
     struct lnwatch_htlc_task* htlctxs;
@@ -68,6 +79,12 @@ struct lnwatch_verifytask {
     struct sha256_double *txid;
     unsigned int depth;
 };
+
+void outsourcing_task_init(struct lnwatch_task* task, const struct sha256_double* commitid);
+
+void outsourcing_htlctasks_create(const tal_t *ctx, struct lnwatch_task* task, size_t count);
+
+void outsourcing_htlctask_init(struct lnwatch_htlc_task* task, const struct sha256* rhash);
 
 /* create or sync outsourcing task */
 void outsourcing_initchannel(struct outsourcing* svr, const struct LNchannel* lnchn);

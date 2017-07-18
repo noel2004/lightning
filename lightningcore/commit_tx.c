@@ -224,10 +224,28 @@ struct bitcoin_tx *create_commit_tx(const tal_t *ctx,
 	return tx;
 }
 
+//redeem should be the first or 2nd output in commit_tx
+size_t find_redeem_output_from_commit_tx(const struct bitcoin_tx* commit_tx,
+    u8* script, size_t* indicate_pos)
+{
+    size_t i;
+    
+    for (i = 0; i < tal_count(commit_tx->output); ++i)
+    {
+        if (memcmp(commit_tx->output[i].script, script, tal_count(script))) {
+            *indicate_pos = i + 1;
+            return i;
+        }
+    }
+
+    *indicate_pos = 0;
+    return i;
+}
+
 //follow the possible sequence which we form the commit_tx so
 //we can find the corresponding output as fast as possible
 //when we iterate from the htlcmap
-size_t find_output_from_commit_tx(const struct bitcoin_tx* commit_tx,
+size_t find_htlc_output_from_commit_tx(const struct bitcoin_tx* commit_tx,
     u8* wscript, size_t *indicate_pos)
 {
     const tal_t *tmpctx = tal_tmpctx(commit_tx);

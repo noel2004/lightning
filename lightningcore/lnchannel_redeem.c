@@ -5,7 +5,6 @@
 #include "permute_tx.h"
 #include "close_tx.h"
 #include "commit_tx.h"
-#include "find_p2sh_out.h"
 #include "output_to_htlc.h"
 #include "pseudorand.h"
 #include "remove_dust.h"
@@ -45,11 +44,14 @@ void lnchn_update_htlc_watch(struct LNchannel *chn, const struct sha256 *rhash, 
         return;
     }
 
-    if (h->src_watch) {
-        tal_free(h->src_watch);
+    //htlc have upstream must not have src 
+    assert(!h->src_expiry);
+
+    if (h->upstream_watch) {
+        tal_free(h->upstream_watch);
     }
 
-    h->src_watch = txo;
+    h->upstream_watch = txo;
 }
 
 static bool is_mutual_close(const struct LNchannel *lnchn,
@@ -173,10 +175,9 @@ static void reset_onchain_closing(struct LNchannel *lnchn, const struct bitcoin_
     bitcoin_txid(tx, &lnchn->onchain.txid);
 }
 
-/* Create a HTLC fulfill transaction for onchain.tx[out_num]. */
-static const struct bitcoin_tx *htlc_deliver_tx(const struct LNchannel *lnchn,
-    const tal_t *ctx, const struct sha256_double *commitid, 
-    u32 out_num, u64 satoshis)
+static const struct bitcoin_tx *generate_deliver_tx(const struct LNchannel *lnchn,
+    const tal_t *ctx, const struct sha256_double *commitid,
+    u32 out_num, u64 satoshis, size_t estimated_txsize)
 {
     struct bitcoin_tx *tx = bitcoin_tx(ctx, 1, 1);
     u64 fee;
@@ -195,9 +196,7 @@ static const struct bitcoin_tx *htlc_deliver_tx(const struct LNchannel *lnchn,
 
     assert(measure_tx_cost(tx) == 83 * 4);
 
-    /* Witness length can vary, due to DER encoding of sigs, but we
-    * use 539 from an example run. */
-    fee = fee_by_feerate(83 + 539 / 4, get_feerate(lnchn->dstate->topology));
+    fee = fee_by_feerate(83 + estimated_txsize / 4, get_feerate(lnchn->dstate->topology));
 
     if (fee > satoshis || is_dust(satoshis - fee)) {
         log_broken(lnchn->log, "HTLC redeem amount of %"PRIu64" won't cover fee %"PRIu64,
@@ -207,6 +206,26 @@ static const struct bitcoin_tx *htlc_deliver_tx(const struct LNchannel *lnchn,
 
     tx->output[0].amount = satoshis - fee;
     return tx;
+}
+
+/* Create a spend fulfill transaction for onchain.tx[out_num]. */
+static const struct bitcoin_tx *redeem_deliver_tx(const struct LNchannel *lnchn,
+    const tal_t *ctx, const struct sha256_double *commitid, 
+    u32 out_num, u64 satoshis)
+{
+    /* Witness length can vary, due to DER encoding of sigs, but we
+    * use 176 from an example run. */
+    return generate_deliver_tx(lnchn, ctx, commitid, out_num, satoshis, 176);
+}
+
+/* Create a HTLC fulfill transaction for onchain.tx[out_num]. */
+static const struct bitcoin_tx *htlc_deliver_tx(const struct LNchannel *lnchn,
+    const tal_t *ctx, const struct sha256_double *commitid, 
+    u32 out_num, u64 satoshis)
+{
+    /* Witness length can vary, due to DER encoding of sigs, but we
+    * use 539 from an example run. */
+    return generate_deliver_tx(lnchn, ctx, commitid, out_num, satoshis, 539);
 }
 
 static struct txdeliver* create_watch_deliver_task(const tal_t *ctx, 
@@ -247,14 +266,24 @@ static struct txdeliver* create_watch_deliver_task(const tal_t *ctx,
 
 static struct txdeliver *create_watch_our_redeem_task(const tal_t *ctx,
     struct LNchannel *lnchn, u8 *wscript,
-    const struct bitcoin_tx *commit_tx, u32 out_num, 
-    const struct sha256 *rhash,
+    const struct bitcoin_tx *commit_tx, u32 out_num,
     const struct sha256_double *commitid) {
 
     struct txdeliver *task = tal(ctx, struct txdeliver);
+    u64 satoshis = commit_tx->output[out_num].amount;
 
     //we care about redeeming our commit
-    //commit_output_to_us(ctx, lnchn, )
+    task->wscript = wscript;
+    task->deliver_tx =
+        redeem_deliver_tx(lnchn, task, commitid, out_num, satoshis);
+
+    if (task->deliver_tx == NULL) {
+        //fail tx, so fail task
+        return NULL;
+    }
+
+    lnchn_sign_spend(lnchn, task->deliver_tx, wscript, &task->sig_nolocked);
+    //no lock-time, redeem tx use CSV
 
     return task;
 }
@@ -295,28 +324,52 @@ static bool create_watch_output_task(const tal_t *ctx,
 }
 
 /* create a watch task from visible state (current commit)*/
-struct lnwatch_task* lnchn_inner_create_watch_task(struct LNchannel *lnchn,
+struct lnwatch_task* lnchn_inner_watch_tasks_from_commit(struct LNchannel *lnchn,
     const tal_t *ctx,
-    const struct bitcoin_tx *commit_tx, 
+    const struct bitcoin_tx *commit_tx, const struct sha256_double *commitid, 
     const struct sha256 *rhash,
-    enum side side)
+    enum side side, struct lnwatch_task* tasks)
 {
     struct htlc_map_iter it;
     struct htlc *h;
     struct htlc_output_map *hmap;
     int committed_flag = HTLC_FLAG(side, HTLC_F_COMMITTED);
-    struct lnwatch_task* tasks = tal_arr(ctx, struct lnwatch_task, tal_count(commit_tx->output));
-    struct lnwatch_htlc_task* htlctaskscur;
+    struct lnwatch_htlc_task *htlctaskscur;
+    u32    htlc_deadline_min = 0;
+    u8     *to_us_wscript;
+    size_t redeem_outnum;
     size_t active_tasks = 1;
     size_t search_i = 0;
 
-    /* default task for the commit_tx */
-    bitcoin_txid(commit_tx, &tasks->commitid);
-    /* have at most delivertasks equal to the output of commit_tx*/
+    /*main task (the 1st task)*/
+    outsourcing_task_init(tasks, commitid);
+    outsourcing_htlctasks_create(ctx, tasks, tal_count(commit_tx->output));
+
+    /* update redeem tx*/
+    redeem_outnum = find_redeem_output_from_commit_tx(commit_tx,
+        commit_output_to_us(ctx, lnchn, rhash, side, &to_us_wscript),
+        &search_i);
+    if (redeem_outnum >= tal_count(commit_tx->output)) {
+        log_debug(lnchn->log, 
+                "this commit %s (%s) has no output for us", 
+                tal_hexstr(ctx, commitid, sizeof(*commitid)),
+                side == LOCAL ? "local" : "remote" );
+        tasks->redeem_tx = NULL;
+    }
+    else {
+        tasks->redeem_tx = create_watch_our_redeem_task(ctx, lnchn, to_us_wscript,
+            commit_tx, redeem_outnum, commitid);
+    }
+
+    //if our commit, use aggressive mode
+    if (side == LOCAL) {
+        tasks->tasktype = OUTSOURCING_AGGRESSIVE;
+        tasks->trigger_tx = commit_tx;
+    }
+
+    /* have at most deliver tasks equal to the output of commit_tx*/
     tasks->htlctxs = tal_arr(ctx, struct lnwatch_htlc_task, tal_count(commit_tx->output));
     htlctaskscur = tasks->htlctxs;
-
-    tasks->preimage = NULL;
 
     //buid the output_map like handling an on-chain tx 
     //do not use the output_map of htlcs, instead, we do it "reversely", which 
@@ -333,7 +386,7 @@ struct lnwatch_task* lnchn_inner_create_watch_task(struct LNchannel *lnchn,
 
         wscript = wscript_for_htlc(ctx, lnchn, h, rhash, side);
         //find the corresponding output for this htlc
-        outnum = find_output_from_commit_tx(commit_tx, wscript, &search_i);
+        outnum = find_htlc_output_from_commit_tx(commit_tx, wscript, &search_i);
         if (outnum >= tal_count(commit_tx->output)) {
             log_debug(lnchn->log, 
                 "htlc %s has no correponding output in commit-tx", 
@@ -341,33 +394,36 @@ struct lnwatch_task* lnchn_inner_create_watch_task(struct LNchannel *lnchn,
             continue;
         }
 
+        outsourcing_htlctask_init(htlctaskscur, &h->rhash);
         //add deliver task for each active htlc
-        memcpy(&htlctaskscur->rhash, &h->rhash, sizeof(h->rhash));
-        htlctaskscur->txowatch = NULL;
         htlctaskscur->txdeliver = create_watch_deliver_task(ctx, lnchn, wscript,
             commit_tx, outnum, &tasks->commitid, h);
 
         //create additional txo watch task
-        if (htlc_owner(h) == LOCAL && h->src_expiry 
-            && active_tasks < tal_count(commit_tx->output)) {
+        if (htlc_owner(h) == LOCAL && h->src_expiry) {
 
+            //a local htlc with source should update its source
             if(create_watch_output_task(ctx, lnchn, outnum, 
                 &tasks->commitid, h, tasks + active_tasks))
                 ++active_tasks;
+        }
+        else if (htlc_owner(h) == REMOTE && tasks->tasktype == OUTSOURCING_AGGRESSIVE) {
+            //in agressive mode, a remote htlc should take a twowatch
+            htlctaskscur->txowatch = h->upstream_watch;
         }
 
         htlctaskscur++;
     }
 
+    //finally, update htlctxs' size
     if (htlctaskscur == tasks->htlctxs) {
         tasks->htlctxs = NULL; //no htlc tasks ...
     }
     else {
         tal_resize(&tasks->htlctxs, htlctaskscur - tasks->htlctxs);
     }
-    
-    tal_resize(&tasks, active_tasks);
-    return tasks;
+
+    return tasks + active_tasks;
 }
 
 void lnchn_notify_txo_delivered(struct LNchannel *chn, const struct txowatch *txo)

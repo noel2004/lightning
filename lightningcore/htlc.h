@@ -103,7 +103,7 @@ struct htlc {
     struct abs_locktime *src_expiry;
 	/* FIXME: actually an enum onion_type */
 	//u8 malformed;
-    struct txowatch *src_watch;
+    struct txowatch *upstream_watch;
 
     /* the "life" history of a htlc: that is, the commit number at which */
     /* it was added to the number it was resolved (commited or revoked) */
