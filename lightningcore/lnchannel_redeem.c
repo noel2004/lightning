@@ -424,6 +424,28 @@ static struct lnwatch_task* create_watch_tasks_from_commit(struct LNchannel *lnc
 
 void lnchn_internal_watch_for_commit(struct LNchannel *chn)
 {
+    const tal_t *tmpctx = tal_tmpctx(chn);
+    /* we have at most 2*htlc + 2 tasks (all htlcs are local and have src, plus two main task) */
+    struct lnwatch_task* tasks = tal_arr(tmpctx, struct lnwatch_task,
+        htlc_map_count(&chn->htlcs) * 2 + 2); 
+    struct lnwatch_task* tasks_end = tasks;
+
+    tasks_end = create_watch_tasks_from_commit(chn, tmpctx,
+        chn->local.commit->tx, &chn->local.commit->txid, 
+        &chn->local.commit->revocation_hash,
+        LOCAL, tasks_end);
+
+    tasks_end = create_watch_tasks_from_commit(chn, tmpctx,
+        chn->remote.commit->tx, &chn->remote.commit->txid, 
+        &chn->remote.commit->revocation_hash,
+        REMOTE, tasks_end);
+
+    assert(tasks_end != tasks);
+
+    tal_resize(&tasks, tasks_end - tasks);
+
+    outsourcing_tasks(chn->dstate->outsourcing_svr, chn, tasks, tal_count(tasks),
+        /*TODO*/ NULL, NULL);
 
 }
 
