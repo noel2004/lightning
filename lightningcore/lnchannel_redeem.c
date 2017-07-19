@@ -300,18 +300,16 @@ static bool create_watch_output_task(const tal_t *ctx,
 
     assert(srcchn->local.commit);
 
-    memcpy(&outtask->commitid, &srcchn->local.commit->txid, sizeof(*commitid));
-    outtask->preimage = NULL;
-    outtask->redeem_tx = NULL;
-    outtask->htlctxs = tal(ctx, struct lnwatch_htlc_task);
-
-    //set the only lnwatch_htlc_task
-    memcpy(&outtask->htlctxs->rhash, &h->rhash, sizeof(h->rhash));
-
-    outtask->htlctxs->txdeliver = NULL;
     txo = tal(ctx, struct txowatch);
     memcpy(&txo->commitid, commitid, sizeof(*commitid));
     txo->output_num = out_num;
+
+    //the task CREATED FOR source channel (NOT this channel!)
+    outsourcing_task_init(outtask, &srcchn->local.commit->txid);
+
+    //update the task with one HTLCtask
+    outsourcing_htlctasks_create(ctx, outtask, 1);
+    outsourcing_htlctask_init(outtask->htlctxs, &h->rhash);
     outtask->htlctxs->txowatch = txo;
 
     //task done, we also update the srcchn ...
@@ -319,12 +317,11 @@ static bool create_watch_output_task(const tal_t *ctx,
 
     //final release
     lite_release_query_chn(lnchn->dstate->channels, srcchn);
-
     return true;
 }
 
 /* create a watch task from visible state (current commit)*/
-struct lnwatch_task* lnchn_inner_watch_tasks_from_commit(struct LNchannel *lnchn,
+static struct lnwatch_task* create_watch_tasks_from_commit(struct LNchannel *lnchn,
     const tal_t *ctx,
     const struct bitcoin_tx *commit_tx, const struct sha256_double *commitid, 
     const struct sha256 *rhash,
@@ -401,10 +398,9 @@ struct lnwatch_task* lnchn_inner_watch_tasks_from_commit(struct LNchannel *lnchn
 
         //create additional txo watch task
         if (htlc_owner(h) == LOCAL && h->src_expiry) {
-
             //a local htlc with source should update its source
             if(create_watch_output_task(ctx, lnchn, outnum, 
-                &tasks->commitid, h, tasks + active_tasks))
+                commitid, h, tasks + active_tasks))
                 ++active_tasks;
         }
         else if (htlc_owner(h) == REMOTE && tasks->tasktype == OUTSOURCING_AGGRESSIVE) {
@@ -424,6 +420,11 @@ struct lnwatch_task* lnchn_inner_watch_tasks_from_commit(struct LNchannel *lnchn
     }
 
     return tasks + active_tasks;
+}
+
+void lnchn_internal_watch_for_commit(struct LNchannel *chn)
+{
+
 }
 
 void lnchn_notify_txo_delivered(struct LNchannel *chn, const struct txowatch *txo)
