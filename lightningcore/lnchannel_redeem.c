@@ -33,7 +33,7 @@
 #include <stdlib.h>
 #include <sys/types.h>
 
-void lnchn_update_htlc_watch(struct LNchannel *chn, const struct sha256 *rhash, struct txowatch* txo)
+void internal_update_htlc_watch(struct LNchannel *chn, const struct sha256 *rhash, struct txowatch* txo)
 {
     struct htlc *h = htlc_map_get(&chn->htlcs, rhash);
     if (h == NULL) {
@@ -54,62 +54,12 @@ void lnchn_update_htlc_watch(struct LNchannel *chn, const struct sha256 *rhash, 
     h->upstream_watch = txo;
 }
 
-
-/* FIXME-OLD #onchain:
-*
-* When node A sees its own *commitment tx*:
-*/
-static void resolve_our_unilateral(struct LNchannel *lnchn)
+void internal_resolve_htlc(struct LNchannel *lnchn, const struct sha256 *rhash)
 {
-    unsigned int i;
-    struct chain_topology *topo = lnchn->dstate->topology;
-    const struct bitcoin_tx *tx = lnchn->onchain.tx;
 
-    /* This only works because we always watch for a long time before
-    * freeing lnchn, by which time this has resolved.  We could create
-    * resolved[] entries for these uncommitted HTLCs, too. */
-    watch_tx(tx, topo, lnchn, tx, our_unilateral_depth, NULL);
-
-    for (i = 0; i < tal_count(tx->output); i++) {
-        /* FIXME-OLD #onchain:
-        *
-        * 1. _A's main output_: A node SHOULD spend this output to a
-        *    convenient address. ... A node MUST wait until the
-        *    `OP_CHECKSEQUENCEVERIFY` delay has passed (as specified
-        *    by the other node's `open_channel` `delay` field) before
-        *    spending the output.
-        */
-        if (i == lnchn->onchain.to_us_idx)
-            watch_tx(tx, topo,
-                lnchn, tx, our_main_output_depth, NULL);
-
-        /* FIXME-OLD #onchain:
-        *
-        * 2. _B's main output_: No action required, this output is
-        *    considered *resolved* by the *commitment tx*.
-        */
-        else if (i == lnchn->onchain.to_them_idx)
-            lnchn->onchain.resolved[i] = tx;
-
-        /* FIXME-OLD #onchain:
-        *
-        * 3. _A's offered HTLCs_: See On-chain HTLC Handling: Our
-        *    Offers below.
-        */
-        else if (htlc_owner(lnchn->onchain.htlcs[i]) == LOCAL)
-            resolve_our_htlc(lnchn, i, our_htlc_depth_ourcommit);
-
-        /* FIXME-OLD #onchain:
-        *
-        * 4. _B's offered HTLCs_: See On-chain HTLC Handling: Their
-        *    Offers below.
-        */
-        else
-            resolve_their_htlc(lnchn, i);
-    }
 }
 
-static const struct bitcoin_tx *generate_deliver_tx(const struct LNchannel *lnchn,
+static struct bitcoin_tx *generate_deliver_tx(const struct LNchannel *lnchn,
     const tal_t *ctx, const struct sha256_double *commitid,
     u32 out_num, u64 satoshis, size_t estimated_txsize)
 {
@@ -143,7 +93,7 @@ static const struct bitcoin_tx *generate_deliver_tx(const struct LNchannel *lnch
 }
 
 /* Create a spend fulfill transaction for onchain.tx[out_num]. */
-static const struct bitcoin_tx *redeem_deliver_tx(const struct LNchannel *lnchn,
+static struct bitcoin_tx *redeem_deliver_tx(const struct LNchannel *lnchn,
     const tal_t *ctx, const struct sha256_double *commitid, 
     u32 out_num, u64 satoshis)
 {
@@ -153,7 +103,7 @@ static const struct bitcoin_tx *redeem_deliver_tx(const struct LNchannel *lnchn,
 }
 
 /* Create a HTLC fulfill transaction for onchain.tx[out_num]. */
-static const struct bitcoin_tx *htlc_deliver_tx(const struct LNchannel *lnchn,
+static struct bitcoin_tx *htlc_deliver_tx(const struct LNchannel *lnchn,
     const tal_t *ctx, const struct sha256_double *commitid, 
     u32 out_num, u64 satoshis)
 {
@@ -168,6 +118,7 @@ static struct txdeliver* create_watch_deliver_task(const tal_t *ctx,
     const struct sha256_double *commitid, const struct htlc* h) {
 
     struct txdeliver *task = tal(ctx, struct txdeliver);
+    struct bitcoin_tx *work_tx;
     /* 
        two amount can be used: the output amount in commit_tx or the msatoshi in hltc,
        previous one is generated from the second when building commit_tx but 
@@ -177,24 +128,24 @@ static struct txdeliver* create_watch_deliver_task(const tal_t *ctx,
     u64 satoshis = commit_tx->output[out_num].amount;
 
     task->wscript = wscript;
-    task->deliver_tx =
-        htlc_deliver_tx(lnchn, task, commitid, out_num, satoshis);
+    work_tx = htlc_deliver_tx(lnchn, task, commitid, out_num, satoshis);
 
-    if (task->deliver_tx == NULL) {
+    if (work_tx == NULL) {
         //fail tx, so fail task
         return NULL;
     }
 
     //sign for a "immediately" redeem (with preimage or revocation hash)
-    lnchn_sign_htlc(lnchn, task->deliver_tx, wscript, &task->sig_nolocked);
+    lnchn_sign_htlc(lnchn, work_tx, wscript, &task->sig_nolocked);
 
     //if htlc is ours, we also set locktime and sign the "expire" redeem
     if (htlc_owner(h) == LOCAL) {
         task->sig = tal(ctx, ecdsa_signature);
-        task->deliver_tx->lock_time = h->expiry.locktime;
-        lnchn_sign_htlc(lnchn, task->deliver_tx, wscript, task->sig);
+        work_tx->lock_time = h->expiry.locktime;
+        lnchn_sign_htlc(lnchn, work_tx, wscript, task->sig);
     }
 
+    task->deliver_tx = work_tx;
     return task;
 }
 
@@ -205,19 +156,20 @@ static struct txdeliver *create_watch_our_redeem_task(const tal_t *ctx,
 
     struct txdeliver *task = tal(ctx, struct txdeliver);
     u64 satoshis = commit_tx->output[out_num].amount;
+    struct bitcoin_tx *work_tx;
 
     //we care about redeeming our commit
     task->wscript = wscript;
-    task->deliver_tx =
-        redeem_deliver_tx(lnchn, task, commitid, out_num, satoshis);
+    work_tx = redeem_deliver_tx(lnchn, task, commitid, out_num, satoshis);
 
-    if (task->deliver_tx == NULL) {
+    if (work_tx == NULL) {
         //fail tx, so fail task
         return NULL;
     }
 
-    lnchn_sign_spend(lnchn, task->deliver_tx, wscript, &task->sig_nolocked);
+    lnchn_sign_spend(lnchn, work_tx, wscript, &task->sig_nolocked);
     //no lock-time, redeem tx use CSV
+    task->deliver_tx = work_tx;
 
     return task;
 }
@@ -228,7 +180,7 @@ static bool create_watch_output_task(const tal_t *ctx,
     struct lnwatch_task *outtask) {
 
     struct txowatch* txo = NULL;
-    const struct LNchannel* srcchn = lite_query_htlc_src(lnchn->dstate->channels, &h->rhash);
+    struct LNchannel* srcchn = lite_query_htlc_src(lnchn->dstate->channels, &h->rhash);
 
     if (srcchn == NULL)return false;
 
@@ -247,7 +199,7 @@ static bool create_watch_output_task(const tal_t *ctx,
     outtask->htlctxs->txowatch = txo;
 
     //task done, we also update the srcchn ...
-    lnchn_update_htlc_watch(srcchn, &h->rhash, tal_dup(srcchn, struct txowatch, txo));
+    internal_update_htlc_watch(srcchn, &h->rhash, tal_dup(srcchn, struct txowatch, txo));
 
     //final release
     lite_release_query_chn(lnchn->dstate->channels, srcchn);
@@ -263,7 +215,6 @@ static struct lnwatch_task* create_watch_tasks_from_commit(struct LNchannel *lnc
 {
     struct htlc_map_iter it;
     struct htlc *h;
-    struct htlc_output_map *hmap;
     int committed_flag = HTLC_FLAG(side, HTLC_F_COMMITTED);
     struct lnwatch_htlc_task *htlctaskscur;
     u32    htlc_deadline_min = 0;
@@ -416,7 +367,7 @@ static void reset_onchain_closing(struct LNchannel *lnchn, const struct bitcoin_
         h;
         h = htlc_map_next(&lnchn->htlcs, &it)) {
         if (h->state == SENT_ADD_HTLC) {
-            lnchn_internal_fail_own_htlc(lnchn, h);
+            internal_fail_own_htlc(lnchn, h);
         }
     }
 
@@ -500,7 +451,7 @@ static bool map_onchain_outputs(struct LNchannel *lnchn,
     enum side side,
     unsigned int commit_num)
 {
-    u8 *to_us, *to_them, tmp;
+    u8 *to_us, *to_them, *tmp;
     struct htlc_output_map *hmap;
     size_t i;
     bool   ret = true;
@@ -550,8 +501,6 @@ static bool map_onchain_outputs(struct LNchannel *lnchn,
 
 static void handle_close_tx_delivered(struct LNchannel *lnchn, const struct bitcoin_tx *tx) {
     enum state newstate;
-    struct htlc_map_iter it;
-    struct htlc *h;
     u64 commit_num;
 
     reset_onchain_closing(lnchn, tx);
@@ -575,8 +524,6 @@ static void handle_close_tx_delivered(struct LNchannel *lnchn, const struct bitc
             newstate = STATE_ERR_INFORMATION_LEAK;
         }
 
-        resolve_our_unilateral(lnchn);
-        /* Must be their unilateral */
     }
     else if (find_their_old_tx(lnchn, &lnchn->onchain.txid,
         &commit_num)) {
@@ -592,11 +539,9 @@ static void handle_close_tx_delivered(struct LNchannel *lnchn, const struct bitc
         }
         if (preimage) {
             newstate = STATE_CLOSE_ONCHAIN_CHEATED;
-            resolve_their_steal(lnchn, preimage);
         }
         else {
             newstate = STATE_CLOSE_ONCHAIN_THEIR_UNILATERAL;
-            resolve_their_unilateral(lnchn);
         }
     }
     else {
@@ -605,13 +550,72 @@ static void handle_close_tx_delivered(struct LNchannel *lnchn, const struct bitc
         newstate = STATE_ERR_INFORMATION_LEAK;
     }
 
-    set_lnchn_state(lnchn, newstate, "anchor_spent", false);
+    internal_set_lnchn_state(lnchn, newstate, "anchor_spent", false);
+}
+
+static void handle_htlc_tx_finished(struct LNchannel *lnchn, const struct bitcoin_tx *tx,
+    bool isdelivered) {
+
+    struct htlc *h;
+
+    //only check first input, done or fail (even we use ANYONECANPAY and SINGLE sigops later)
+    if (!structeq(&lnchn->onchain.txid, &tx->input[0].txid)) {
+        log_broken(lnchn->log,
+                "Not correct htlc tx for corresponding task %s!",
+                tal_hexstr(lnchn, &lnchn->onchain.txid, sizeof(lnchn->onchain.txid)));
+        internal_set_lnchn_state(lnchn, STATE_ERR_INTERNAL, "htlc_spent", false);
+        return;
+    }
+
+    if (tx->input[0].index >= tal_count(lnchn->onchain.resolved)) {
+         /*outsourcing svr mus breakdown*/
+        struct sha256_double txid;
+        bitcoin_txid(tx, &txid);
+
+        log_broken(lnchn->log,
+                "htlc tx %s received must breakdown!",
+                tal_hexstr(lnchn, &txid, sizeof(txid)));
+        internal_set_lnchn_state(lnchn, STATE_ERR_BREAKDOWN, "htlc_spent", false);
+        return;
+    }
+
+    h = lnchn->onchain.htlcs[tx->input[0].index];
+
+    //if fail, it was only normal when htlc is ours
+    if (!isdelivered) {
+        if (htlc_owner(h) != LOCAL) {
+            struct sha256_double txid;
+            bitcoin_txid(tx, &txid);
+            log_broken(lnchn->log,
+                "redeem their htlc tx %s fail!",
+                tal_hexstr(lnchn, &txid, sizeof(txid)));
+            internal_set_lnchn_state(lnchn, STATE_ERR_INFORMATION_LEAK, "htlc_spent", false);
+            return;
+        }
+    }
+    else {
+        //if htlc is delivered for timeout, we MUST also resolve the 
+        //source htlc
+        if (htlc_owner(h) == LOCAL && h->src_expiry
+            && tx->lock_time != 0 /*we simply use locktime in tx to judge if it is expired-htlc tx*/
+            ) {
+            struct LNchannel* srcchn = lite_query_htlc_src(lnchn->dstate->channels, &h->rhash);
+
+            if(srcchn){
+                internal_resolve_htlc(srcchn, &h->rhash);
+                lite_release_query_chn(lnchn->dstate->channels, srcchn);
+            }            
+        }
+        //(for their htlc, redeem is just redeem)
+    }
+
+    //simply resolve one
+    lnchn->onchain.resolved[tx->input[0].index] = tx;
 }
 
 void lnchn_notify_tx_delivered(struct LNchannel *lnchn, const struct bitcoin_tx *tx, 
     enum outsourcing_deliver ret, const struct sha256_double *taskid)
 {
-    enum state newstate;
     struct sha256_double txid;
     bitcoin_txid(tx, &txid);
 
@@ -649,11 +653,13 @@ void lnchn_notify_tx_delivered(struct LNchannel *lnchn, const struct bitcoin_tx 
 
         //tx in a task, only care about failure or confirmed ...
         if (ret == OUTSOURCING_DELIVER_CONFIRMED) {
+            handle_htlc_tx_finished(lnchn, tx, true);
         }
         else if (ret == OUTSOURCING_DELIVER_FAILED) {
             //should be the failure of a owned htlc, so just log it
             //and mark it as resolved
-
+            //treat as delivered
+            handle_htlc_tx_finished(lnchn, tx, false);
         }
         else {
             //deliver is just logged

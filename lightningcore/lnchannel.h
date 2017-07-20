@@ -51,9 +51,6 @@ const char *command_htlc_add(struct LNchannel *chn, u64 msatoshi,
 			     enum fail_error *error_code,
 			     struct htlc **htlc);
 
-void lnchn_update_htlc_watch(struct LNchannel *chn, 
-                 const struct sha256 *rhash, struct txowatch* txo);
-
 /* Peer has an issue, breakdown and fail. */
 void lnchn_fail(struct LNchannel *chn, const char *caller);
 

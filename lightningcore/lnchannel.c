@@ -291,7 +291,7 @@ static void lnchn_open_complete(struct LNchannel *lnchn, const char *problem)
 	}
 }
 
-static void set_lnchn_state(struct LNchannel *lnchn, enum state newstate,
+void internal_set_lnchn_state(struct LNchannel *lnchn, enum state newstate,
 			   const char *caller, bool db_commit)
 {
 	log_debug(lnchn->log, "%s: %s => %s", caller,
@@ -299,9 +299,6 @@ static void set_lnchn_state(struct LNchannel *lnchn, enum state newstate,
 	lnchn->state = newstate;
 
 	/* We can only route in normal state. */
-	if (!state_is_normal(lnchn->state))
-		lnchn->nc = tal_free(lnchn->nc);
-
 	if (db_commit)
 		db_update_state(lnchn);
 }

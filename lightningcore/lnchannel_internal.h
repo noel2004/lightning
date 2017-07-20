@@ -187,6 +187,13 @@ struct LNchannel {
 };
 
 //many internal api and helpers ...
+void internal_set_lnchn_state(struct LNchannel *lnchn, enum state newstate,
+    const char *caller, bool db_commit);
+
+void internal_resolve_htlc(struct LNchannel *lnchn, const struct sha256 *rhash);
+
+void internal_update_htlc_watch(struct LNchannel *chn, 
+                 const struct sha256 *rhash, struct txowatch* txo);
 
 static bool outputscript_eq(const struct bitcoin_tx_output *out,
     size_t i, const u8 *script)
