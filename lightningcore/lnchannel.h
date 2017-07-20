@@ -69,10 +69,17 @@ void debug_dump_lnchn(struct LNchannel *chn);
 /*check outsourcing pending, should not closed or you may lost something...*/
 bool lnchn_has_pending_outsourcing(struct LNchannel *chn);
 
-/*watch message ...*/
+enum outsourcing_deliver{
+    OUTSOURCING_DELIVER_DONE,
+    OUTSOURCING_DELIVER_FAILED,
+    OUTSOURCING_DELIVER_CONFIRMED,
+};
+
+/* watch message, incoming struct MUST be allocated as children of lnchn ...*/
 void lnchn_notify_txo_delivered(struct LNchannel *chn, const struct txowatch *txo);
 
-void lnchn_notify_tx_delivered(struct LNchannel *chn, const struct bitcoin_tx *tx);
+void lnchn_notify_tx_delivered(struct LNchannel *chn, const struct bitcoin_tx *tx,
+    enum outsourcing_deliver ret, const struct sha256_double *taskid);
 
 void cleanup_lnchn(struct lightningd_state *dstate, struct LNchannel *chn);
 

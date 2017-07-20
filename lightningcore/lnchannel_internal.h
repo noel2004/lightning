@@ -185,4 +185,15 @@ struct LNchannel {
 	/* High water mark for the staggered broadcast */
 	u64 broadcast_index;
 };
+
+//many internal api and helpers ...
+
+static bool outputscript_eq(const struct bitcoin_tx_output *out,
+    size_t i, const u8 *script)
+{
+    if (tal_count(out[i].script) != tal_count(script))
+        return false;
+    return memcmp(out[i].script, script, tal_count(script)) == 0;
+}
+
 #endif /* LIGHTNING_CORE_LNCHANNEL_INTERNAL_H */

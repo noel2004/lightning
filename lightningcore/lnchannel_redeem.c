@@ -54,56 +54,6 @@ void lnchn_update_htlc_watch(struct LNchannel *chn, const struct sha256 *rhash, 
     h->upstream_watch = txo;
 }
 
-static bool is_mutual_close(const struct LNchannel *lnchn,
-    const struct bitcoin_tx *tx)
-{
-    const u8 *ours, *theirs;
-
-    ours = lnchn->closing.our_script;
-    theirs = lnchn->closing.their_script;
-    /* If we don't know the closing scripts, can't have signed them. */
-    if (!ours || !theirs)
-        return false;
-
-    if (tal_count(tx->output) != 2)
-        return false;
-
-    /* Without knowing fee amounts, can't determine order.  Check both. */
-    if (scripteq(tx->output[0].script, ours)
-        && scripteq(tx->output[1].script, theirs))
-        return true;
-
-    if (scripteq(tx->output[0].script, theirs)
-        && scripteq(tx->output[1].script, ours))
-        return true;
-
-    return false;
-}
-
-static struct sha256 *get_rhash(struct LNchannel *lnchn, u64 commit_num,
-    struct sha256 *rhash)
-{
-    struct sha256 preimage;
-
-    /* Previous revoked tx? */
-    if (shachain_get_hash(&lnchn->their_preimages,
-        0xFFFFFFFFFFFFFFFFL - commit_num,
-        &preimage)) {
-        sha256(rhash, &preimage, sizeof(preimage));
-        return tal_dup(lnchn, struct sha256, &preimage);
-    }
-
-    /* Current tx? */
-    if (commit_num == lnchn->remote.commit->commit_num) {
-        *rhash = lnchn->remote.commit->revocation_hash;
-        return NULL;
-    }
-
-    /* Last tx, but we haven't got revoke for it yet? */
-    assert(commit_num == lnchn->remote.commit->commit_num - 1);
-    *rhash = *lnchn->their_prev_revocation_hash;
-    return NULL;
-}
 
 /* FIXME-OLD #onchain:
 *
@@ -157,22 +107,6 @@ static void resolve_our_unilateral(struct LNchannel *lnchn)
         else
             resolve_their_htlc(lnchn, i);
     }
-}
-
-static void reset_onchain_closing(struct LNchannel *lnchn, const struct bitcoin_tx *tx)
-{
-    if (lnchn->onchain.tx) {
-        log_unusual_struct(lnchn->log,
-            "New anchor spend, forgetting old tx %s",
-            struct sha256_double, &lnchn->onchain.txid);
-        lnchn->onchain.tx = tal_free(lnchn->onchain.tx);
-        lnchn->onchain.resolved = NULL;
-        lnchn->onchain.htlcs = NULL;
-        lnchn->onchain.wscripts = NULL;
-    }
-
-    lnchn->onchain.tx = tal_steal(lnchn, tx);
-    bitcoin_txid(tx, &lnchn->onchain.txid);
 }
 
 static const struct bitcoin_tx *generate_deliver_tx(const struct LNchannel *lnchn,
@@ -454,14 +388,276 @@ void lnchn_notify_txo_delivered(struct LNchannel *chn, const struct txowatch *tx
 
 }
 
-void lnchn_notify_tx_delivered(struct LNchannel *chn, const struct bitcoin_tx *tx)
+static void reset_onchain_closing(struct LNchannel *lnchn, const struct bitcoin_tx *tx)
 {
-    struct sha256 ctxid;
+    struct htlc_map_iter it;
+    struct htlc *h;
 
-    bitcoin_txid(tx, &ctxid);
-
-    if (structeq(&ctxid, &chn->anchor.txid) == 0) {
-        //we have spent the anchor 
-        //handle_anchor_spent()
+    if (lnchn->onchain.tx) {
+        log_unusual_struct(lnchn->log,
+            "New anchor spend, forgetting old tx %s",
+            struct sha256_double, &lnchn->onchain.txid);
+        lnchn->onchain.tx = tal_free(lnchn->onchain.tx);
+        lnchn->onchain.resolved = NULL;
+        lnchn->onchain.htlcs = NULL;
+        lnchn->onchain.wscripts = NULL;
     }
+
+    lnchn->onchain.tx = tal_steal(lnchn, tx);
+    bitcoin_txid(tx, &lnchn->onchain.txid);
+
+    /* We need to resolve every output. */
+    lnchn->onchain.resolved
+        = tal_arrz(tx, const struct bitcoin_tx *,
+            tal_count(tx->output));
+
+    /* If we have any HTLCs we're not committed to yet, fail them now. */
+    for (h = htlc_map_first(&lnchn->htlcs, &it);
+        h;
+        h = htlc_map_next(&lnchn->htlcs, &it)) {
+        if (h->state == SENT_ADD_HTLC) {
+            lnchn_internal_fail_own_htlc(lnchn, h);
+        }
+    }
+
+}
+
+static bool find_their_old_tx(struct LNchannel *lnchn,
+    const struct sha256_double *txid,
+    u64 *idx)
+{
+    /* FIXME: Don't keep these in memory, search db here. */
+    struct their_commit *tc;
+
+    log_debug_struct(lnchn->log, "Finding txid %s", struct sha256_double,
+        txid);
+    list_for_each(&lnchn->their_commits, tc, list) {
+        if (structeq(&tc->txid, txid)) {
+            *idx = tc->commit_num;
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool is_mutual_close(const struct LNchannel *lnchn,
+    const struct bitcoin_tx *tx)
+{
+    const u8 *ours, *theirs;
+
+    ours = lnchn->closing.our_script;
+    theirs = lnchn->closing.their_script;
+    /* If we don't know the closing scripts, can't have signed them. */
+    if (!ours || !theirs)
+        return false;
+
+    if (tal_count(tx->output) != 2)
+        return false;
+
+    /* Without knowing fee amounts, can't determine order.  Check both. */
+    if (scripteq(tx->output[0].script, ours)
+        && scripteq(tx->output[1].script, theirs))
+        return true;
+
+    if (scripteq(tx->output[0].script, theirs)
+        && scripteq(tx->output[1].script, ours))
+        return true;
+
+    return false;
+}
+
+static struct sha256 *get_rhash(struct LNchannel *lnchn, u64 commit_num,
+    struct sha256 *rhash)
+{
+    struct sha256 preimage;
+
+    /* Previous revoked tx? */
+    if (shachain_get_hash(&lnchn->their_preimages,
+        0xFFFFFFFFFFFFFFFFL - commit_num,
+        &preimage)) {
+        sha256(rhash, &preimage, sizeof(preimage));
+        return tal_dup(lnchn, struct sha256, &preimage);
+    }
+
+    /* Current tx? */
+    if (commit_num == lnchn->remote.commit->commit_num) {
+        *rhash = lnchn->remote.commit->revocation_hash;
+        return NULL;
+    }
+
+    /* Last tx, but we haven't got revoke for it yet? */
+    assert(commit_num == lnchn->remote.commit->commit_num - 1);
+    *rhash = *lnchn->their_prev_revocation_hash;
+    return NULL;
+}
+
+
+/* This tx is their commitment;
+* fill in onchain.htlcs[], wscripts[], to_us_idx and to_them_idx */
+static bool map_onchain_outputs(struct LNchannel *lnchn,
+    const struct sha256 *rhash,
+    const struct bitcoin_tx *tx,
+    enum side side,
+    unsigned int commit_num)
+{
+    u8 *to_us, *to_them, tmp;
+    struct htlc_output_map *hmap;
+    size_t i;
+    bool   ret = true;
+
+    lnchn->onchain.to_us_idx = lnchn->onchain.to_them_idx = -1;
+    lnchn->onchain.htlcs = tal_arr(tx, struct htlc *, tal_count(tx->output));
+
+    //it is OK to not output wscript
+    to_us = commit_output_to_us(tx, lnchn, rhash, side, NULL);
+    to_them = commit_output_to_them(tx, lnchn, rhash, side, NULL);
+
+    /* Now verify each output. */
+    hmap = get_htlc_output_map(tx, lnchn, rhash, side, commit_num);
+
+    for (i = 0; i < tal_count(tx->output); i++) {
+        log_debug(lnchn->log, "%s: output %zi", __func__, i);
+        if (lnchn->onchain.to_us_idx == -1
+            && outputscript_eq(tx->output, i, to_us)) {
+            log_add(lnchn->log, " -> to us");
+            lnchn->onchain.htlcs[i] = NULL;
+            lnchn->onchain.to_us_idx = i;
+            continue;
+        }
+        if (lnchn->onchain.to_them_idx == -1
+            && outputscript_eq(tx->output, i, to_them)) {
+            log_add(lnchn->log, " -> to them");
+            lnchn->onchain.htlcs[i] = NULL;
+            lnchn->onchain.to_them_idx = i;
+            continue;
+        }
+        /* Must be an HTLC output */
+        lnchn->onchain.htlcs[i] = txout_get_htlc(hmap,
+            tx->output[i].script, &tmp);
+        if (!lnchn->onchain.htlcs[i]) {
+            log_add(lnchn->log, "no HTLC found");
+            ret = false;
+            continue;//well, we still handle the rest ...
+        }
+        tal_steal(lnchn->onchain.htlcs, lnchn->onchain.htlcs[i]);
+        log_add(lnchn->log, "HTLC %s", tal_hexstr(hmap, &lnchn->onchain.htlcs[i]->rhash, 
+            sizeof(lnchn->onchain.htlcs[i]->rhash)));
+    }
+
+    tal_free(hmap);
+    return ret;
+}
+
+static void handle_close_tx_delivered(struct LNchannel *lnchn, const struct bitcoin_tx *tx) {
+    enum state newstate;
+    struct htlc_map_iter it;
+    struct htlc *h;
+    u64 commit_num;
+
+    reset_onchain_closing(lnchn, tx);
+
+    if (is_mutual_close(lnchn, tx)) {
+        newstate = STATE_CLOSE_ONCHAIN_MUTUAL;
+        resolve_mutual_close(lnchn);
+        /* Our unilateral */
+    }
+    else if (structeq(&lnchn->local.commit->txid,
+        &lnchn->onchain.txid)) {
+        newstate = STATE_CLOSE_ONCHAIN_OUR_UNILATERAL;
+
+        if (!map_onchain_outputs(lnchn,
+            &lnchn->local.commit->revocation_hash,
+            tx, LOCAL,
+            lnchn->local.commit->commit_num)) {
+            log_broken(lnchn->log,
+                "Can't resolve own anchor spend %"PRIu64"!",
+                lnchn->local.commit->commit_num);
+            newstate = STATE_ERR_INFORMATION_LEAK;
+        }
+
+        resolve_our_unilateral(lnchn);
+        /* Must be their unilateral */
+    }
+    else if (find_their_old_tx(lnchn, &lnchn->onchain.txid,
+        &commit_num)) {
+        struct sha256 *preimage, rhash;
+
+        preimage = get_rhash(lnchn, commit_num, &rhash);
+        if (!map_onchain_outputs(lnchn, &rhash, tx, REMOTE, commit_num)) {
+            /* Should not happen */
+            log_broken(lnchn->log,
+                "Can't resolve known anchor spend %"PRIu64"!",
+                commit_num);
+            newstate = STATE_ERR_INFORMATION_LEAK;
+        }
+        if (preimage) {
+            newstate = STATE_CLOSE_ONCHAIN_CHEATED;
+            resolve_their_steal(lnchn, preimage);
+        }
+        else {
+            newstate = STATE_CLOSE_ONCHAIN_THEIR_UNILATERAL;
+            resolve_their_unilateral(lnchn);
+        }
+    }
+    else {
+        log_broken(lnchn->log,
+            "Unknown anchor spend!  Funds may be lost!");
+        newstate = STATE_ERR_INFORMATION_LEAK;
+    }
+
+    set_lnchn_state(lnchn, newstate, "anchor_spent", false);
+}
+
+void lnchn_notify_tx_delivered(struct LNchannel *lnchn, const struct bitcoin_tx *tx, 
+    enum outsourcing_deliver ret, const struct sha256_double *taskid)
+{
+    enum state newstate;
+    struct sha256_double txid;
+    bitcoin_txid(tx, &txid);
+
+    if (structeq(&txid, taskid)) {
+        //is task itself
+        if (ret == OUTSOURCING_DELIVER_DONE) {
+            handle_close_tx_delivered(lnchn, tx);
+        }
+        else if (ret == OUTSOURCING_DELIVER_FAILED) {
+            //only possible is the aggressive task fail, can omit,
+            //if not, just log it 
+            if (!structeq(&lnchn->local.commit->txid, &txid)) {
+                log_broken(lnchn->log,
+                    "We encounter unexpected task tx [%s] delivered and fail",
+                    tal_hexstr(lnchn, &txid, sizeof(txid)));
+            }
+        }
+        else {
+            //confirmed, just trigger a verify, but it should always no action 
+            //unless the task is rare (no resolution required)
+        }
+    }
+    else {
+        //first we check if the tx belong to corresponding task
+        if (!lnchn->onchain.tx || !structeq(&lnchn->onchain.txid, taskid)) {
+            log_broken(lnchn->log,
+                "We encounter unexpected htlc tx [%s] delivered [%d] "
+                "(not belong to current task <%s>)",
+                tal_hexstr(lnchn, &txid, sizeof(txid)),
+                (int) ret,
+                lnchn->onchain.tx ? "NOT INITED" : 
+                tal_hexstr(lnchn, &lnchn->onchain.txid, sizeof(txid)));
+            return;
+        }
+
+        //tx in a task, only care about failure or confirmed ...
+        if (ret == OUTSOURCING_DELIVER_CONFIRMED) {
+        }
+        else if (ret == OUTSOURCING_DELIVER_FAILED) {
+            //should be the failure of a owned htlc, so just log it
+            //and mark it as resolved
+
+        }
+        else {
+            //deliver is just logged
+        }
+    }
+
 }

@@ -50,6 +50,8 @@ void db_set_their_closing_script(struct LNchannel *lnchn);
 
 void db_add_commit_map(struct LNchannel *lnchn,
 		       const struct sha256_double *txid, u64 commit_num);
+void db_find_commit(struct LNchannel *lnchn,
+    const struct sha256_double *txid, u64 commit_num);
 
 void db_forget_lnchn(struct LNchannel *lnchn);
 #endif /* LIGHTNING_CORE_DB_H */

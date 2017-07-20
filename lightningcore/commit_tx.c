@@ -224,6 +224,7 @@ struct bitcoin_tx *create_commit_tx(const tal_t *ctx,
 	return tx;
 }
 
+
 //redeem should be the first or 2nd output in commit_tx
 size_t find_redeem_output_from_commit_tx(const struct bitcoin_tx* commit_tx,
     u8* script, size_t* indicate_pos)
@@ -232,7 +233,7 @@ size_t find_redeem_output_from_commit_tx(const struct bitcoin_tx* commit_tx,
     
     for (i = 0; i < tal_count(commit_tx->output); ++i)
     {
-        if (memcmp(commit_tx->output[i].script, script, tal_count(script))) {
+        if (outputscript_eq(commit_tx->output, i, script)) {
             *indicate_pos = i + 1;
             return i;
         }
@@ -257,7 +258,7 @@ size_t find_htlc_output_from_commit_tx(const struct bitcoin_tx* commit_tx,
 
     for (i = *indicate_pos; i < last; ++i)
     {
-        if (memcmp(commit_tx->output[i].script, script, tal_count(script)) == 0) {
+        if (outputscript_eq(commit_tx->output, i, script)) {
             tal_free(tmpctx);
             *indicate_pos = i + 1;
             return i;
@@ -267,7 +268,7 @@ size_t find_htlc_output_from_commit_tx(const struct bitcoin_tx* commit_tx,
     if (*indicate_pos != 0) {
         for (i = 0; i < *indicate_pos; ++i)
         {
-            if (memcmp(commit_tx->output[i].script, script, tal_count(script)) == 0) {
+            if (outputscript_eq(commit_tx->output, i, script)) {
                 tal_free(tmpctx);
                 *indicate_pos = i + 1;
                 return i;
