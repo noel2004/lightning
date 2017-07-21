@@ -506,9 +506,17 @@ static void handle_close_tx_delivered(struct LNchannel *lnchn, const struct bitc
     reset_onchain_closing(lnchn, tx);
 
     if (is_mutual_close(lnchn, tx)) {
+        size_t i;
+
         newstate = STATE_CLOSE_ONCHAIN_MUTUAL;
-        resolve_mutual_close(lnchn);
-        /* Our unilateral */
+        for (i = 0; i < tal_count(lnchn->onchain.tx->output); i++) {
+            lnchn->onchain.resolved[i] = lnchn->onchain.tx;
+        }       
+        
+        /* No HTLCs. */
+        lnchn->onchain.htlcs = tal_arrz(lnchn->onchain.tx,
+            struct htlc *,
+            tal_count(tx->output));
     }
     else if (structeq(&lnchn->local.commit->txid,
         &lnchn->onchain.txid)) {
@@ -636,6 +644,8 @@ void lnchn_notify_tx_delivered(struct LNchannel *lnchn, const struct bitcoin_tx 
         else {
             //confirmed, just trigger a verify, but it should always no action 
             //unless the task is rare (no resolution required)
+
+            internal_set_lnchn_state(lnchn, STATE_CLOSED, "deliver_confirmed", false);
         }
     }
     else {
