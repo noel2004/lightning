@@ -29,7 +29,7 @@ struct txowatch {
 };
 
 struct txdeliver {
-    struct bitcoin_tx *deliver_tx;
+    const struct bitcoin_tx *deliver_tx;
 
     /* data to build witness */
     u8 *wscript;
@@ -58,7 +58,7 @@ struct lnwatch_task {
     struct sha256_double commitid;
 
     /* the tx needed to be trigger and broadcasted by txowatch task in aggresive mode*/
-    struct bitcoin_tx *trigger_tx;
+    const struct bitcoin_tx *trigger_tx;
 
     /* the revocation preimage used in htlctxs/redeem_tx */
     struct sha256* preimage;
