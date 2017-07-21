@@ -1606,6 +1606,41 @@ void db_add_commit_map(struct LNchannel *lnchn,
 	tal_free(ctx);
 }
 
+bool db_find_commit(struct LNchannel *lnchn,
+    const struct sha256_double *txid, u64 *commit_num) {
+
+    int err;
+    sqlite3_stmt *stmt;
+    sqlite3 *sql = lnchn->dstate->db->sql;
+    char *ctx = tal_tmpctx(lnchn);
+    const char *select;
+
+    select = tal_fmt(ctx,
+        "SELECT * FROM their_commitments WHERE lnchn=x'%s' AND txid=x'%s';",
+        pubkey_to_hexstr(ctx, lnchn->id),
+        tal_hexstr(ctx, txid, sizeof(*txid)));
+
+    err = sqlite3_prepare_v2(sql, select, -1, &stmt, NULL);
+    
+    if (err != SQLITE_OK)
+    	fatal("db_find_commit:prepare gave %s:%s",
+    		    sqlite3_errstr(err), sqlite3_errmsg(sql));
+    
+    while ((err = sqlite3_step(stmt)) != SQLITE_DONE) {
+    	if (err != SQLITE_ROW)
+    		fatal("db_find_commit:step gave %s:%s",
+    			    sqlite3_errstr(err),
+    			    sqlite3_errmsg(sql));
+    	if (sqlite3_column_count(stmt) != 1)
+    		fatal("db_find_commit:step gave %i cols, not 3",
+    			    sqlite3_column_count(stmt));
+        *commit_num = sqlite3_column_int64(stmt, 2);
+        return true;
+    }
+
+    return false;
+}
+
 ///* FIXME: Clean out old ones! */
 //bool db_add_lnchn_address(struct lightningd_state *dstate,
 //			 const struct LNchannel_address *addr)

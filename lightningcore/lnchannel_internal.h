@@ -195,6 +195,8 @@ void internal_resolve_htlc(struct LNchannel *lnchn, const struct sha256 *rhash);
 void internal_update_htlc_watch(struct LNchannel *chn, 
                  const struct sha256 *rhash, struct txowatch* txo);
 
+void internal_fail_own_htlc(struct LNchannel *lnchn, struct htlc *htlc);
+
 static bool outputscript_eq(const struct bitcoin_tx_output *out,
     size_t i, const u8 *script)
 {
