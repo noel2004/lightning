@@ -17,6 +17,7 @@
 #include <bitcoin/base58.h>
 #include <bitcoin/address.h>
 #include <bitcoin/script.h>
+#include <bitcoin/preimage.h>
 #include <bitcoin/tx.h>
 #include <ccan/array_size/array_size.h>
 #include <ccan/cast/cast.h>
@@ -70,59 +71,6 @@ static const struct bitcoin_tx *mk_bitcoin_close(const tal_t *ctx,
 	return close_tx;
 }
 
-/* Create a bitcoin spend tx (to spend our commit's outputs) */
-static const struct bitcoin_tx *bitcoin_spend_ours(struct LNchannel *lnchn)
-{
-	u8 *witnessscript;
-	const struct bitcoin_tx *commit = lnchn->local.commit->tx;
-	ecdsa_signature sig;
-	struct bitcoin_tx *tx;
-	unsigned int p2wsh_out;
-	uint64_t fee;
-
-	/* The redeemscript for a commit tx is fairly complex. */
-	witnessscript = bitcoin_redeem_secret_or_delay(lnchn,
-						      &lnchn->local.finalkey,
-						      &lnchn->remote.locktime,
-						      &lnchn->remote.finalkey,
-						      &lnchn->local.commit->revocation_hash);
-
-	/* Now, create transaction to spend it. */
-	tx = bitcoin_tx(lnchn, 1, 1);
-	tx->input[0].txid = lnchn->local.commit->txid;
-	p2wsh_out = find_p2wsh_out(commit, witnessscript);
-	tx->input[0].index = p2wsh_out;
-	tx->input[0].sequence_number = bitcoin_nsequence(&lnchn->remote.locktime);
-	tx->input[0].amount = tal_dup(tx->input, u64,
-				      &commit->output[p2wsh_out].amount);
-
-    tx->output[0].script = lnchn->final_redeemscript;/* scriptpubkey_p2sh(tx,
-				 bitcoin_redeem_single(tx,
-						       &lnchn->local.finalkey));*/
-
-	/* Witness length can vary, due to DER encoding of sigs, but we
-	 * use 176 from an example run. */
-	assert(measure_tx_cost(tx) == 83 * 4);
-
-	fee = fee_by_feerate(83 + 176 / 4, get_feerate(lnchn->dstate->topology));
-
-	/* FIXME: Fail gracefully in these cases (not worth collecting) */
-	if (fee > commit->output[p2wsh_out].amount
-	    || is_dust(commit->output[p2wsh_out].amount - fee))
-		fatal("Amount of %"PRIu64" won't cover fee %"PRIu64,
-		      commit->output[p2wsh_out].amount, fee);
-
-	tx->output[0].amount = commit->output[p2wsh_out].amount - fee;
-
-	lnchn_sign_spend(lnchn, tx, witnessscript, &sig);
-
-	tx->input[0].witness = bitcoin_witness_secret(tx,
-						      NULL, 0, &sig,
-						      witnessscript);
-
-	return tx;
-}
-
 /* Sign and local commit tx */
 static void sign_commit_tx(struct LNchannel *lnchn)
 {
@@ -151,60 +99,6 @@ static u64 commit_tx_fee(const struct bitcoin_tx *commit, u64 anchor_satoshis)
 
 	assert(anchor_satoshis >= total);
 	return anchor_satoshis - total;
-}
-
-struct LNchannel *find_lnchn(struct lightningd_state *dstate, const struct pubkey *id)
-{
-	struct LNchannel *lnchn;
-
-	list_for_each(&dstate->lnchns, lnchn, list) {
-		if (lnchn->id && pubkey_eq(lnchn->id, id))
-			return lnchn;
-	}
-	return NULL;
-}
-
-struct LNchannel *find_lnchn_by_pkhash(struct lightningd_state *dstate, const u8 *pkhash)
-{
-	struct LNchannel *lnchn;
-	u8 addr[20];
-
-	list_for_each(&dstate->lnchns, lnchn, list) {
-		pubkey_hash160(addr, lnchn->id);
-		if (memcmp(addr, pkhash, sizeof(addr)) == 0)
-			return lnchn;
-	}
-	return NULL;
-}
-
-void debug_dump_lnchns(struct lightningd_state *dstate)
-{
-	struct LNchannel *lnchn;
-
-	list_for_each(&dstate->lnchns, lnchn, list) {
-		if (!lnchn->local.commit
-		    || !lnchn->remote.commit)
-			continue;
-		log_debug_struct(lnchn->log, "our cstate: %s",
-				 struct channel_state,
-				 lnchn->local.commit->cstate);
-		log_debug_struct(lnchn->log, "their cstate: %s",
-				 struct channel_state,
-				 lnchn->remote.commit->cstate);
-	}
-}
-
-static struct LNchannel *find_lnchn_json(struct lightningd_state *dstate,
-			      const char *buffer,
-			      jsmntok_t *lnchnidtok)
-{
-	struct pubkey lnchnid;
-
-	if (!pubkey_from_hexstr(buffer + lnchnidtok->start,
-				lnchnidtok->end - lnchnidtok->start, &lnchnid))
-		return NULL;
-
-	return find_lnchn(dstate, &lnchnid);
 }
 
 static bool lnchn_uncommitted_changes(const struct LNchannel *lnchn)
@@ -243,11 +137,6 @@ static void remote_changes_pending(struct LNchannel *lnchn)
 static void lnchn_update_complete(struct LNchannel *lnchn)
 {
 	log_debug(lnchn->log, "lnchn_update_complete");
-	if (lnchn->commit_jsoncmd) {
-		command_success(lnchn->commit_jsoncmd,
-				null_response(lnchn->commit_jsoncmd));
-		lnchn->commit_jsoncmd = NULL;
-	}
 
 	/* Have we got more changes in the meantime? */
 	if (lnchn_uncommitted_changes(lnchn)) {
@@ -256,38 +145,6 @@ static void lnchn_update_complete(struct LNchannel *lnchn)
 	}
 }
 
-/* FIXME: Split success and fail functions, roll state changes etc into
- * success case. */
-static void lnchn_open_complete(struct LNchannel *lnchn, const char *problem)
-{
-	if (problem) {
-		log_unusual(lnchn->log, "lnchn open failed: %s", problem);
-		if (lnchn->open_jsoncmd)  {
-			command_fail(lnchn->open_jsoncmd, "%s", problem);
-			lnchn->open_jsoncmd = NULL;
-		}
-	} else {
-		log_debug(lnchn->log, "lnchn open complete");
-		assert(!lnchn->nc);
-		/* We're connected, so record it. */
-		lnchn->nc = add_connection(lnchn->dstate->rstate,
-					  &lnchn->dstate->id, lnchn->id,
-					  lnchn->dstate->config.fee_base,
-					  lnchn->dstate->config.fee_per_satoshi,
-					  lnchn->dstate->config.min_htlc_expiry,
-					  lnchn->dstate->config.min_htlc_expiry);
-		if (lnchn->open_jsoncmd) {
-			struct json_result *response;
-			response = new_json_result(lnchn->open_jsoncmd);
-
-			json_object_start(response, NULL);
-			json_add_pubkey(response, "id", lnchn->id);
-			json_object_end(response);
-			command_success(lnchn->open_jsoncmd, response);
-			lnchn->open_jsoncmd = NULL;
-		}
-	}
-}
 
 void internal_set_lnchn_state(struct LNchannel *lnchn, enum state newstate,
 			   const char *caller, bool db_commit)
@@ -295,13 +152,14 @@ void internal_set_lnchn_state(struct LNchannel *lnchn, enum state newstate,
 	log_debug(lnchn->log, "%s: %s => %s", caller,
 		  state_name(lnchn->state), state_name(newstate));
 	lnchn->state = newstate;
+    lnchn->state_height = get_block_height(lnchn->dstate->topology);
 
 	/* We can only route in normal state. */
 	if (db_commit)
 		db_update_state(lnchn);
 }
 
-static void lnchn_breakdown(struct LNchannel *lnchn)
+void internal_lnchn_breakdown(struct LNchannel *lnchn)
 {
 	if (lnchn->commit_jsoncmd) {
 		command_fail(lnchn->commit_jsoncmd, "lnchn breakdown");
@@ -412,7 +270,7 @@ void lnchn_fail(struct LNchannel *lnchn, const char *caller)
 
 	/* FIXME: Save state here? */
 	set_lnchn_state(lnchn, STATE_ERR_BREAKDOWN, caller, false);
-	lnchn_breakdown(lnchn);
+	internal_lnchn_breakdown(lnchn);
 }
 
 /* Communication failed: send err (if non-NULL), then dump to chain and close. */
@@ -430,144 +288,9 @@ static bool lnchn_database_err(struct LNchannel *lnchn)
 	return lnchn_comms_err(lnchn, pkt_err(lnchn, "database error"));
 }
 
-/* Unexpected packet received: stop listening, send error, start
- * breakdown procedure, return false. */
-static bool lnchn_received_unexpected_pkt(struct LNchannel *lnchn, const Pkt *pkt,
-					 const char *where)
-{
-	const char *p;
-	Pkt *err;
 
-	log_unusual(lnchn->log, "%s: received unexpected pkt %u (%s) in %s",
-		    where, pkt->pkt_case, pkt_name(pkt->pkt_case),
-		    state_name(lnchn->state));
 
-	if (pkt->pkt_case != PKT__PKT_ERROR) {
-		err = pkt_err_unexpected(lnchn, pkt);
-		goto out;
-	}
 
-	/* FIXME-OLD #2:
-	 *
-	 * A node MUST fail the connection if it receives an `err`
-	 * message, and MUST NOT send an `err` message in this case.
-	 * For other connection failures, a node SHOULD send an
-	 * informative `err` message.
-	 */
-	err = NULL;
-
-	/* Check packet for weird chars. */
-	for (p = pkt->error->problem; *p; p++) {
-		if (cisprint(*p))
-			continue;
-
-		p = tal_hexstr(lnchn, pkt->error->problem,
-			       strlen(pkt->error->problem));
-		log_unusual(lnchn->log, "Error pkt (hex) %s", p);
-		tal_free(p);
-		goto out;
-	}
-	log_unusual(lnchn->log, "Error pkt '%s'", pkt->error->problem);
-
-out:
-	return lnchn_comms_err(lnchn, err);
-}
-
-/* Creation the bitcoin anchor tx, spending output user provided. */
-static bool bitcoin_create_anchor(struct LNchannel *lnchn)
-{
-	struct bitcoin_tx *tx = bitcoin_tx(lnchn, 1, 1);
-	size_t i;
-
-	/* We must be offering anchor for us to try creating it */
-	assert(lnchn->local.offer_anchor);
-
-	tx->output[0].script = scriptpubkey_p2wsh(tx, lnchn->anchor.witnessscript);
-	tx->output[0].amount = lnchn->anchor.input->out_amount;
-
-	tx->input[0].txid = lnchn->anchor.input->txid;
-	tx->input[0].index = lnchn->anchor.input->index;
-	tx->input[0].amount = tal_dup(tx->input, u64,
-				      &lnchn->anchor.input->in_amount);
-
-	if (!wallet_add_signed_input(lnchn->dstate,
-				     &lnchn->anchor.input->walletkey,
-				     tx, 0))
-		return false;
-
-	bitcoin_txid(tx, &lnchn->anchor.txid);
-	lnchn->anchor.tx = tx;
-	lnchn->anchor.index = 0;
-	/* We'll need this later, when we're told to broadcast it. */
-	lnchn->anchor.satoshis = tx->output[0].amount;
-
-	/* To avoid malleation, all inputs must be segwit! */
-	for (i = 0; i < tal_count(tx->input); i++)
-		assert(tx->input[i].witness);
-	return true;
-}
-
-static bool open_pkt_in(struct LNchannel *lnchn, const Pkt *pkt)
-{
-	Pkt *err;
-	struct commit_info *ci;
-
-	assert(lnchn->state == STATE_OPEN_WAIT_FOR_OPENPKT);
-
-	if (pkt->pkt_case != PKT__PKT_OPEN)
-		return lnchn_received_unexpected_pkt(lnchn, pkt, __func__);
-
-	db_start_transaction(lnchn);
-	ci = new_commit_info(lnchn, 0);
-
-	err = accept_pkt_open(lnchn, pkt, &ci->revocation_hash,
-			      &lnchn->remote.next_revocation_hash);
-	if (err) {
-		db_abort_transaction(lnchn);
-		return lnchn_comms_err(lnchn, err);
-	}
-
-	db_set_visible_state(lnchn);
-
-	/* Set up their commit info now: rest gets done in setup_first_commit
-	 * once anchor is established. */
-	lnchn->remote.commit = ci;
-
-	/* Witness script for anchor. */
-	lnchn->anchor.witnessscript
-		= bitcoin_redeem_2of2(lnchn,
-				      &lnchn->local.commitkey,
-				      &lnchn->remote.commitkey);
-
-	if (lnchn->local.offer_anchor) {
-		if (!bitcoin_create_anchor(lnchn)) {
-			db_abort_transaction(lnchn);
-			err = pkt_err(lnchn, "Own anchor unavailable");
-			return lnchn_comms_err(lnchn, err);
-		}
-		/* FIXME: Redundant with lnchn->local.offer_anchor? */
-		lnchn->anchor.ours = true;
-
-		/* This shouldn't happen! */
-		if (!setup_first_commit(lnchn)) {
-			db_abort_transaction(lnchn);
-			err = pkt_err(lnchn, "Own anchor has insufficient funds");
-			return lnchn_comms_err(lnchn, err);
-		}
-		set_lnchn_state(lnchn,  STATE_OPEN_WAIT_FOR_COMMIT_SIGPKT,
-			       __func__, true);
-		if (db_commit_transaction(lnchn) != NULL)
-			return lnchn_database_err(lnchn);
-		queue_pkt_anchor(lnchn);
-		return true;
-	} else {
-		set_lnchn_state(lnchn,  STATE_OPEN_WAIT_FOR_ANCHORPKT,
-			       __func__, true);
-		if (db_commit_transaction(lnchn) != NULL)
-			return lnchn_database_err(lnchn);
-		return true;
-	}
-}
 
 static void funding_tx_failed(struct LNchannel *lnchn,
 			      int exitstatus,
@@ -673,28 +396,6 @@ static bool open_theiranchor_pkt_in(struct LNchannel *lnchn, const Pkt *pkt)
 	queue_pkt_open_commit_sig(lnchn);
 	lnchn_watch_anchor(lnchn, lnchn->local.mindepth);
 	return true;
-}
-
-/* Dump all known channels and nodes to the lnchn. Used when a new
- * connection was established. */
-static void sync_routing_table(struct lightningd_state *dstate, struct LNchannel *lnchn)
-{
-	struct node *n;
-	struct node_map_iter it;
-	int i;
-	struct node_connection *nc;
-	for (n = node_map_first(dstate->rstate->nodes, &it); n; n = node_map_next(dstate->rstate->nodes, &it)) {
-		size_t num_edges = tal_count(n->out);
-		for (i = 0; i < num_edges; i++) {
-			nc = n->out[i];
-			if (nc->channel_announcement)
-				queue_pkt_nested(lnchn, WIRE_CHANNEL_ANNOUNCEMENT, nc->channel_announcement);
-			if (nc->channel_update)
-				queue_pkt_nested(lnchn, WIRE_CHANNEL_UPDATE, nc->channel_update);
-		}
-		if (n->node_announcement && num_edges > 0)
-			queue_pkt_nested(lnchn, WIRE_NODE_ANNOUNCEMENT, n->node_announcement);
-	}
 }
 
 static bool open_wait_pkt_in(struct LNchannel *lnchn, const Pkt *pkt)
@@ -1847,36 +1548,6 @@ static bool lnchn_start_shutdown(struct LNchannel *lnchn)
 	return db_commit_transaction(lnchn) == NULL;
 }
 
-/* Shim to handle the new packet format until we complete the
- * switch. Handing the protobuf in anyway to fall back on protobuf
- * based error handling. */
-static bool nested_pkt_in(struct LNchannel *lnchn, const u32 type,
-				 const u8 *innerpkt, size_t innerpktlen,
-				 const Pkt *pkt)
-{
-	switch (type) {
-	case WIRE_CHANNEL_ANNOUNCEMENT:
-		handle_channel_announcement(lnchn->dstate->rstate, innerpkt, innerpktlen);
-		break;
-	case WIRE_CHANNEL_UPDATE:
-		handle_channel_update(lnchn->dstate->rstate, innerpkt, innerpktlen);
-		break;
-	case WIRE_NODE_ANNOUNCEMENT:
-		handle_node_announcement(lnchn->dstate->rstate, innerpkt, innerpktlen);
-		break;
-	default:
-		/* BOLT01: Unknown even typed packets MUST kill the
-		   connection, unknown odd-typed packets MAY be ignored. */
-		if (type % 2 == 0){
-			return lnchn_received_unexpected_pkt(lnchn, pkt, __func__);
-		} else {
-			log_debug(lnchn->log, "Ignoring odd typed (%d) unknown packet.", type);
-			return true;
-		}
-	}
-	return true;
-}
-
 /* This is the io loop while we're in normal mode. */
 static bool normal_pkt_in(struct LNchannel *lnchn, const Pkt *pkt)
 {
@@ -1935,56 +1606,6 @@ static bool normal_pkt_in(struct LNchannel *lnchn, const Pkt *pkt)
 	return true;
 }
 
-/* Create a HTLC fulfill transaction for onchain.tx[out_num]. */
-static const struct bitcoin_tx *htlc_fulfill_tx(const struct LNchannel *lnchn,
-						unsigned int out_num)
-{
-	struct bitcoin_tx *tx = bitcoin_tx(lnchn, 1, 1);
-	const struct htlc *htlc = lnchn->onchain.htlcs[out_num];
-	const u8 *wscript = lnchn->onchain.wscripts[out_num];
-	ecdsa_signature sig;
-	u64 fee, satoshis;
-
-	assert(htlc->r);
-
-	tx->input[0].index = out_num;
-	tx->input[0].txid = lnchn->onchain.txid;
-	satoshis = htlc->msatoshi / 1000;
-	tx->input[0].amount = tal_dup(tx->input, u64, &satoshis);
-	tx->input[0].sequence_number = bitcoin_nsequence(&lnchn->remote.locktime);
-
-	/* Using a new output address here would be useless: they can tell
-	 * it's their HTLC, and that we collected it via rval. */
-    tx->output[0].script = lnchn->final_redeemscript;/*scriptpubkey_p2sh(tx,
-				 bitcoin_redeem_single(tx,
-						       &lnchn->local.finalkey));*/
-
-	log_debug(lnchn->log, "Pre-witness txlen = %zu\n",
-		  measure_tx_cost(tx) / 4);
-
-	assert(measure_tx_cost(tx) == 83 * 4);
-
-	/* Witness length can vary, due to DER encoding of sigs, but we
-	 * use 539 from an example run. */
-	fee = fee_by_feerate(83 + 539 / 4, get_feerate(lnchn->dstate->topology));
-
-	/* FIXME: Fail gracefully in these cases (not worth collecting) */
-	if (fee > satoshis || is_dust(satoshis - fee))
-		fatal("HTLC fulfill amount of %"PRIu64" won't cover fee %"PRIu64,
-		      satoshis, fee);
-
-	tx->output[0].amount = satoshis - fee;
-
-	lnchn_sign_htlc_fulfill(lnchn, tx, wscript, &sig);
-
-	tx->input[0].witness = bitcoin_witness_htlc(tx,
-						    htlc->r, &sig, wscript);
-
-	log_debug(lnchn->log, "tx cost for htlc fulfill tx: %zu",
-		  measure_tx_cost(tx));
-
-	return tx;
-}
 
 static bool command_htlc_set_fail(struct LNchannel *lnchn, struct htlc *htlc,
 				  enum fail_error error_code, const char *why)
@@ -2016,31 +1637,6 @@ static bool command_htlc_fail(struct LNchannel *lnchn, struct htlc *htlc)
 
 	queue_pkt_htlc_fail(lnchn, htlc);
 	return true;
-}
-
-/* FIXME-OLD #onchain:
- *
- * If the node receives... a redemption preimage for an unresolved *commitment
- * tx* output it was offered, it MUST *resolve* the output by spending it using
- * the preimage.
- */
-static bool fulfill_onchain(struct LNchannel *lnchn, struct htlc *htlc)
-{
-	size_t i;
-
-	for (i = 0; i < tal_count(lnchn->onchain.htlcs); i++) {
-		if (lnchn->onchain.htlcs[i] == htlc) {
-			/* Already irrevocably resolved? */
-			if (lnchn->onchain.resolved[i])
-				return false;
-			lnchn->onchain.resolved[i]
-				= htlc_fulfill_tx(lnchn, i);
-			broadcast_tx(lnchn->dstate->topology,
-				     lnchn, lnchn->onchain.resolved[i], NULL);
-			return true;
-		}
-	}
-	fatal("Unknown HTLC to fulfill onchain");
 }
 
 static bool command_htlc_fulfill(struct LNchannel *lnchn, struct htlc *htlc)
@@ -2148,79 +1744,6 @@ const char *command_htlc_add(struct LNchannel *lnchn, u64 msatoshi,
 	lnchn->htlc_id_counter++;
 
 	return NULL;
-}
-
-static struct io_plan *pkt_out(struct io_conn *conn, struct LNchannel *lnchn)
-{
-	Pkt *out;
-	size_t n = tal_count(lnchn->outpkt);
-
-	if (n == 0) {
-		/* We close the connection once we've sent everything. */
-		if (!state_can_io(lnchn->state)) {
-			log_debug(lnchn->log, "pkt_out: no IO possible, closing");
-			return io_close(conn);
-		}
-		return io_out_wait(conn, lnchn, pkt_out, lnchn);
-	}
-
-	if (lnchn->fake_close || !lnchn->output_enabled)
-		return io_out_wait(conn, lnchn, pkt_out, lnchn);
-
-	out = lnchn->outpkt[0];
-	memmove(lnchn->outpkt, lnchn->outpkt + 1, (sizeof(*lnchn->outpkt)*(n-1)));
-	tal_resize(&lnchn->outpkt, n-1);
-	log_debug(lnchn->log, "pkt_out: writing %s", pkt_name(out->pkt_case));
-	return lnchn_write_packet(conn, lnchn, out, pkt_out);
-}
-
-static void clear_output_queue(struct LNchannel *lnchn)
-{
-	size_t i, n = tal_count(lnchn->outpkt);
-	for (i = 0; i < n; i++)
-		tal_free(lnchn->outpkt[i]);
-	tal_resize(&lnchn->outpkt, 0);
-}
-
-static struct io_plan *pkt_in(struct io_conn *conn, struct LNchannel *lnchn)
-{
-	bool keep_going = true;
-
-	/* We ignore packets if they tell us to, or we're closing already */
-	if (lnchn->fake_close || !state_can_io(lnchn->state))
-		keep_going = true;
-
-	/* Sidestep the state machine for nested packets */
-	else if (lnchn->inpkt->pkt_case == PKT__PKT_NESTED)
-		keep_going = nested_pkt_in(lnchn, lnchn->inpkt->nested->type,
-					   lnchn->inpkt->nested->inner_pkt.data,
-					   lnchn->inpkt->nested->inner_pkt.len,
-					   lnchn->inpkt);
-	else if (state_is_normal(lnchn->state))
-		keep_going = normal_pkt_in(lnchn, lnchn->inpkt);
-	else if (state_is_shutdown(lnchn->state))
-		keep_going = shutdown_pkt_in(lnchn, lnchn->inpkt);
-	else if (lnchn->state == STATE_MUTUAL_CLOSING)
-		keep_going = closing_pkt_in(lnchn, lnchn->inpkt);
-	else if (lnchn->state == STATE_OPEN_WAIT_FOR_OPENPKT)
-		keep_going = open_pkt_in(lnchn, lnchn->inpkt);
-	else if (lnchn->state == STATE_OPEN_WAIT_FOR_COMMIT_SIGPKT)
-		keep_going = open_ouranchor_pkt_in(lnchn, lnchn->inpkt);
-	else if (lnchn->state == STATE_OPEN_WAIT_FOR_ANCHORPKT)
-		keep_going = open_theiranchor_pkt_in(lnchn, lnchn->inpkt);
-	else if (state_is_openwait(lnchn->state))
-		keep_going = open_wait_pkt_in(lnchn, lnchn->inpkt);
-	else {
-		log_unusual(lnchn->log,
-			    "Unexpected state %s", state_name(lnchn->state));
-		keep_going = false;
-	}
-
-	lnchn->inpkt = tal_free(lnchn->inpkt);
-	if (keep_going)
-		return lnchn_read_packet(conn, lnchn, pkt_in);
-	else
-		return lnchn_close(conn, lnchn);
 }
 
 /*
@@ -2458,87 +1981,6 @@ static void lnchn_has_connected(struct LNchannel *lnchn)
 	}
 }
 
-static struct io_plan *init_pkt_in(struct io_conn *conn, struct LNchannel *lnchn)
-{
-	if (lnchn->inpkt->pkt_case != PKT__PKT_INIT) {
-		lnchn_received_unexpected_pkt(lnchn, lnchn->inpkt, __func__);
-		goto fail;
-	}
-
-	/* They might have missed the error, tell them before hanging up */
-	if (state_is_error(lnchn->state)) {
-		queue_pkt_err(lnchn, pkt_err(lnchn, "In error state %s",
-					    state_name(lnchn->state)));
-		goto fail;
-	}
-
-	/* We might have had an onchain event while handshaking! */
-	if (!state_can_io(lnchn->state))
-		goto fail;
-
-	if (lnchn->inpkt->init->has_features) {
-		size_t i;
-
-		/* FIXME-OLD #2:
-		 *
-		 * The receiving node SHOULD ignore any odd feature bits it
-		 * does not support, and MUST fail the connection if any
-		 * unsupported even `features` bit is set. */
-		for (i = 0; i < lnchn->inpkt->init->features.len*CHAR_BIT; i++) {
-			size_t byte = i / CHAR_BIT, bit = i % CHAR_BIT;
-			if (lnchn->inpkt->init->features.data[byte] & (1<<bit)) {
-				/* Can't handle even features. */
-				if (i % 2 != 0) {
-					log_debug(lnchn->log,
-						  "They offered feature %zu", i);
-					continue;
-				}
-				queue_pkt_err(lnchn,
-					      pkt_err(lnchn,
-						      "Unsupported feature %zu",
-						      i));
-				goto fail;
-			}
-		}
-	}
-
-	/* Send any packets they missed. */
-	retransmit_pkts(lnchn, lnchn->inpkt->init->ack);
-
-	/* We let the conversation go this far in case they missed the
-	 * close packets.  But now we can close if we're done. */
-	if (!state_can_io(lnchn->state)) {
-		log_debug(lnchn->log, "State %s, closing immediately",
-			  state_name(lnchn->state));
-		goto fail;
-	}
-
-	/* Back into normal mode. */
-	lnchn->inpkt = tal_free(lnchn->inpkt);
-
-	lnchn_has_connected(lnchn);
-
-	if (state_is_normal(lnchn->state)){
-		announce_channel(lnchn->dstate, lnchn);
-		sync_routing_table(lnchn->dstate, lnchn);
-	}
-
-	return io_duplex(conn,
-			 lnchn_read_packet(conn, lnchn, pkt_in),
-			 pkt_out(conn, lnchn));
-
-fail:
-	/* We always free inpkt; they may yet reconnect. */
-	lnchn->inpkt = tal_free(lnchn->inpkt);
-	return pkt_out(conn, lnchn);
-}
-
-static struct io_plan *read_init_pkt(struct io_conn *conn,
-					  struct LNchannel *lnchn)
-{
-	return lnchn_read_packet(conn, lnchn, init_pkt_in);
-}
-
 static u64 lnchn_commitsigs_received(struct LNchannel *lnchn)
 {
 	return lnchn->their_commitsigs;
@@ -2646,50 +2088,6 @@ static u8 *gen_redeemscript_from_wallet_str(const tal_t *ctx,
 
 }
 
-/* Crypto is on, we are live. */
-static struct io_plan *lnchn_crypto_on(struct io_conn *conn, struct LNchannel *lnchn)
-{
-    struct bitcoin_address redeem_addr;
-
-	lnchn_secrets_init(lnchn);
-
-    /*init redeem script before save lnchn into db and after the secret is done*/
-    if (select_wallet_address_bystr(lnchn->dstate, &redeem_addr))
-        lnchn->final_redeemscript = /*now only use p2pkh script*/
-            gen_redeemscript_from_wallet_str(lnchn, &redeem_addr, 0);
-    else
-        lnchn->final_redeemscript = scriptpubkey_p2sh(lnchn, 
-            bitcoin_redeem_single(lnchn, &lnchn->local.finalkey));
-
-    log_debug(lnchn->log, "set redeem script as {%s}", 
-        tal_hexstr(lnchn, lnchn->final_redeemscript, tal_count(lnchn->final_redeemscript)));
-
-	lnchn_get_revocation_hash(lnchn, 0, &lnchn->local.next_revocation_hash);
-
-	assert(lnchn->state == STATE_INIT);
-
-	/* Counter is 1 for sending pkt_open: we'll do it in retransmit_pkts */
-	lnchn->order_counter++;
-
-	db_start_transaction(lnchn);
-	set_lnchn_state(lnchn, STATE_OPEN_WAIT_FOR_OPENPKT, __func__, true);
-
-	/* FIXME: Start timeout, and close lnchn if they don't progress! */
-	db_create_lnchn(lnchn);
-	if (db_commit_transaction(lnchn) != NULL) {
-		lnchn_database_err(lnchn);
-		return lnchn_close(conn, lnchn);
-	}
-
-	/* Set up out commit info now: rest gets done in setup_first_commit
-	 * once anchor is established. */
-	lnchn->local.commit = new_commit_info(lnchn, 0);
-	lnchn->local.commit->revocation_hash = lnchn->local.next_revocation_hash;
-	lnchn_get_revocation_hash(lnchn, 1, &lnchn->local.next_revocation_hash);
-
-	return lnchn_send_init(conn,lnchn);
-}
-
 static void destroy_lnchn(struct LNchannel *lnchn)
 {
 	if (lnchn->conn)
@@ -2792,13 +2190,12 @@ static bool lnchn_reconnected(struct LNchannel *lnchn,
 }
 
 struct LNchannel *new_LNChannel(struct lightningd_state *dstate,
-		      struct log *log,
-		      enum state state,
-		      bool offer_anchor)
+		      struct log *log)
 {
 	struct LNchannel *lnchn = tal(dstate, struct LNchannel);
 
-	lnchn->state = state;
+	lnchn->state = STATE_INIT;
+    lnchn->state_height = 0;
 	lnchn->id = NULL;
 	lnchn->dstate = dstate;
 	lnchn->secrets = NULL;
@@ -2814,12 +2211,11 @@ struct LNchannel *new_LNChannel(struct lightningd_state *dstate,
 	lnchn->onchain.tx = NULL;
 	lnchn->onchain.resolved = NULL;
 	lnchn->onchain.htlcs = NULL;
-	lnchn->onchain.wscripts = NULL;
 	lnchn->commit_timer = NULL;
 	lnchn->their_prev_revocation_hash = NULL;
 	lnchn->fake_close = false;
 	lnchn->output_enabled = true;
-	lnchn->local.offer_anchor = offer_anchor;
+    lnchn->local.offer_anchor = false;
 	lnchn->broadcast_index = 0;
 	if (!blocks_to_rel_locktime(dstate->config.locktime_blocks,
 				    &lnchn->local.locktime))
@@ -3061,116 +2457,6 @@ static struct io_plan *lnchn_connected_in(struct io_conn *conn,
 	return lnchn_crypto_setup(conn, dstate, NULL, l, crypto_on_in, NULL);
 }
 
-static int make_listen_fd(struct lightningd_state *dstate,
-			  int domain, void *addr, socklen_t len)
-{
-	int fd = socket(domain, SOCK_STREAM, 0);
-	if (fd < 0) {
-		log_debug(dstate->base_log, "Failed to create %u socket: %s",
-			  domain, strerror(errno));
-		return -1;
-	}
-
-	if (addr) {
-		int on = 1;
-
-		/* Re-use, please.. */
-		if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)))
-			log_unusual(dstate->base_log,
-				    "Failed setting socket reuse: %s",
-				    strerror(errno));
-
-		if (bind(fd, addr, len) != 0) {
-			log_unusual(dstate->base_log,
-				    "Failed to bind on %u socket: %s",
-				    domain, strerror(errno));
-			goto fail;
-		}
-	}
-
-	if (listen(fd, 5) != 0) {
-		log_unusual(dstate->base_log,
-			    "Failed to listen on %u socket: %s",
-			    domain, strerror(errno));
-		goto fail;
-	}
-	return fd;
-
-fail:
-	close_noerr(fd);
-	return -1;
-}
-
-void setup_listeners(struct lightningd_state *dstate)
-{
-	struct sockaddr_in addr;
-	struct sockaddr_in6 addr6;
-	socklen_t len;
-	int fd1, fd2;
-
-	if (!dstate->portnum)
-		return;
-
-	memset(&addr, 0, sizeof(addr));
-	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = INADDR_ANY;
-	addr.sin_port = htons(dstate->portnum);
-
-	memset(&addr6, 0, sizeof(addr6));
-	addr6.sin6_family = AF_INET6;
-	addr6.sin6_addr = in6addr_any;
-	addr6.sin6_port = htons(dstate->portnum);
-
-	/* IPv6, since on Linux that (usually) binds to IPv4 too. */
-	fd1 = make_listen_fd(dstate, AF_INET6, &addr6, sizeof(addr6));
-	if (fd1 >= 0) {
-		struct sockaddr_in6 in6;
-
-		len = sizeof(in6);
-		if (getsockname(fd1, (void *)&in6, &len) != 0) {
-			log_unusual(dstate->base_log,
-				    "Failed get IPv6 sockname: %s",
-				    strerror(errno));
-			close_noerr(fd1);
-		} else {
-			addr.sin_port = in6.sin6_port;
-			assert(dstate->portnum == ntohs(addr.sin_port));
-			log_debug(dstate->base_log,
-				  "Creating IPv6 listener on port %u",
-				  dstate->portnum);
-			io_new_listener(dstate, fd1, lnchn_connected_in, dstate);
-		}
-	}
-
-	/* Just in case, aim for the same port... */
-	fd2 = make_listen_fd(dstate, AF_INET, &addr, sizeof(addr));
-	if (fd2 >= 0) {
-		len = sizeof(addr);
-		if (getsockname(fd2, (void *)&addr, &len) != 0) {
-			log_unusual(dstate->base_log,
-				    "Failed get IPv4 sockname: %s",
-				    strerror(errno));
-			close_noerr(fd2);
-		} else {
-			assert(dstate->portnum == ntohs(addr.sin_port));
-			log_debug(dstate->base_log,
-				  "Creating IPv4 listener on port %u",
-				  dstate->portnum);
-			io_new_listener(dstate, fd2, lnchn_connected_in, dstate);
-		}
-	}
-
-	if (fd1 < 0 && fd2 < 0)
-		fatal("Could not bind to a network address");
-}
-
-static void lnchn_failed(struct lightningd_state *dstate,
-			struct json_connecting *connect)
-{
-	/* FIXME: Better diagnostics! */
-	command_fail(connect->cmd, "Failed to connect to lnchn %s:%s",
-		     connect->name, connect->port);
-}
 
 static void json_connect(struct command *cmd,
 			const char *buffer, const jsmntok_t *params)
@@ -3247,14 +2533,6 @@ static void json_connect(struct command *cmd,
 
 	tal_free(tmpctx);
 }
-
-static const struct json_command connect_command = {
-	"connect",
-	json_connect,
-	"Connect to a {host} at {port} using hex-encoded {tx} to fund",
-	"Returns the {id} on success (once channel established)"
-};
-AUTODATA(json_command, &connect_command);
 
 /* Have any of our HTLCs passed their deadline? */
 static bool any_deadline_past(struct LNchannel *lnchn)
@@ -3433,13 +2711,6 @@ void notify_new_block(struct chain_topology *topo, unsigned int height)
 }
 
 
-static const struct bitcoin_tx *irrevocably_resolved(struct LNchannel *lnchn)
-{
-	/* We can't all be irrevocably resolved until the commit tx is,
-	 * so just mark that as resolving us. */
-	return lnchn->onchain.tx;
-}
-
 /* We usually don't fail HTLCs we offered, but if the lnchn breaks down
  * before we've confirmed it, this is exactly what happens. */
 void internal_fail_own_htlc(struct LNchannel *lnchn, struct htlc *htlc)
@@ -3538,139 +2809,6 @@ struct bitcoin_tx *lnchn_create_close_tx(const tal_t *ctx,
 			       cstate.side[REMOTE].pay_msat / 1000);
 }
 
-/* Sets up the initial cstate and commit tx for both nodes: false if
- * insufficient funds. */
-bool setup_first_commit(struct LNchannel *lnchn)
-{
-	bool to_them_only, to_us_only;
-
-	assert(!lnchn->local.commit->tx);
-	assert(!lnchn->remote.commit->tx);
-
-	/* Revocation hashes already filled in, from pkt_open */
-	lnchn->local.commit->cstate = initial_cstate(lnchn->local.commit,
-						    lnchn->anchor.satoshis,
-						    lnchn->local.commit_fee_rate,
-						    lnchn->local.offer_anchor ?
-						    LOCAL : REMOTE);
-	if (!lnchn->local.commit->cstate)
-		return false;
-
-	lnchn->remote.commit->cstate = initial_cstate(lnchn->remote.commit,
-						     lnchn->anchor.satoshis,
-						     lnchn->remote.commit_fee_rate,
-						     lnchn->local.offer_anchor ?
-						     LOCAL : REMOTE);
-	if (!lnchn->remote.commit->cstate)
-		return false;
-
-	lnchn->local.commit->tx = create_commit_tx(lnchn->local.commit,
-						  lnchn,
-						  &lnchn->local.commit->revocation_hash,
-						  lnchn->local.commit->cstate,
-						  LOCAL, &to_them_only);
-	bitcoin_txid(lnchn->local.commit->tx, &lnchn->local.commit->txid);
-
-	lnchn->remote.commit->tx = create_commit_tx(lnchn->remote.commit,
-						   lnchn,
-						   &lnchn->remote.commit->revocation_hash,
-						   lnchn->remote.commit->cstate,
-						   REMOTE, &to_us_only);
-	assert(to_them_only != to_us_only);
-
-	/* If we offer anchor, their commit is to-us only. */
-	assert(to_us_only == lnchn->local.offer_anchor);
-	bitcoin_txid(lnchn->remote.commit->tx, &lnchn->remote.commit->txid);
-
-	lnchn->local.staging_cstate = copy_cstate(lnchn, lnchn->local.commit->cstate);
-	lnchn->remote.staging_cstate = copy_cstate(lnchn, lnchn->remote.commit->cstate);
-
-	return true;
-}
-
-static struct io_plan *lnchn_reconnect(struct io_conn *conn, struct LNchannel *lnchn)
-{
-	/* In case they reconnected to us already. */
-	if (lnchn->conn)
-		return io_close(conn);
-
-	log_debug(lnchn->log, "Reconnected, doing crypto...");
-	lnchn->conn = conn;
-	assert(!lnchn->connected);
-
-	assert(lnchn->id);
-	return lnchn_crypto_setup(conn, lnchn->dstate,
-				 lnchn->id, lnchn->log,
-				 crypto_on_reconnect_out, lnchn);
-}
-
-/* We can't only retry when we want to send: they may want to send us
- * something but not be able to connect (NAT).  So keep retrying.. */
-static void reconnect_failed(struct io_conn *conn, struct LNchannel *lnchn)
-{
-	/* Already otherwise connected (ie. they connected in)? */
-	if (lnchn->conn) {
-		log_debug(lnchn->log, "reconnect_failed: already connected");
-		return;
-	}
-
-	log_debug(lnchn->log, "Setting timer to re-connect");
-	new_reltimer(&lnchn->dstate->timers, lnchn, lnchn->dstate->config.poll_time,
-		     try_reconnect, lnchn);
-}
-
-static struct io_plan *init_conn(struct io_conn *conn, struct LNchannel *lnchn)
-{
-	struct addrinfo a;
-	struct LNchannel_address *addr = find_address(lnchn->dstate, lnchn->id);
-
-	netaddr_to_addrinfo(&a, &addr->addr);
-	return io_connect(conn, &a, lnchn_reconnect, lnchn);
-}
-
-static void try_reconnect(struct LNchannel *lnchn)
-{
-	struct io_conn *conn;
-	struct LNchannel_address *addr;
-	char *name;
-	int fd;
-
-	/* Already reconnected? */
-	if (lnchn->conn) {
-		log_debug(lnchn->log, "try_reconnect: already connected");
-		return;
-	}
-
-	addr = find_address(lnchn->dstate, lnchn->id);
-	if (!addr) {
-		log_debug(lnchn->log, "try_reconnect: no known address");
-		return;
-	}
-
-	fd = socket(addr->addr.saddr.s.sa_family, addr->addr.type,
-		    addr->addr.protocol);
-	if (fd < 0) {
-		log_broken(lnchn->log, "do_reconnect: failed to create socket: %s",
-			   strerror(errno));
-		lnchn_fail(lnchn, __func__);
-		return;
-	}
-
-	assert(!lnchn->conn);
-	conn = io_new_conn(lnchn->dstate, fd, init_conn, lnchn);
-	name = netaddr_name(lnchn, &addr->addr);
-	log_debug(lnchn->log, "Trying to reconnect to %s", name);
-	tal_free(name);
-	io_set_finish(conn, reconnect_failed, lnchn);
-}
-
-void reconnect_lnchns(struct lightningd_state *dstate)
-{
-	struct LNchannel *lnchn;
-
-	list_for_each(&dstate->lnchns, lnchn, list)
-		try_reconnect(lnchn);
-}
 
 /* Return earliest block we're interested in, or 0 for none. */
 u32 get_lnchn_min_block(struct lightningd_state *dstate)
@@ -3705,171 +2843,6 @@ void rebroadcast_anchors(struct lightningd_state *dstate)
 				     lnchn, lnchn->anchor.tx, NULL);
 	}
 }
-
-static void json_add_abstime(struct json_result *response,
-			     const char *id,
-			     const struct abs_locktime *t)
-{
-	json_object_start(response, id);
-	if (abs_locktime_is_seconds(t))
-		json_add_num(response, "second", abs_locktime_to_seconds(t));
-	else
-		json_add_num(response, "block", abs_locktime_to_blocks(t));
-	json_object_end(response);
-}
-
-static void json_add_htlcs(struct json_result *response,
-			   const char *id,
-			   struct LNchannel *lnchn,
-			   enum side owner)
-{
-	struct htlc_map_iter it;
-	struct htlc *h;
-	const struct htlc_map *htlcs = &lnchn->htlcs;
-
-	json_array_start(response, id);
-	for (h = htlc_map_first(htlcs, &it); h; h = htlc_map_next(htlcs, &it)) {
-		if (htlc_owner(h) != owner)
-			continue;
-
-		/* Ignore completed HTLCs. */
-		if (htlc_is_dead(h))
-			continue;
-
-		json_object_start(response, NULL);
-		json_add_u64(response, "msatoshi", h->msatoshi);
-		json_add_abstime(response, "expiry", &h->expiry);
-		json_add_hex(response, "rhash", &h->rhash, sizeof(h->rhash));
-		json_add_string(response, "state", htlc_state_name(h->state));
-		json_object_end(response);
-	}
-	json_array_end(response);
-}
-
-/* FIXME: add history command which shows all prior and current commit txs */
-
-/* FIXME: Somehow we should show running DNS lookups! */
-static void json_getlnchns(struct command *cmd,
-			  const char *buffer, const jsmntok_t *params)
-{
-	struct LNchannel *p;
-	struct json_result *response = new_json_result(cmd);
-
-	json_object_start(response, NULL);
-	json_array_start(response, "lnchns");
-	list_for_each(&cmd->dstate->lnchns, p, list) {
-		const struct channel_state *last;
-
-		json_object_start(response, NULL);
-		json_add_string(response, "name", log_prefix(p->log));
-		json_add_string(response, "state", state_name(p->state));
-
-		if (p->id)
-			json_add_pubkey(response, "lnchnid", p->id);
-
-		json_add_bool(response, "connected", p->connected);
-
-		/* FIXME: Report anchor. */
-
-		if (!p->local.commit || !p->local.commit->cstate) {
-			json_object_end(response);
-			continue;
-		}
-		last = p->local.commit->cstate;
-
-		json_add_num(response, "our_amount", last->side[LOCAL].pay_msat);
-		json_add_num(response, "our_fee", last->side[LOCAL].fee_msat);
-		json_add_num(response, "their_amount", last->side[REMOTE].pay_msat);
-		json_add_num(response, "their_fee", last->side[REMOTE].fee_msat);
-		json_add_htlcs(response, "our_htlcs", p, LOCAL);
-		json_add_htlcs(response, "their_htlcs", p, REMOTE);
-		json_object_end(response);
-	}
-	json_array_end(response);
-	json_object_end(response);
-	command_success(cmd, response);
-}
-
-static const struct json_command getlnchns_command = {
-	"getlnchns",
-	json_getlnchns,
-	"List the current lnchns",
-	"Returns a 'lnchns' array"
-};
-AUTODATA(json_command, &getlnchns_command);
-
-static void json_gethtlcs(struct command *cmd,
-			  const char *buffer, const jsmntok_t *params)
-{
-	struct LNchannel *lnchn;
-	jsmntok_t *lnchnidtok, *resolvedtok;
-	bool resolved = false;
-	struct json_result *response = new_json_result(cmd);
-	struct htlc *h;
-	struct htlc_map_iter it;
-
-	if (!json_get_params(buffer, params,
-			     "lnchnid", &lnchnidtok,
-			     "?resolved", &resolvedtok,
-			     NULL)) {
-		command_fail(cmd, "Need lnchnid");
-		return;
-	}
-
-	lnchn = find_lnchn_json(cmd->dstate, buffer, lnchnidtok);
-	if (!lnchn) {
-		command_fail(cmd, "Could not find lnchn with that lnchnid");
-		return;
-	}
-
-	if (resolvedtok && !json_tok_bool(buffer, resolvedtok, &resolved)) {
-		command_fail(cmd, "resolved must be true or false");
-		return;
-	}
-
-	json_object_start(response, NULL);
-	json_array_start(response, "htlcs");
-	for (h = htlc_map_first(&lnchn->htlcs, &it);
-	     h; h = htlc_map_next(&lnchn->htlcs, &it)) {
-		if (htlc_is_dead(h) && !resolved)
-			continue;
-
-		json_object_start(response, NULL);
-		json_add_u64(response, "id", h->id);
-		json_add_string(response, "state", htlc_state_name(h->state));
-		json_add_u64(response, "msatoshi", h->msatoshi);
-		json_add_abstime(response, "expiry", &h->expiry);
-		json_add_hex(response, "rhash", &h->rhash, sizeof(h->rhash));
-		if (h->r)
-			json_add_hex(response, "r", h->r, sizeof(*h->r));
-		if (htlc_owner(h) == LOCAL) {
-			json_add_num(response, "deadline", h->deadline);
-			if (h->src) {
-				json_object_start(response, "src");
-				json_add_pubkey(response,
-						"lnchnid", h->src->lnchn->id);
-				json_add_u64(response, "id", h->src->id);
-				json_object_end(response);
-			}
-		} else {
-			if (h->routing)
-				json_add_hex(response, "routing",
-					     h->routing, tal_count(h->routing));
-		}
-		json_object_end(response);
-	}
-	json_array_end(response);
-	json_object_end(response);
-	command_success(cmd, response);
-}
-
-static const struct json_command gethtlcs_command = {
-	"gethtlcs",
-	json_gethtlcs,
-	"List HTLCs for {lnchn}; all if {resolved} is true.",
-	"Returns a 'htlcs' array"
-};
-AUTODATA(json_command, &gethtlcs_command);
 
 /* To avoid freeing underneath ourselves, we free outside event loop. */
 void cleanup_lnchns(struct lightningd_state *dstate)
@@ -3972,14 +2945,6 @@ static void json_newhtlc(struct command *cmd,
 	json_object_end(response);
 	command_success(cmd, response);
 }
-
-static const struct json_command dev_newhtlc_command = {
-	"dev-newhtlc",
-	json_newhtlc,
-	"Offer {lnchnid} an HTLC worth {msatoshi} in {expiry} (block number) with {rhash}",
-	"Returns { id: u64 } result on success"
-};
-AUTODATA(json_command, &dev_newhtlc_command);
 
 static void json_fulfillhtlc(struct command *cmd,
 			     const char *buffer, const jsmntok_t *params)

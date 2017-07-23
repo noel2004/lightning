@@ -986,7 +986,10 @@ static void db_load_lnchns(struct lightningd_state *dstate)
 		idstr = pubkey_to_hexstr(dstate, &id);
 		l = new_log(dstate, dstate->log_book, "%s:", idstr);
 		tal_free(idstr);
-		lnchn = new_LNChannel(dstate, l, state, sqlite3_column_int(stmt, 2));
+		lnchn = new_LNChannel(dstate, l);
+        lnchn->state = state;
+        lnchn->state_height = sqlite3_column_int64(stmt, 5);
+        lnchn->local.offer_anchor = sqlite3_column_int(stmt, 2);
 		lnchn->id = tal_dup(lnchn, struct pubkey, &id);
 		lnchn->local.commit_fee_rate = sqlite3_column_int64(stmt, 3);
         address_from_sql(stmt, 4, &lnchn->redeem_addr);
@@ -1213,7 +1216,7 @@ void db_init(struct lightningd_state *dstate)
 		TABLE(lnchns,
 		      SQL_PUBKEY(lnchn), SQL_STATENAME(state),
 		      SQL_BOOL(offered_anchor), SQL_U32(our_feerate),
-              SQL_BLOB(redeemaddr),
+              SQL_BLOB(redeemaddr), SQL_U32(state_height),
 		      "PRIMARY KEY(lnchn)")
 		TABLE(version, "version VARCHAR(100)"));
 	db_exec(__func__, dstate, "INSERT INTO version VALUES ('"VERSION"');");
@@ -1320,12 +1323,13 @@ void db_create_lnchn(struct LNchannel *lnchn)
 	assert(lnchn->dstate->db->in_transaction);
 
     db_exec(__func__, lnchn->dstate,
-        "INSERT INTO lnchns VALUES (x'%s', '%s', %s, %"PRIi64", x'%s');",
+        "INSERT INTO lnchns VALUES (x'%s', '%s', %s, %"PRIi64", x'%s', %u);",
         lnchnid,
         state_name(lnchn->state),
         sql_bool(lnchn->local.offer_anchor),
         lnchn->local.commit_fee_rate,
-        tal_hexstr(ctx, &lnchn->redeem_addr, sizeof(lnchn->redeem_addr.addr)));
+        tal_hexstr(ctx, &lnchn->redeem_addr, sizeof(lnchn->redeem_addr.addr)),
+        lnchn->state_height);
 
 	db_exec(__func__, lnchn->dstate,
 		"INSERT INTO lnchn_secrets VALUES (x'%s', %s);",
@@ -1492,8 +1496,8 @@ void db_update_state(struct LNchannel *lnchn)
 
 	assert(lnchn->dstate->db->in_transaction);
 	db_exec(__func__, lnchn->dstate,
-		"UPDATE lnchns SET state='%s' WHERE lnchn=x'%s';",
-		state_name(lnchn->state), lnchnid);
+		"UPDATE lnchns SET state='%s' AND state_height=%u WHERE lnchn=x'%s';",
+		state_name(lnchn->state), lnchn->state_height, lnchnid);
 	tal_free(ctx);
 }
 

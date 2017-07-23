@@ -68,6 +68,9 @@ struct LNchannel {
 	/* State in state machine. */
 	enum state state;
 
+    /* the block height which state is set*/
+    u32 state_height;
+
 	/* Global state. */
 	struct lightningd_state *dstate;
 
@@ -143,8 +146,6 @@ struct LNchannel {
 		int to_us_idx, to_them_idx;
 		/* Maps what txouts are HTLCs (NULL implies to_us/them_idx). */
 		struct htlc **htlcs;
-		/* Witness scripts for each output (where appropriate) */
-		const u8 **wscripts;
 		/* The tx which resolves each txout. */
 		const struct bitcoin_tx **resolved;
 	} onchain;
@@ -187,6 +188,8 @@ struct LNchannel {
 };
 
 //many internal api and helpers ...
+void internal_lnchn_breakdown(struct LNchannel *lnchn);
+
 void internal_set_lnchn_state(struct LNchannel *lnchn, enum state newstate,
     const char *caller, bool db_commit);
 

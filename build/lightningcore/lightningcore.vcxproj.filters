@@ -74,6 +74,9 @@
     <ClCompile Include="..\..\lightningcore\Source.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\lightningcore\lnchannel_open.c">
+      <Filter>源文件\LNChannel</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\protos\peer.pb.h">

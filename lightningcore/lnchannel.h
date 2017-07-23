@@ -22,12 +22,26 @@ struct LNchannel;
 struct txowatch;
 
 struct LNchannel *new_LNChannel(struct lightningd_state *dstate,
-		      struct log *log,
-		      enum state state,
-		      bool offer_anchor);
+		      struct log *log);
 
-/* Populates very first peer->{local,remote}.commit->{tx,cstate} */
-bool setup_first_commit(struct LNchannel *chn);
+bool lnchn_open_local(struct LNchannel *lnchn);
+
+struct LNchannel_config
+{
+    struct rel_locktime delay;
+    u32    min_depth;
+    u64    initial_fee_rate;
+};
+
+bool lnchn_notify_open_remote(struct LNchannel *lnchn, 
+    const struct pubkey *chnid,                /*if replay from remote, this is NULL*/
+    const struct LNchannel_config *nego_config,/*if replay from remote, this is NULL*/
+    const struct sha256 *revocation_hash[2], /*this and next*/
+    const struct pubkey *remote_key[2] /*commit key and final key*/
+);
+
+bool lnchn_notify_open_confirmed(struct LNchannel *lnchn);
+
 
 /* Whenever we send a signature, remember the txid -> commit_num mapping */
 void lnchn_add_their_commit(struct LNchannel *chn,

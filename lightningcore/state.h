@@ -70,7 +70,6 @@ struct lightningd_state {
 
     /* Our config dir, and rpc file */
     char *config_dir;
-    char *rpc_filename;
 
     /* A default redeem address*/
     char *default_redeem_address;
@@ -84,9 +83,6 @@ struct lightningd_state {
     /* The database where we keep our stuff. */
     struct db *db;
 
-    /* Any pending timers. */
-    struct timers timers;
-
     /* Cached block topology. */
     struct chain_topology *topology;
 
@@ -96,32 +92,14 @@ struct lightningd_state {
     /* Server for out-sourcing transactions*/
     struct outsourcing *outsourcing_svr;
 
-    /* Addresses to contact peers. */
-    struct list_head addresses;
-
-    /* Any outstanding "pay" commands. */
-    struct list_head pay_commands;
+    /* Server for sending message (mostly-once or at least once, according to the API)*/
+    struct LNmessage *message_svr;
 
     ///* Our private key for communication and peer identify*/
     //struct privkey *privkey;
 
     ///* This is us. */
     //struct pubkey id;
-
-    /* Our tame bitcoind. */
-    struct bitcoind *bitcoind;
-
-    /* Wallet addresses we maintain. */
-    struct list_head wallet;
-
-    /* Maintained by invoices.c */
-    struct invoices *invoices;
-
-    /* Routing information */
-    struct routing_state *rstate;
-
-    /* For testing: don't fail if we can't route. */
-    bool dev_never_routefail;
 
     /* Re-exec hack for testing. */
     char **reexec;
