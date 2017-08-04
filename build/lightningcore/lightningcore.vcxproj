@@ -35,7 +35,6 @@
     <ClCompile Include="..\..\lightningcore\permute_tx.c" />
     <ClCompile Include="..\..\lightningcore\pseudorand.c" />
     <ClCompile Include="..\..\lightningcore\secrets.c" />
-    <ClCompile Include="..\..\lightningcore\Source.cpp" />
     <ClCompile Include="..\..\lightningcore\version.c" />
     <ClCompile Include="..\..\protos\peer.pb.cc">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>

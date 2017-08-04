@@ -167,27 +167,21 @@ Pkt *accept_pkt_open_commit_sig(struct peer *peer, const Pkt *pkt,
 }
 
 /* Crypto is on, we are live. */
-static void lnchn_crypto_on(struct LNchannel *lnchn)
+static bool lnchn_crypto_on(struct LNchannel *lnchn, char *redeem_addr)
 {
     struct bitcoin_address redeem_addr;
 
 	lnchn_secrets_init(lnchn);
 
-    /*init redeem script before save lnchn into db and after the secret is done*/
-    if (select_wallet_address_bystr(lnchn->dstate, &redeem_addr))
-        lnchn->final_redeemscript = /*now only use p2pkh script*/
-            gen_redeemscript_from_wallet_str(lnchn, &redeem_addr, 0);
-    else
-        lnchn->final_redeemscript = scriptpubkey_p2sh(lnchn, 
-            bitcoin_redeem_single(lnchn, &lnchn->local.finalkey));
-
-    log_debug(lnchn->log, "set redeem script as {%s}", 
-        tal_hexstr(lnchn, lnchn->final_redeemscript, tal_count(lnchn->final_redeemscript)));
+    char *useaddr = redeem_addr ? redeem_addr : lnchn->dstate->default_redeem_address;
+    if (!bitcoin_from_base58(&lnchn->redeem_addr, useaddr, strlen(useaddr))) {
+        log_broken(lnchn->log, "can't get bitcoin address from {%s}", useaddr);
+        return false;
+    }
+    
+    log_info(lnchn->log, "set redeem address as {%s}", useaddr);
 
 	lnchn_get_revocation_hash(lnchn, 0, &lnchn->local.next_revocation_hash);
-
-	/* Counter is 1 for sending pkt_open: we'll do it in retransmit_pkts */
-	lnchn->order_counter++;
 
 	/* Set up out commit info now: rest gets done in setup_first_commit
 	 * once anchor is established. */

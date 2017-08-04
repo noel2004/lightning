@@ -78,7 +78,7 @@ struct LNchannel {
 	struct pubkey *id;
 
 	/* Order counter for transmission of revocations/commitments. */
-	s64 order_counter;
+	//s64 order_counter;
 
 	/* Their commitments we have signed (which could appear on chain). */
 	struct list_head their_commits;

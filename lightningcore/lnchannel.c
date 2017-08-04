@@ -2200,7 +2200,7 @@ struct LNchannel *new_LNChannel(struct lightningd_state *dstate,
 	lnchn->dstate = dstate;
 	lnchn->secrets = NULL;
 	lnchn->anchor.ok_depth = -1;
-	lnchn->order_counter = 0;
+//	lnchn->order_counter = 0;
 	lnchn->their_commitsigs = 0;
 	lnchn->closing.their_sig = NULL;
 	lnchn->closing.our_script = NULL;
