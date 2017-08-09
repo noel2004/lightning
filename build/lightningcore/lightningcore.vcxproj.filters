@@ -18,6 +18,9 @@
     <Filter Include="源文件\LNChannel">
       <UniqueIdentifier>{714c6266-3525-43c8-a45d-746203f2b501}</UniqueIdentifier>
     </Filter>
+    <Filter Include="lite_c">
+      <UniqueIdentifier>{489267bb-87b9-4d22-b3ea-5c6535b26ac9}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\protos\peer.pb.cc">
@@ -129,6 +132,12 @@
     </ClInclude>
     <ClInclude Include="..\..\lightningcore\names.h">
       <Filter>头文件\LNChannel</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\lightninglite\c\manager.h">
+      <Filter>lite_c</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\lightninglite\c\message.h">
+      <Filter>lite_c</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

@@ -24,7 +24,7 @@ struct txowatch;
 struct LNchannel *new_LNChannel(struct lightningd_state *dstate,
 		      struct log *log);
 
-bool lnchn_open_local(struct LNchannel *lnchn);
+bool lnchn_open_local(struct LNchannel *lnchn, const struct pubkey *chnid);
 
 struct LNchannel_config
 {

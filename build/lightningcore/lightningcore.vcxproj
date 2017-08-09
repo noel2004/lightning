@@ -59,6 +59,8 @@
     <ClInclude Include="..\..\lightningcore\secrets.h" />
     <ClInclude Include="..\..\lightningcore\state.h" />
     <ClInclude Include="..\..\lightningcore\version.h" />
+    <ClInclude Include="..\..\lightninglite\c\manager.h" />
+    <ClInclude Include="..\..\lightninglite\c\message.h" />
     <ClInclude Include="..\..\protos\peer.pb.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">

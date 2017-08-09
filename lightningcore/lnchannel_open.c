@@ -12,6 +12,7 @@
 #include "secrets.h"
 #include "btcnetwork/c/chaintopology.h"
 #include "btcnetwork/c/watch.h"
+#include "lightninglite/c/message.h"
 #include "utils/utils.h"
 #include "utils/sodium/randombytes.h"
 #include <bitcoin/base58.h>
@@ -214,8 +215,7 @@ bool lnchn_notify_open_remote(struct LNchannel *lnchn,
         }
 
         //TODO: add redeem addr option
-        if (!lnchn_crypto_on(lnchn, NULL)) {
-           
+        if (!lnchn_crypto_on(lnchn, NULL)) {           
             return false;
         }
 
@@ -293,17 +293,68 @@ bool lnchn_notify_open_remote(struct LNchannel *lnchn,
 	//} 
 }
 
-bool lnchn_open_local(struct LNchannel *lnchn) {
+bool lnchn_open_local(struct LNchannel *lnchn, const struct pubkey *chnid) {
+
+    //TODO: add redeem addr option
+    if (!lnchn_crypto_on(lnchn, NULL)) {           
+        return false;
+    }
+
+    lnchn->id = tal_dup(lnchn, struct pubkey, chnid);
+    lnchn->remote.offer_anchor = true;
+    //simply set local the same as remote because they are compatible
+    lnchn->local.locktime = lnchn->remote.locktime = nego_config->delay;
+	lnchn->local.mindepth = lnchn->remote.mindepth = nego_config->min_depth;
+	lnchn->remote.commit_fee_rate = nego_config->initial_fee_rate;
+    if (feerate > lnchn->remote.commit_fee_rate) {
+        lnchn->local.commit_fee_rate = feerate - lnchn->remote.commit_fee_rate;
+    }
+    else {
+        /* if he is generous enough */
+        lnchn->local.commit_fee_rate = 0;
+    }
+	log_debug(lnchn->log, "Using local fee rate %"PRIu64, lnchn->local.commit_fee_rate);
+
+    lnchn->local.offer_anchor = false;
 
 	db_start_transaction(lnchn);
 	set_lnchn_state(lnchn, STATE_OPEN_WAIT_FOR_OPENPKT, __func__, true);
 
-	/* FIXME: Start timeout, and close lnchn if they don't progress! */
 	db_create_lnchn(lnchn);
+
 	if (db_commit_transaction(lnchn) != NULL) {
 		lnchn_database_err(lnchn);
-		return lnchn_close(conn, lnchn);
+        return false;
 	}
+	lnchn->htlc_id_counter = 0;
+
+	/* If we free lnchn, conn should be closed, but can't be freed
+	 * immediately so don't make lnchn a parent. */
+	lnchn->conn = conn;
+	io_set_finish(conn, lnchn_disconnect, lnchn);
+
+	lnchn->anchor.min_depth = get_block_height(lnchn->dstate->topology);
+
+	/* FIXME: Attach IO logging for this lnchn. */
+	if (!netaddr_from_fd(io_conn_fd(conn), addr_type, addr_protocol, &addr))
+		return false;
+
+	/* Save/update address if we connected to them. */
+	if (we_connected && !add_lnchn_address(lnchn->dstate, lnchn->id, &addr))
+		return false;
+
+	name = netaddr_name(lnchn, &addr);
+	idstr = pubkey_to_hexstr(name, lnchn->id);
+	log_info(lnchn->log, "Connected %s %s id %s, changing prefix",
+		 we_connected ? "out to" : "in from", name, idstr);
+	set_log_prefix(lnchn->log, tal_fmt(name, "%s:", idstr));
+	tal_free(name);
+
+	log_debug(lnchn->log, "Using fee rate %"PRIu64,
+		  lnchn->local.commit_fee_rate);
+    
+
+    lite_msg_open(lnchn->dstate->message_svr, , , );
 
 }
 

@@ -13,6 +13,10 @@ void    lite_msg_open(struct LNmessage *msg,
     const struct sha256 *revocation_hash[2],
     const struct pubkey *channel_key[2]);
 
-void    lite_msg_anchor(struct LNmessage *msg);
+void    lite_msg_open_ack(struct LNmessage *msg /*, 2-of-2 address*/);
+
+void    lite_msg_anchor(struct LNmessage *msg /*, 2-of-2 txid*/);
+
+void    lite_msg_anchor_ack(struct LNmessage *msg /*, 2-of-2 txid*/);
 
 #endif
