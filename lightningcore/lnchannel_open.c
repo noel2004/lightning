@@ -189,6 +189,8 @@ static bool lnchn_crypto_on(struct LNchannel *lnchn, char *redeem_addr)
 	lnchn->local.commit->revocation_hash = lnchn->local.next_revocation_hash;
 	lnchn_get_revocation_hash(lnchn, 1, &lnchn->local.next_revocation_hash);
 
+    return true;
+
 }
 
 bool lnchn_notify_open_remote(struct LNchannel *lnchn, 
@@ -211,7 +213,11 @@ bool lnchn_notify_open_remote(struct LNchannel *lnchn,
             return false;
         }
 
-        lnchn_crypto_on(lnchn);
+        //TODO: add redeem addr option
+        if (!lnchn_crypto_on(lnchn, NULL)) {
+           
+            return false;
+        }
 
         lnchn->id = tal_steal(lnchn, chnid);
         lnchn->remote.offer_anchor = true;
