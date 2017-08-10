@@ -2222,6 +2222,8 @@ struct LNchannel *new_LNChannel(struct lightningd_state *dstate,
 	lnchn->log = tal_steal(lnchn, log);
 	log_debug(lnchn->log, "New lnchn %p", lnchn);
 
+    lnchn->remote.offer_anchor = false;
+
 	htlc_map_init(&lnchn->htlcs);
 	memset(lnchn->feechanges, 0, sizeof(lnchn->feechanges));
 	shachain_init(&lnchn->their_preimages);

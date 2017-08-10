@@ -178,6 +178,7 @@ static bool lnchn_crypto_on(struct LNchannel *lnchn, char *redeem_addr)
     }
     
     log_info(lnchn->log, "set redeem address as {%s}", useaddr);
+    set_lnchn_state(lnchn, STATE_OPEN_WAIT_FOR_OPENPKT, __func__, true);
 
 	lnchn_get_revocation_hash(lnchn, 0, &lnchn->local.next_revocation_hash);
 
@@ -187,26 +188,30 @@ static bool lnchn_crypto_on(struct LNchannel *lnchn, char *redeem_addr)
 	lnchn->local.commit->revocation_hash = lnchn->local.next_revocation_hash;
 	lnchn_get_revocation_hash(lnchn, 1, &lnchn->local.next_revocation_hash);
 
+    send_open_message(lnchn);
     return true;
 
 }
 
-static void send_open_message(struct LNchannel *lnchn)
+static void send_open_message(struct LNchannel *lnchn, bool recvside)
 {
     struct LNchannel_config config;
 
-    config.initial_fee_rate = lnchn->local.commit_fee_rate;
-    config.min_depth = lnchn->local.mindepth;
-    config.delay = lnchn->local.locktime;
+    if (!recvside) {
+        config.initial_fee_rate = lnchn->local.commit_fee_rate;
+        config.min_depth = lnchn->local.mindepth;
+        config.delay = lnchn->local.locktime;
+    }
 
-    lite_msg_open(lnchn->dstate->message_svr, &config, , );
+    lite_msg_open(lnchn->dstate->message_svr, recvside ? NULL : &config, 
+        , );
 }
 
 void internal_openphase_retry_msg(struct LNchannel *lnchn)
 {
     switch (lnchn->state) {
     case STATE_OPEN_WAIT_FOR_OPENPKT:
-        
+        send_open_message(lnchn);
         break;
     }
 }
@@ -326,8 +331,6 @@ bool lnchn_open_local(struct LNchannel *lnchn, const struct pubkey *chnid) {
     }
 
 	db_start_transaction(lnchn);
-	set_lnchn_state(lnchn, STATE_OPEN_WAIT_FOR_OPENPKT, __func__, true);
-
 	db_create_lnchn(lnchn);
 
 	if (db_commit_transaction(lnchn) != NULL) {

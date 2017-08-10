@@ -275,7 +275,7 @@ static void load_lnchn_secrets(struct LNchannel *lnchn)
 
 	err = sqlite3_finalize(stmt);
 	if (err != SQLITE_OK)
-		fatal("load_lnchn_visible_state:finalize gave %s:%s",
+		fatal("load_lnchn_anchor:finalize gave %s:%s",
 		      sqlite3_errstr(err), sqlite3_errmsg(sql));
 
 	if (!secrets_set)
@@ -320,7 +320,7 @@ static void load_lnchn_anchor(struct LNchannel *lnchn)
 
 	err = sqlite3_finalize(stmt);
 	if (err != SQLITE_OK)
-		fatal("load_lnchn_visible_state:finalize gave %s:%s",
+		fatal("load_lnchn_anchor:finalize gave %s:%s",
 		      sqlite3_errstr(err), sqlite3_errmsg(sql));
 
 	if (!anchor_set)
@@ -366,7 +366,7 @@ static void load_lnchn_anchor_input(struct LNchannel *lnchn)
 
 	err = sqlite3_finalize(stmt);
 	if (err != SQLITE_OK)
-		fatal("load_lnchn_visible_state:finalize gave %s:%s",
+		fatal("load_lnchn_anchor_input:finalize gave %s:%s",
 		      sqlite3_errstr(err), sqlite3_errmsg(sql));
 
 	if (!anchor_input_set)
@@ -923,31 +923,28 @@ static void restore_lnchn_local_visible_state(struct LNchannel *lnchn)
 	memcheck(&lnchn->local.commit_fee_rate,
 		 sizeof(lnchn->local.commit_fee_rate));
 
-	lnchn_get_revocation_hash(lnchn,
-				 lnchn->local.commit->commit_num + 1,
-				 &lnchn->local.next_revocation_hash);
+    if (lnchn->local.commit) {
+	    lnchn_get_revocation_hash(lnchn,
+				     lnchn->local.commit->commit_num + 1,
+				     &lnchn->local.next_revocation_hash);
 
-	//if (state_is_normal(lnchn->state))
-	//	lnchn->nc = add_connection(lnchn->dstate->rstate,
-	//				  &lnchn->dstate->id, lnchn->id,
-	//				  lnchn->dstate->config.fee_base,
-	//				  lnchn->dstate->config.fee_per_satoshi,
-	//				  lnchn->dstate->config.min_htlc_expiry,
-	//				  lnchn->dstate->config.min_htlc_expiry);
+	    lnchn->their_commitsigs = lnchn->local.commit->commit_num + 1;
+	    /* If they created anchor, they didn't send a sig for first commit */
+	    if (!lnchn->anchor.ours)
+		    lnchn->their_commitsigs--;
+    }
+    else {
+        //if still no commit data, just init it
+    }
 
-	lnchn->their_commitsigs = lnchn->local.commit->commit_num + 1;
-	/* If they created anchor, they didn't send a sig for first commit */
-	if (!lnchn->anchor.ours)
-		lnchn->their_commitsigs--;
-
-	if (lnchn->local.commit->order + 1 > lnchn->order_counter)
-		lnchn->order_counter = lnchn->local.commit->order + 1;
-	if (lnchn->remote.commit->order + 1 > lnchn->order_counter)
-		lnchn->order_counter = lnchn->remote.commit->order + 1;
-	if (lnchn->closing.closing_order + 1 > lnchn->order_counter)
-		lnchn->order_counter = lnchn->closing.closing_order + 1;
-	if (lnchn->closing.shutdown_order + 1 > lnchn->order_counter)
-		lnchn->order_counter = lnchn->closing.shutdown_order + 1;
+	//if (lnchn->local.commit->order + 1 > lnchn->order_counter)
+	//	lnchn->order_counter = lnchn->local.commit->order + 1;
+	//if (lnchn->remote.commit->order + 1 > lnchn->order_counter)
+	//	lnchn->order_counter = lnchn->remote.commit->order + 1;
+	//if (lnchn->closing.closing_order + 1 > lnchn->order_counter)
+	//	lnchn->order_counter = lnchn->closing.closing_order + 1;
+	//if (lnchn->closing.shutdown_order + 1 > lnchn->order_counter)
+	//	lnchn->order_counter = lnchn->closing.shutdown_order + 1;
 }
 
 static void db_load_lnchns(struct lightningd_state *dstate)
@@ -993,22 +990,30 @@ static void db_load_lnchns(struct lightningd_state *dstate)
 		lnchn->id = tal_dup(lnchn, struct pubkey, &id);
 		lnchn->local.commit_fee_rate = sqlite3_column_int64(stmt, 3);
         address_from_sql(stmt, 4, &lnchn->redeem_addr);
-		lnchn->order_counter = 1;
 		log_debug(lnchn->log, "%s:%s",
 			  __func__, state_name(lnchn->state));
 
 		load_lnchn_secrets(lnchn);
 		load_lnchn_closing(lnchn);
 		lnchn->anchor.min_depth = 0;
-		if (lnchn->state >= STATE_OPEN_WAIT_ANCHORDEPTH_AND_THEIRCOMPLETE
-		    && !state_is_error(lnchn->state)) {
-			load_lnchn_anchor(lnchn);
-			load_lnchn_visible_state(lnchn);
-			load_lnchn_shachain(lnchn);
-			load_lnchn_commit_info(lnchn);
-			load_lnchn_htlcs(lnchn);
-			restore_lnchn_local_visible_state(lnchn);
-		}
+        if (!state_is_error(lnchn->state)) {
+            if (lnchn->state >= STATE_OPEN_WAIT_ANCHORDEPTH_AND_THEIRCOMPLETE) {
+			    load_lnchn_anchor(lnchn);
+			    load_lnchn_visible_state(lnchn);
+			    load_lnchn_shachain(lnchn);
+			    load_lnchn_commit_info(lnchn);
+			    load_lnchn_htlcs(lnchn);
+			    restore_lnchn_local_visible_state(lnchn);
+            }
+            else if (lnchn->state >= STATE_OPEN_WAIT_FOR_ANCHORPKT) {
+
+                load_lnchn_visible_state(lnchn);
+                //TODO: have part of visible state
+                restore_lnchn_local_visible_state(lnchn);
+            }
+
+        }
+
 		if (lnchn->local.offer_anchor)
 			load_lnchn_anchor_input(lnchn);
 
