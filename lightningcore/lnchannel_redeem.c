@@ -9,9 +9,6 @@
 #include "pseudorand.h"
 #include "remove_dust.h"
 #include "secrets.h"
-#include "lightninglite/c/manager.h"
-#include "btcnetwork/c/chaintopology.h"
-#include "btcnetwork/c/watch.h"
 #include "utils/utils.h"
 #include "utils/sodium/randombytes.h"
 #include <bitcoin/base58.h>

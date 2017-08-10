@@ -3,6 +3,10 @@
 #ifndef LIGHTNING_CORE_LNCHANNEL_INTERNAL_H
 #define LIGHTNING_CORE_LNCHANNEL_INTERNAL_H
 #include "config.h"
+#include "btcnetwork/c/chaintopology.h"
+#include "btcnetwork/c/watch.h"
+#include "lightninglite/c/manager.h"
+#include "lightninglite/c/message.h"
 
 struct anchor_input {
 	struct sha256_double txid;
@@ -200,12 +204,19 @@ void internal_update_htlc_watch(struct LNchannel *chn,
 
 void internal_fail_own_htlc(struct LNchannel *lnchn, struct htlc *htlc);
 
+void internal_openphase_retry_msg(struct LNchannel *lnchn);
+
 static bool outputscript_eq(const struct bitcoin_tx_output *out,
     size_t i, const u8 *script)
 {
     if (tal_count(out[i].script) != tal_count(script))
         return false;
     return memcmp(out[i].script, script, tal_count(script)) == 0;
+}
+
+static u64 desired_commit_feerate(struct lightningd_state *dstate)
+{
+    return get_feerate(dstate->topology) * dstate->config.commitment_fee_percent / 100;
 }
 
 #endif /* LIGHTNING_CORE_LNCHANNEL_INTERNAL_H */

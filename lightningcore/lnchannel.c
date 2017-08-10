@@ -1953,10 +1953,6 @@ static void retransmit_pkts(struct LNchannel *lnchn, s64 ack)
 	retry_all_routing(lnchn);
 }
 
-static u64 desired_commit_feerate(struct lightningd_state *dstate)
-{
-	return get_feerate(dstate->topology) * dstate->config.commitment_fee_percent / 100;
-}
 
 static bool want_feechange(const struct LNchannel *lnchn)
 {
