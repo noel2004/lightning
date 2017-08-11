@@ -211,8 +211,9 @@ void internal_openphase_retry_msg(struct LNchannel *lnchn)
 {
     switch (lnchn->state) {
     case STATE_OPEN_WAIT_FOR_OPENPKT:
-        send_open_message(lnchn);
-        break;
+        send_open_message(lnchn, false); break;
+    case STATE_OPEN_WAIT_FOR_ANCHORPKT:
+        send_open_message(lnchn, true); break;
     }
 }
 

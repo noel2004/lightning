@@ -934,7 +934,7 @@ static void restore_lnchn_local_visible_state(struct LNchannel *lnchn)
 		    lnchn->their_commitsigs--;
     }
     else {
-        //if still no commit data, just init it
+        lnchn_get_revocation_hash(lnchn, 0, &lnchn->local.next_revocation_hash);
     }
 
 	//if (lnchn->local.commit->order + 1 > lnchn->order_counter)
@@ -1006,11 +1006,9 @@ static void db_load_lnchns(struct lightningd_state *dstate)
 			    restore_lnchn_local_visible_state(lnchn);
             }
             else if (lnchn->state >= STATE_OPEN_WAIT_FOR_ANCHORPKT) {
-
-                load_lnchn_visible_state(lnchn);
-                //TODO: have part of visible state
-                restore_lnchn_local_visible_state(lnchn);
+                load_lnchn_visible_state(lnchn);                
             }
+            restore_lnchn_local_visible_state(lnchn);
 
         }
 
