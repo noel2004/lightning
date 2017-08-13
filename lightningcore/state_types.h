@@ -10,6 +10,7 @@ enum state {
 	 */
 	STATE_OPEN_WAIT_FOR_OPENPKT,
 	STATE_OPEN_WAIT_FOR_ANCHORPKT,
+    STATE_OPEN_WAIT_FOR_CREATEANCHOR,
 	STATE_OPEN_WAIT_FOR_COMMIT_SIGPKT,
 
 	/* We're waiting for depth+their complete. */

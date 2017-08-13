@@ -422,6 +422,9 @@ static void load_lnchn_visible_state(struct LNchannel *lnchn)
 			= bitcoin_redeem_2of2(lnchn,
 					      &lnchn->local.commitkey,
 					      &lnchn->remote.commitkey);
+
+        /* Also update local locktime and mindepth, so we always keep same status*/
+        lnchn_negotiate_from_remote(lnchn);
 	}
 
 	if (!visible_set)
@@ -997,21 +1000,20 @@ static void db_load_lnchns(struct lightningd_state *dstate)
 		load_lnchn_closing(lnchn);
 		lnchn->anchor.min_depth = 0;
         if (!state_is_error(lnchn->state)) {
-            if (lnchn->state >= STATE_OPEN_WAIT_ANCHORDEPTH_AND_THEIRCOMPLETE) {
+            if (lnchn->state >= STATE_OPEN_WAIT_FOR_COMMIT_SIGPKT) {
 			    load_lnchn_anchor(lnchn);
-			    load_lnchn_visible_state(lnchn);
+            }
+            if (lnchn->state >= STATE_OPEN_WAIT_FOR_ANCHORPKT) {
+                load_lnchn_visible_state(lnchn);                
+            }
+            if (lnchn->state >= STATE_OPEN_WAIT_ANCHORDEPTH_AND_THEIRCOMPLETE) {
 			    load_lnchn_shachain(lnchn);
 			    load_lnchn_commit_info(lnchn);
 			    load_lnchn_htlcs(lnchn);
-			    restore_lnchn_local_visible_state(lnchn);
-            }
-            else if (lnchn->state >= STATE_OPEN_WAIT_FOR_ANCHORPKT) {
-                load_lnchn_visible_state(lnchn);                
             }
             restore_lnchn_local_visible_state(lnchn);
 
         }
-
 		if (lnchn->local.offer_anchor)
 			load_lnchn_anchor_input(lnchn);
 

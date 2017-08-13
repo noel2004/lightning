@@ -53,6 +53,17 @@ static bool check_config_compatible(const struct lightningd_state *dstate,
     return true;
 }
 
+void lnchn_negotiate_from_remote(struct LNchannel *lnchn)
+{
+    /*
+        TODO: here just simply set local the same as remote, later we should 
+        derive suitable values from configuration
+    */
+    lnchn->local.locktime = lnchn->remote.locktime;
+	lnchn->local.mindepth = lnchn->remote.mindepth;
+
+}
+
 /* Creation the bitcoin anchor tx, spending output user provided. */
 static bool bitcoin_create_anchor(struct LNchannel *lnchn)
 {
@@ -178,64 +189,69 @@ static bool lnchn_crypto_on(struct LNchannel *lnchn, char *redeem_addr)
     }
     
     log_info(lnchn->log, "set redeem address as {%s}", useaddr);
-    set_lnchn_state(lnchn, STATE_OPEN_WAIT_FOR_OPENPKT, __func__, true);
+    internal_set_lnchn_state(lnchn, STATE_OPEN_WAIT_FOR_OPENPKT, __func__, true);
 
 	lnchn_get_revocation_hash(lnchn, 0, &lnchn->local.next_revocation_hash);
-
-	/* Set up out commit info now: rest gets done in setup_first_commit
-	 * once anchor is established. */
-	lnchn->local.commit = new_commit_info(lnchn, 0);
-	lnchn->local.commit->revocation_hash = lnchn->local.next_revocation_hash;
-	lnchn_get_revocation_hash(lnchn, 1, &lnchn->local.next_revocation_hash);
-
-    send_open_message(lnchn);
     return true;
-
 }
 
-static void send_open_message(struct LNchannel *lnchn, bool recvside)
+static void send_open_message(struct LNchannel *lnchn)
 {
     struct LNchannel_config config;
+    struct pubkey *ck[2];
 
-    if (!recvside) {
-        config.initial_fee_rate = lnchn->local.commit_fee_rate;
-        config.min_depth = lnchn->local.mindepth;
-        config.delay = lnchn->local.locktime;
-    }
+    config.initial_fee_rate = lnchn->local.commit_fee_rate;
+    config.min_depth = lnchn->local.mindepth;
+    config.delay = lnchn->local.locktime;
+    //TODO: acceptor should indicate a minium (or supposed) value he will accept
+    config.purpose_satoshi = 0;
 
-    lite_msg_open(lnchn->dstate->message_svr, recvside ? NULL : &config, 
-        , );
+    ck[0] = &lnchn->local.commitkey;
+    ck[1] = &lnchn->local.finalkey;
+
+    lite_msg_open(lnchn->dstate->message_svr, lnchn->id, 
+        &config, &lnchn->local.next_revocation_hash, ck);
+}
+
+static void send_anchor_message(struct LNchannel *lnchn)
+{
+    lite_msg_anchor(lnchn->dstate->message_svr, lnchn->id,
+        &lnchn->anchor.txid, lnchn->anchor.index, lnchn->anchor.satoshis);
 }
 
 void internal_openphase_retry_msg(struct LNchannel *lnchn)
 {
     switch (lnchn->state) {
     case STATE_OPEN_WAIT_FOR_OPENPKT:
-        send_open_message(lnchn, false); break;
     case STATE_OPEN_WAIT_FOR_ANCHORPKT:
-        send_open_message(lnchn, true); break;
+        send_open_message(lnchn); break;
+    case STATE_OPEN_WAIT_FOR_COMMIT_SIGPKT:
+        send_anchor_message(lnchn); break;
+
+    default://any else states no need a retry msg
+        break;
     }
 }
 
 bool lnchn_notify_open_remote(struct LNchannel *lnchn, 
     const struct pubkey *chnid,                /*if replay from remote, this is NULL*/
-    const struct LNchannel_config *nego_config,/*if replay from remote, this is NULL*/
-    const struct sha256 *revocation_hash[2], /*this and next*/
+    const struct LNchannel_config *nego_config,
+    const struct sha256 *revocation_hash, /*first hash*/
     const struct pubkey *remote_key[2] /*commit key and final key*/    
 )
 {
 	struct commit_info *ci;
 
+    if (!check_config_compatible(lnchn->dstate, nego_config)) {
+        //TODO: print out the config
+        log_broken(lnchn->log, "Not compatible config for channel");
+        return false;
+    }
+
     if (lnchn->state == STATE_INIT) {
         u64 feerate = get_feerate(lnchn->dstate->topology);
 
         assert(chnid != NULL && nego_config != NULL);
-
-        if (!check_config_compatible(lnchn->dstate, nego_config)) {
-            //TODO: print out the config
-            log_broken(lnchn->log, "Not compatible config for channel");
-            return false;
-        }
 
         //TODO: add redeem addr option
         if (!lnchn_crypto_on(lnchn, NULL)) {           
@@ -244,12 +260,9 @@ bool lnchn_notify_open_remote(struct LNchannel *lnchn,
 
         lnchn->id = tal_steal(lnchn, chnid);
         lnchn->remote.offer_anchor = true;
-        //simply set local the same as remote because they are compatible
-        lnchn->local.locktime = lnchn->remote.locktime = nego_config->delay;
-	    lnchn->local.mindepth = lnchn->remote.mindepth = nego_config->min_depth;
-	    lnchn->remote.commit_fee_rate = nego_config->initial_fee_rate;
-        if (feerate > lnchn->remote.commit_fee_rate) {
-            lnchn->local.commit_fee_rate = feerate - lnchn->remote.commit_fee_rate;
+        //feerate is adjusted first ...
+        if (feerate > nego_config->initial_fee_rate) {
+            lnchn->local.commit_fee_rate = feerate - nego_config->initial_fee_rate;
         }
         else {
             /* if he is generous enough */
@@ -263,24 +276,25 @@ bool lnchn_notify_open_remote(struct LNchannel *lnchn,
         db_create_lnchn(lnchn);
     }
     else if (lnchn->state == STATE_OPEN_WAIT_FOR_OPENPKT) {
+        assert(!lnchn->remote.offer_anchor);
         db_start_transaction(lnchn);
     }
     else {
         return false;
     }	
 
+    //update remote data and corresponding local one
+    lnchn->remote.commit_fee_rate = nego_config->initial_fee_rate;
+    lnchn->remote.locktime = nego_config->delay;
+	lnchn->remote.mindepth = nego_config->min_depth;
+
+    lnchn_negotiate_from_remote(lnchn);
+
     memcpy(&lnchn->remote.commitkey, remote_key[0], sizeof(struct pubkey));
     memcpy(&lnchn->remote.finalkey, remote_key[1], sizeof(struct pubkey));
+    memcpy(&lnchn->remote.next_revocation_hash, revocation_hash, sizeof(struct sha256));
 
 	db_set_visible_state(lnchn);
-
-	ci = new_commit_info(lnchn, 0);
-    memcpy(&ci->revocation_hash, revocation_hash[0], sizeof(struct sha256));
-    memcpy(&lnchn->remote.next_revocation_hash, revocation_hash[1], sizeof(struct sha256));
-
-	/* Set up their commit info now: rest gets done in setup_first_commit
-	 * once anchor is established. */
-	lnchn->remote.commit = ci;
 
 	/* Witness script for anchor. */
 	lnchn->anchor.witnessscript
@@ -288,13 +302,51 @@ bool lnchn_notify_open_remote(struct LNchannel *lnchn,
 				      &lnchn->local.commitkey,
 				      &lnchn->remote.commitkey);
 
-    set_lnchn_state(lnchn,  STATE_OPEN_WAIT_FOR_ANCHORPKT, __func__, true);
+
+    internal_set_lnchn_state(lnchn,  lnchn->state == STATE_INIT ? 
+        STATE_OPEN_WAIT_FOR_ANCHORPKT : STATE_OPEN_WAIT_FOR_CREATEANCHOR, 
+        __func__, true);
+
     if (db_commit_transaction(lnchn) != NULL)
         return false;
 
-    //lite_msg_open
+    if (lnchn->state == STATE_INIT)send_open_message(lnchn);
 
     return true;
+}
+
+bool lnchn_open_local(struct LNchannel *lnchn, const struct pubkey *chnid) {
+
+    lnchn->id = tal_dup(lnchn, struct pubkey, chnid);
+    lnchn->local.commit_fee_rate = desired_commit_feerate(lnchn->dstate);
+    log_debug(lnchn->log, "Using local fee rate %"PRIu64, lnchn->local.commit_fee_rate);
+
+    //TODO: add redeem addr option
+    if (!lnchn_crypto_on(lnchn, NULL)) {           
+        return false;
+    }
+
+    lnchn->local.offer_anchor = true;
+    lnchn->remote.offer_anchor = false;
+
+	db_start_transaction(lnchn);
+	db_create_lnchn(lnchn);
+
+	if (db_commit_transaction(lnchn) != NULL) {
+		lnchn_database_err(lnchn);
+        return false;
+	}
+
+    send_open_message(lnchn);
+    return true;
+
+}
+
+bool lnchn_open_anchor(struct LNchannel *lnchn, const struct bitcoin_tx *anchor_tx) {
+
+    if (lnchn->state != STATE_OPEN_WAIT_FOR_ANCHORPKT) {
+        return false;
+     }
 
 	//if (lnchn->local.offer_anchor) {
 	//	if (!bitcoin_create_anchor(lnchn)) {
@@ -318,32 +370,45 @@ bool lnchn_notify_open_remote(struct LNchannel *lnchn,
 	//	queue_pkt_anchor(lnchn);
 	//	return true;
 	//} 
-}
 
-bool lnchn_open_local(struct LNchannel *lnchn, const struct pubkey *chnid) {
+    lnchn->anchor.ours = true;
+    lnchn->anchor.min_depth = get_block_height(lnchn->dstate->topology);
 
-    lnchn->id = tal_dup(lnchn, struct pubkey, chnid);
-    lnchn->local.commit_fee_rate = desired_commit_feerate(lnchn->dstate);
-    log_debug(lnchn->log, "Using local fee rate %"PRIu64, lnchn->local.commit_fee_rate);
+    db_start_transaction(lnchn);
+    db_set_anchor(lnchn);
 
-    //TODO: add redeem addr option
-    if (!lnchn_crypto_on(lnchn, NULL)) {           
+    internal_set_lnchn_state(lnchn,  STATE_OPEN_WAIT_FOR_COMMIT_SIGPKT, __func__, true);
+
+    if (db_commit_transaction(lnchn) != NULL){
+        lnchn_database_err(lnchn);
         return false;
     }
 
-	db_start_transaction(lnchn);
-	db_create_lnchn(lnchn);
+    send_anchor_message(lnchn);
+    return true;
+}
 
-	if (db_commit_transaction(lnchn) != NULL) {
-		lnchn_database_err(lnchn);
+static void on_first_commit_task(const struct LNchannel* lnchn, enum outsourcing_result ret, void *cbdata)
+{
+
+}
+
+bool lnchn_notify_anchor(struct LNchannel *lnchn, const struct pubkey *chnid,
+    const struct sha256_double *txid, unsigned int index, unsigned long long amount
+) {
+
+    db_start_transaction(lnchn);
+
+    db_new_commit_info(lnchn, LOCAL, NULL);
+    db_new_commit_info(lnchn, REMOTE, NULL);
+    internal_set_lnchn_state(lnchn,  STATE_OPEN_WAIT_ANCHORDEPTH_AND_THEIRCOMPLETE, __func__, true);
+
+    if (db_commit_transaction(lnchn) != NULL){
+        lnchn_database_err(lnchn);
         return false;
-	}
-
-	//lnchn->anchor.min_depth = get_block_height(lnchn->dstate->topology);
-
+    }
 
     return true;
-
 }
 
 static bool open_ouranchor_pkt_in(struct LNchannel *lnchn, const Pkt *pkt)

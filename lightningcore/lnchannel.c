@@ -269,27 +269,15 @@ void lnchn_fail(struct LNchannel *lnchn, const char *caller)
 		return;
 
 	/* FIXME: Save state here? */
-	set_lnchn_state(lnchn, STATE_ERR_BREAKDOWN, caller, false);
+	internal_set_lnchn_state(lnchn, STATE_ERR_BREAKDOWN, caller, false);
 	internal_lnchn_breakdown(lnchn);
 }
 
-/* Communication failed: send err (if non-NULL), then dump to chain and close. */
-static bool lnchn_comms_err(struct LNchannel *lnchn, Pkt *err)
+static void lnchn_database_err(struct LNchannel *lnchn)
 {
-	if (err)
-		queue_pkt_err(lnchn, err);
-
 	lnchn_fail(lnchn, __func__);
-	return false;
+
 }
-
-static bool lnchn_database_err(struct LNchannel *lnchn)
-{
-	return lnchn_comms_err(lnchn, pkt_err(lnchn, "database error"));
-}
-
-
-
 
 
 static void funding_tx_failed(struct LNchannel *lnchn,

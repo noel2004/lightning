@@ -19,29 +19,43 @@
 struct log;
 struct lightningd_state;
 struct LNchannel;
+struct bitcoin_tx;
 struct txowatch;
+struct sha256_double;
 
 struct LNchannel *new_LNChannel(struct lightningd_state *dstate,
 		      struct log *log);
 
 bool lnchn_open_local(struct LNchannel *lnchn, const struct pubkey *chnid);
 
+bool lnchn_open_anchor(struct LNchannel *lnchn, const struct bitcoin_tx *anchor_tx);
+
+//if state is less than first commit, this is safe to redeem anchord txid
+//if force is false, only return valid txid for possible state and chain depth
+const struct sha256_double* lnchn_get_anchor_txid(struct LNchannel *lnchn, bool force);
+
 struct LNchannel_config
 {
     struct rel_locktime delay;
     u32    min_depth;
     u64    initial_fee_rate;
+    u64    purpose_satoshi;
 };
+
+void lnchn_negotiate_from_remote(struct LNchannel *lnchn);
 
 bool lnchn_notify_open_remote(struct LNchannel *lnchn, 
     const struct pubkey *chnid,                /*if replay from remote, this is NULL*/
-    const struct LNchannel_config *nego_config,/*if replay from remote, this is NULL*/
-    const struct sha256 *revocation_hash[2], /*this and next*/
+    const struct LNchannel_config *nego_config,
+    const struct sha256 *revocation_hash,      /*first hash*/
     const struct pubkey *remote_key[2] /*commit key and final key*/
 );
 
-bool lnchn_notify_open_confirmed(struct LNchannel *lnchn);
-
+bool lnchn_notify_anchor(struct LNchannel *lnchn, const struct pubkey *chnid,
+    const struct sha256_double *txid,
+    unsigned int index,
+    unsigned long long amount
+);
 
 /* Whenever we send a signature, remember the txid -> commit_num mapping */
 void lnchn_add_their_commit(struct LNchannel *chn,
