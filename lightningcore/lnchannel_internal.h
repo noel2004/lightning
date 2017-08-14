@@ -165,6 +165,9 @@ struct LNchannel {
 	/* What happened. */
 	struct log *log;
 
+    /* Tell detail for a notify failure*/
+    char* notify_fail_reason;
+
 	/* Things we're watching for (see watches.c) */
 	//struct list_head watches;
 
@@ -193,6 +196,8 @@ struct LNchannel {
 
 //many internal api and helpers ...
 void internal_lnchn_breakdown(struct LNchannel *lnchn);
+
+void internal_lnchn_fail_on_notify(struct LNchannel *lnchn, const char* msg, ...);
 
 void internal_set_lnchn_state(struct LNchannel *lnchn, enum state newstate,
     const char *caller, bool db_commit);

@@ -148,32 +148,6 @@ static bool setup_first_commit(struct LNchannel *lnchn)
 	return true;
 }
 
-Pkt *accept_pkt_anchor(struct peer *peer, const Pkt *pkt)
-{
-	const OpenAnchor *a = pkt->open_anchor;
-
-	/* They must be offering anchor for us to try accepting */
-	assert(!peer->local.offer_anchor);
-	assert(peer->remote.offer_anchor);
-
-	if (anchor_too_large(a->amount))
-		return pkt_err(peer, "Anchor millisatoshis exceeds 32 bits");
-
-	proto_to_sha256(a->txid, &peer->anchor.txid.sha);
-	peer->anchor.index = a->output_index;
-	peer->anchor.satoshis = a->amount;
-	return NULL;
-}
-
-Pkt *accept_pkt_open_commit_sig(struct peer *peer, const Pkt *pkt,
-				secp256k1_ecdsa_signature *sig)
-{
-	const OpenCommitSig *s = pkt->open_commit_sig;
-
-	if (!proto_to_signature(s->sig, sig))
-		return pkt_err(peer, "Malformed signature");
-	return NULL;
-}
 
 /* Crypto is on, we are live. */
 static bool lnchn_crypto_on(struct LNchannel *lnchn, char *redeem_addr)
@@ -245,6 +219,8 @@ bool lnchn_notify_open_remote(struct LNchannel *lnchn,
     if (!check_config_compatible(lnchn->dstate, nego_config)) {
         //TODO: print out the config
         log_broken(lnchn->log, "Not compatible config for channel");
+
+        internal_lnchn_fail_on_notify(lnchn, "Config is not compatible");
         return false;
     }
 
@@ -396,6 +372,11 @@ static void on_first_commit_task(const struct LNchannel* lnchn, enum outsourcing
 bool lnchn_notify_anchor(struct LNchannel *lnchn, const struct pubkey *chnid,
     const struct sha256_double *txid, unsigned int index, unsigned long long amount
 ) {
+
+    if (anchor_too_large(amount)) {
+        internal_lnchn_fail_on_notify(lnchn, "Anchor millisatoshis exceeds 32 bits");
+        return false;
+    }     
 
     db_start_transaction(lnchn);
 

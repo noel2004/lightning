@@ -159,6 +159,18 @@ void internal_set_lnchn_state(struct LNchannel *lnchn, enum state newstate,
 		db_update_state(lnchn);
 }
 
+void internal_lnchn_fail_on_notify(struct LNchannel *lnchn, const char* msg, ...)
+{
+    va_list ap;
+
+    tal_free(lnchn->notify_fail_reason);
+    
+    va_start(ap, msg);
+    lnchn->notify_fail_reason = tal_vfmt(lnchn, msg, ap);
+    va_end(ap);
+
+}
+
 void internal_lnchn_breakdown(struct LNchannel *lnchn)
 {
 	if (lnchn->commit_jsoncmd) {
@@ -2209,6 +2221,7 @@ struct LNchannel *new_LNChannel(struct lightningd_state *dstate,
 	lnchn->local.staging_cstate = lnchn->remote.staging_cstate = NULL;
 	lnchn->log = tal_steal(lnchn, log);
 	log_debug(lnchn->log, "New lnchn %p", lnchn);
+    lnchn->notify_fail_reason = NULL;
 
     lnchn->remote.offer_anchor = false;
 
