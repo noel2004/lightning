@@ -197,18 +197,6 @@ void htlc_changestate(struct htlc *h,
 
 	h->state = newstate;
 
-	//if (db_commit) {
-	//	if (newstate == RCVD_ADD_COMMIT || newstate == SENT_ADD_COMMIT) {
-	//		db_new_htlc(h->peer, h);
-	//		return;
-	//	}
-	//	/* These never hit the database. */
-	//	if (oldstate == RCVD_REMOVE_HTLC)
-	//		oldstate = SENT_ADD_ACK_REVOCATION;
-	//	else if (oldstate == SENT_REMOVE_HTLC)
-	//		oldstate = RCVD_ADD_ACK_REVOCATION;
-	//	db_update_htlc_state(h->peer, h, oldstate);
-	//}
 }
 
 void htlc_undostate(struct htlc *h,

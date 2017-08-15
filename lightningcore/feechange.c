@@ -145,15 +145,4 @@ void feechange_changestate(struct LNchannel *lnchn,
 
 	lnchn->feechanges[oldstate] = NULL;
 	lnchn->feechanges[newstate] = f;
-
-	//if (db_commit) {
-	//	if (newstate == RCVD_FEECHANGE_COMMIT
-	//	    || newstate == SENT_FEECHANGE_COMMIT)
-	//		db_new_feechange(lnchn, f);
-	//	else if (newstate == RCVD_FEECHANGE_ACK_REVOCATION
-	//		 || newstate == SENT_FEECHANGE_ACK_REVOCATION)
-	//		db_remove_feechange(lnchn, f, oldstate);
-	//	else
-	//		db_update_feechange_state(lnchn, f, oldstate);
-	//}
 }

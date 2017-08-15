@@ -32,6 +32,163 @@
 #include <stdlib.h>
 #include <sys/types.h>
 
+struct htlcs_table {
+	enum htlc_state from, to;
+};
+
+struct feechanges_table {
+	enum feechange_state from, to;
+};
+
+static const char *changestates(struct LNchannel *lnchn,
+				const struct htlcs_table *table,
+				size_t n,
+				const struct feechanges_table *ftable,
+				size_t n_ftable,
+				bool db_commit)
+{
+	struct htlc_map_iter it;
+	struct htlc *h;
+	bool changed = false;
+	size_t i;
+
+	for (h = htlc_map_first(&lnchn->htlcs, &it);
+	     h;
+	     h = htlc_map_next(&lnchn->htlcs, &it)) {
+		for (i = 0; i < n; i++) {
+			if (h->state == table[i].from) {
+				if (!adjust_cstates(lnchn, h,
+						    table[i].from, table[i].to))
+					return "accounting error";
+				htlc_changestate(h, table[i].from,
+						 table[i].to, db_commit);
+				check_both_committed(lnchn, h);
+				changed = true;
+			}
+		}
+	}
+
+	//if (db_commit) {
+	//	if (newstate == RCVD_ADD_COMMIT || newstate == SENT_ADD_COMMIT) {
+	//		db_new_htlc(h->peer, h);
+	//		return;
+	//	}
+	//	/* These never hit the database. */
+	//	if (oldstate == RCVD_REMOVE_HTLC)
+	//		oldstate = SENT_ADD_ACK_REVOCATION;
+	//	else if (oldstate == SENT_REMOVE_HTLC)
+	//		oldstate = RCVD_ADD_ACK_REVOCATION;
+	//	db_update_htlc_state(h->peer, h, oldstate);
+	//}
+
+	for (i = 0; i < n_ftable; i++) {
+		struct feechange *f = lnchn->feechanges[ftable[i].from];
+		if (!f)
+			continue;
+		adjust_cstates_fee(lnchn, f, ftable[i].from, ftable[i].to);
+		feechange_changestate(lnchn, f,
+				      ftable[i].from, ftable[i].to,
+				      db_commit);
+		changed = true;
+	}
+
+	//if (db_commit) {
+	//	if (newstate == RCVD_FEECHANGE_COMMIT
+	//	    || newstate == SENT_FEECHANGE_COMMIT)
+	//		db_new_feechange(lnchn, f);
+	//	else if (newstate == RCVD_FEECHANGE_ACK_REVOCATION
+	//		 || newstate == SENT_FEECHANGE_ACK_REVOCATION)
+	//		db_remove_feechange(lnchn, f, oldstate);
+	//	else
+	//		db_update_feechange_state(lnchn, f, oldstate);
+	//}
+
+	/* FIXME-OLD #2:
+	 *
+	 * A node MUST NOT send an `update_commit` message which does
+	 * not include any updates.
+	 */
+	if (!changed)
+		return "no changes made";
+	return NULL;
+}
+
+static bool adjust_cstate_side(struct channel_state *cstate,
+			       struct htlc *h,
+			       enum htlc_state old, enum htlc_state new,
+			       enum side side)
+{
+	int oldf = htlc_state_flags(old), newf = htlc_state_flags(new);
+	bool old_committed, new_committed;
+
+	/* We applied changes to staging_cstate when we first received
+	 * add/remove packet, so we could make sure it was valid.  Don't
+	 * do that again. */
+	if (old == SENT_ADD_HTLC || old == RCVD_REMOVE_HTLC
+	    || old == RCVD_ADD_HTLC || old == SENT_REMOVE_HTLC)
+		return true;
+
+	old_committed = (oldf & HTLC_FLAG(side, HTLC_F_COMMITTED));
+	new_committed = (newf & HTLC_FLAG(side, HTLC_F_COMMITTED));
+
+	if (old_committed && !new_committed) {
+		if (h->r)
+			cstate_fulfill_htlc(cstate, h);
+		else
+			cstate_fail_htlc(cstate, h);
+	} else if (!old_committed && new_committed) {
+		if (!cstate_add_htlc(cstate, h, false)) {
+			log_broken_struct(h->lnchn->log,
+					  "Cannot afford htlc %s",
+					  struct htlc, h);
+			log_add_struct(h->lnchn->log, " channel state %s",
+				       struct channel_state, cstate);
+			return false;
+		}
+	}
+	return true;
+}
+
+/* We apply changes to staging_cstate when we first PENDING, so we can
+ * make sure they're valid.  So here we change the staging_cstate on
+ * the revocation receive (ie. when acked). */
+static bool adjust_cstates(struct LNchannel *lnchn, struct htlc *h,
+			   enum htlc_state old, enum htlc_state new)
+{
+	return adjust_cstate_side(lnchn->remote.staging_cstate, h, old, new,
+				  REMOTE)
+		&& adjust_cstate_side(lnchn->local.staging_cstate, h, old, new,
+				      LOCAL);
+}
+
+static void adjust_cstate_fee_side(struct channel_state *cstate,
+				   const struct feechange *f,
+				   enum feechange_state old,
+				   enum feechange_state new,
+				   enum side side)
+{
+	/* We applied changes to staging_cstate when we first received
+	 * feechange packet, so we could make sure it was valid.  Don't
+	 * do that again. */
+	if (old == SENT_FEECHANGE || old == RCVD_FEECHANGE)
+		return;
+
+	/* Feechanges only ever get applied to the side which created them:
+	 * ours gets applied when they ack, theirs gets applied when we ack. */
+	if (side == LOCAL && new == RCVD_FEECHANGE_REVOCATION)
+		adjust_fee(cstate, f->fee_rate);
+	else if (side == REMOTE && new == SENT_FEECHANGE_REVOCATION)
+		adjust_fee(cstate, f->fee_rate);
+}
+
+static void adjust_cstates_fee(struct LNchannel *lnchn, const struct feechange *f,
+			       enum feechange_state old,
+			       enum feechange_state new)
+{
+	adjust_cstate_fee_side(lnchn->remote.staging_cstate, f, old, new, REMOTE);
+	adjust_cstate_fee_side(lnchn->local.staging_cstate, f, old, new, LOCAL);
+}
+
 static bool do_commit(struct LNchannel *lnchn, struct command *jsoncmd)
 {
     struct commit_info *ci;
