@@ -11,8 +11,8 @@
 #include <ccan/str/str.h>
 
 enum htlc_state {
-    /* When we add a new htlc, it goes in this order. */
-    SENT_ADD_HTLC,
+    /* only use partiy states ... */
+    SENT_ADD_HTLC, /* purpose to add*/
     SENT_ADD_COMMIT,
     RCVD_ADD_REVOCATION,
     RCVD_ADD_ACK_COMMIT,
@@ -79,6 +79,7 @@ enum side {
 #define HTLC_LOCAL_F_WAS_COMMITTED	HTLC_FLAG(LOCAL,HTLC_F_WAS_COMMITTED)
 
 struct htlc {
+
 	/* Block number where we abort if it's still live (LOCAL only) */
 	u32 deadline;
 	/* What's the status. */
@@ -104,10 +105,6 @@ struct htlc {
 	/* FIXME: actually an enum onion_type */
 	//u8 malformed;
     struct txowatch *upstream_watch;
-
-    /* the "life" history of a htlc: that is, the commit number at which */
-    /* it was added to the number it was resolved (commited or revoked) */
-    u64 history[2];
 };
 
 const char *htlc_state_name(enum htlc_state s);

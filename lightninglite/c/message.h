@@ -6,6 +6,8 @@ struct LNchannel_config;
 struct sha256;
 struct sha256_double;
 struct pubkey;
+struct abs_locktime;
+struct preimage;
 
 /*take target id from channel id*/
 void    lite_msg_open(struct LNmessage *msg, const struct pubkey *target, 
@@ -18,6 +20,30 @@ void    lite_msg_anchor(struct LNmessage *msg, const struct pubkey *target,
     unsigned int index, 
     unsigned long long amount);
 
-void    lite_msg_anchor_ack(struct LNmessage *msg /*, 2-of-2 txid*/);
+struct msg_htlc_add
+{
+    const struct abs_locktime *expiry;
+    unsigned long long mstatoshi;
+};
+
+struct msg_htlc_del
+{
+    const struct preimage *r; /* NULL if being revoked*/
+};
+
+struct msg_htlc_entry
+{
+    const struct sha256 *rhash;
+    int   action_type; /*1 is add and 0 is del*/
+    union {
+        struct msg_htlc_add add;
+        struct msg_htlc_del del;
+    } action;
+};
+
+void    lite_msg_commit_purpose(struct LNmessage *msg,
+    unsigned int num_htlc_entry,
+    const struct msg_htlc_entry *htlc_entry
+);
 
 #endif

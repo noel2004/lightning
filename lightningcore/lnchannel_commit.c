@@ -55,6 +55,17 @@ static const char *changestates(struct LNchannel *lnchn,
 	for (h = htlc_map_first(&lnchn->htlcs, &it);
 	     h;
 	     h = htlc_map_next(&lnchn->htlcs, &it)) {
+        switch (h->state) {
+        case SENT_ADD_HTLC:
+            //any "send purpose" can be commit after its downstream is commited
+            htlc_changestate(h, table[i].from, table[i].to);
+            break;
+        case SENT_ADD_REVOCATION:
+            //any "remove purpose" can be commit after its upstream is commited
+        case SENT_REMOVE_HTLC:
+            break;
+        }
+
 		for (i = 0; i < n; i++) {
 			if (h->state == table[i].from) {
 				if (!adjust_cstates(lnchn, h,
@@ -187,6 +198,28 @@ static void adjust_cstates_fee(struct LNchannel *lnchn, const struct feechange *
 {
 	adjust_cstate_fee_side(lnchn->remote.staging_cstate, f, old, new, REMOTE);
 	adjust_cstate_fee_side(lnchn->local.staging_cstate, f, old, new, LOCAL);
+}
+
+static bool lnchn_uncommitted_changes(const struct LNchannel *lnchn)
+{
+    struct htlc_map_iter it;
+    struct htlc *h;
+    enum feechange_state i;
+
+    for (h = htlc_map_first(&lnchn->htlcs, &it);
+        h;
+        h = htlc_map_next(&lnchn->htlcs, &it)) {
+        if (htlc_has(h, HTLC_REMOTE_F_PENDING))
+            return true;
+    }
+    /* Pending feechange we sent, or pending ack of theirs. */
+    for (i = 0; i < ARRAY_SIZE(lnchn->feechanges); i++) {
+        if (!lnchn->feechanges[i])
+            continue;
+        if (feechange_state_flags(i) & HTLC_REMOTE_F_PENDING)
+            return true;
+    }
+    return false;
 }
 
 static bool do_commit(struct LNchannel *lnchn, struct command *jsoncmd)
