@@ -13,6 +13,7 @@ enum outsourcing_tasktype {
     OUTSOURCING_PASSIVE,
     OUTSOURCING_AGGRESSIVE,
     OUTSOURCING_DELETE,
+    OUTSOURCING_UPDATE,
 };
 
 enum outsourcing_result {
@@ -49,8 +50,9 @@ struct lnwatch_htlc_task {
 
     struct txdeliver *txdeliver;    
 
-    /* additional trigger, tal_count can get size */
-    struct txowatch **txowatchs;    
+    /* additional trigger */
+    struct txowatch **txowatchs; 
+    u8 txowatch_num;
 };
 
 struct lnwatch_task {
