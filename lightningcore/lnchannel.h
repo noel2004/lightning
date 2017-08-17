@@ -64,7 +64,7 @@ void lnchn_add_their_commit(struct LNchannel *chn,
 /* Allocate a new commit_info struct. */
 struct commit_info *new_commit_info(const tal_t *ctx, u64 commit_num);
 
-/* Freeing removes from map, too */
+/* MUST call after the chn is completly initialized! Freeing removes from map, too */
 struct htlc *lnchn_new_htlc(struct LNchannel *chn,
 			   u64 msatoshi,
 			   const struct sha256 *rhash,

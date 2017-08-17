@@ -22,7 +22,10 @@ enum outsourcing_result {
     OUTSOURCING_FAIL = -3,    //valid transaction but stale
 };
 
-/* outsourcing an output for htlc from committx*/
+/* 
+    outsourcing an output for htlc from committx, if correspondig output is redeemed,
+    it should try to takeout the preimage
+*/
 struct txowatch {
     struct sha256_double commitid;
     size_t output_num;
@@ -44,10 +47,10 @@ struct txdeliver {
 struct lnwatch_htlc_task {
     struct sha256 rhash;
 
-    struct txdeliver* txdeliver;    
+    struct txdeliver *txdeliver;    
 
-    /* additional trigger */
-    struct txowatch*  txowatch;    
+    /* additional trigger, tal_count can get size */
+    struct txowatch **txowatchs;    
 };
 
 struct lnwatch_task {

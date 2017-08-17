@@ -348,7 +348,7 @@ static void reset_onchain_closing(struct LNchannel *lnchn, const struct bitcoin_
         lnchn->onchain.tx = tal_free(lnchn->onchain.tx);
         lnchn->onchain.resolved = NULL;
         lnchn->onchain.htlcs = NULL;
-        lnchn->onchain.wscripts = NULL;
+//        lnchn->onchain.wscripts = NULL;
     }
 
     lnchn->onchain.tx = tal_steal(lnchn, tx);
@@ -614,6 +614,7 @@ static void handle_htlc_tx_finished(struct LNchannel *lnchn, const struct bitcoi
         //(for their htlc, redeem is just redeem)
     }
 
+    lite_unreg_htlc(lnchn->dstate->channels, h);
     //simply resolve one
     lnchn->onchain.resolved[tx->input[0].index] = tx;
 }

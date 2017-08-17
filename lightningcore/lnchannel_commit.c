@@ -48,25 +48,25 @@ static const char *changestates(struct LNchannel *lnchn,
 				bool db_commit)
 {
 	struct htlc_map_iter it;
-	struct htlc *h;
+	struct htlc *h, *h_side;
 	bool changed = false;
 	size_t i;
 
 	for (h = htlc_map_first(&lnchn->htlcs, &it);
 	     h;
 	     h = htlc_map_next(&lnchn->htlcs, &it)) {
-        switch (h->state) {
-        case SENT_ADD_HTLC:
-            //any "send purpose" can be commit after its downstream is commited
-            htlc_changestate(h, table[i].from, table[i].to);
-            break;
-        case SENT_ADD_REVOCATION:
-            //any "remove purpose" can be commit after its upstream is commited
-        case SENT_REMOVE_HTLC:
-            break;
-        }
 
 		for (i = 0; i < n; i++) {
+            //any "send purpose" can be commit after its downstream is commited
+            if (htlc_has(h, HTLC_ADDING)) {
+                h_side = lite_query_htlc_state(lnchn->dstate->channels,
+                    &h->rhash, true);
+            }
+            //any "remove purpose" can be commit after its upstream is commited
+            else if (htlc_has(h, HTLC_REMOVING)) {
+
+            }
+            
 			if (h->state == table[i].from) {
 				if (!adjust_cstates(lnchn, h,
 						    table[i].from, table[i].to))

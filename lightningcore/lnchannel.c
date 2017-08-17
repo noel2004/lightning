@@ -2303,13 +2303,16 @@ struct htlc *lnchn_new_htlc(struct LNchannel *lnchn,
 	        if (!blocks_to_abs_locktime(src_expiry, h->src_expiry))
 		        fatal("Invalid source HTLC expiry %u", src_expiry);
 			h->deadline = abs_locktime_to_blocks(src_expiry)
-				- lnchn->dstate->config.deadline_blocks;            
+				- lnchn->dstate->config.deadline_blocks;
+
+            h->upstream_watch[0] = h->upstream_watch[1] = NULL;
+
 		} else
 			/* If we're paying, give it a little longer. */
 			h->deadline = expiry
 				+ lnchn->dstate->config.min_htlc_expiry;
 	} else {
-		assert(htlc_owner(h) == REMOTE);
+		assert(htlc_owner(h) == REMOTE && src_expiry == 0);
 	}
 
 	htlc_map_add(&lnchn->htlcs, h);
