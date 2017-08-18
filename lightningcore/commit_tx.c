@@ -17,6 +17,19 @@
 #include <assert.h>
 #include <inttypes.h>
 
+static const u32 current_version = 100;
+
+u32 commit_generator_version()
+{
+    return current_version;
+}
+
+bool check_commit_generator_compatible(u32 ver)
+{
+    //TODO: keep version list ...
+    return ver == current_version;
+}
+
 u8 *wscript_for_htlc(const tal_t *ctx,
 		     const struct LNchannel *lnchn,
 		     const struct htlc *h,
@@ -131,7 +144,8 @@ struct bitcoin_tx *create_commit_tx(const tal_t *ctx,
 				    const struct sha256 *rhash,
 				    const struct channel_state *cstate,
 				    enum side side,
-				    bool *otherside_only)
+				    bool *otherside_only,
+                    struct htlc ***htlc_updates)
 {
 	const tal_t *tmpctx = tal_tmpctx(ctx);
 	struct bitcoin_tx *tx;
@@ -144,6 +158,10 @@ struct bitcoin_tx *create_commit_tx(const tal_t *ctx,
 
 	/* Now create commitment tx: one input, two outputs (plus htlcs) */
 	tx = bitcoin_tx(ctx, 1, 2 + count_htlcs(&lnchn->htlcs, committed_flag));
+    if (htlc_updates) {
+        *htlc_updates = tal_arrz(ctx, struct htlc *, tal_count(tx->output));
+    }
+
 
  	log_debug(lnchn->log, "Creating commitment tx:");
 	log_add_struct(lnchn->log, " rhash = %s", struct sha256, rhash);
@@ -204,6 +222,9 @@ struct bitcoin_tx *create_commit_tx(const tal_t *ctx,
 		if (add_output(tx, scriptpubkey_p2wsh(tmpctx, wscript),
 			       h->msatoshi / 1000, &output_count, &total)) {
 			*otherside_only = false;
+            if (htlc_updates) {
+                (*htlc_updates)[output_count - 1] = h;
+            }
 			log_debug(lnchn->log, "Pays %"PRIu64" to htlc %s",
 				  h->msatoshi / 1000, tal_hexstr(tmpctx, &h->rhash, sizeof(h->rhash)));
 			log_add_struct(lnchn->log, " expiry %s",
@@ -219,63 +240,55 @@ struct bitcoin_tx *create_commit_tx(const tal_t *ctx,
 	assert(total <= lnchn->anchor.satoshis);
 
 	tal_resize(&tx->output, output_count);
-	permute_outputs(tx->output, tal_count(tx->output), NULL);
+	
+    if (htlc_updates) {
+        tal_resize(htlc_updates, output_count);
+        permute_outputs(tx->output, tal_count(tx->output), (void **)*htlc_updates);
+    }
+    else {
+        permute_outputs(tx->output, tal_count(tx->output), NULL);
+    }
+
 	tal_free(tmpctx);
 	return tx;
 }
 
-
-//redeem should be the first or 2nd output in commit_tx
-size_t find_redeem_output_from_commit_tx(const struct bitcoin_tx* commit_tx,
-    u8* script, size_t* indicate_pos)
+void   update_htlc_in_channel(struct LNchannel *lnchn,
+    enum side side, struct htlc **htlc_updates)
 {
-    size_t i;
+    size_t i, cnt;
+    cnt = tal_count(htlc_updates);
+
+    for (i = 0; i < cnt; ++i) {
+        if (htlc_updates[i]) 
+            htlc_updates[i]->in_commit_output[side] = i;        
+    }
+}
+
+size_t find_redeem_output_from_commit_tx(const struct bitcoin_tx* commit_tx,
+    u8* script)
+{
+    size_t i, last;
+    last = tal_count(commit_tx->output);
     
-    for (i = 0; i < tal_count(commit_tx->output); ++i)
+    for (i = 0; i < last; ++i)
     {
         if (outputscript_eq(commit_tx->output, i, script)) {
-            *indicate_pos = i + 1;
             return i;
         }
     }
 
-    *indicate_pos = 0;
     return i;
 }
 
-//follow the possible sequence which we form the commit_tx so
-//we can find the corresponding output as fast as possible
-//when we iterate from the htlcmap
+
 size_t find_htlc_output_from_commit_tx(const struct bitcoin_tx* commit_tx,
-    u8* wscript, size_t *indicate_pos)
+    u8* wscript)
 {
     const tal_t *tmpctx = tal_tmpctx(commit_tx);
-    size_t last = tal_count(commit_tx->output);
     u8* script = scriptpubkey_p2wsh(tmpctx, wscript);
-    size_t i;
-
-    if (*indicate_pos > last) *indicate_pos = 0;
-
-    for (i = *indicate_pos; i < last; ++i)
-    {
-        if (outputscript_eq(commit_tx->output, i, script)) {
-            tal_free(tmpctx);
-            *indicate_pos = i + 1;
-            return i;
-        }
-    }
-
-    if (*indicate_pos != 0) {
-        for (i = 0; i < *indicate_pos; ++i)
-        {
-            if (outputscript_eq(commit_tx->output, i, script)) {
-                tal_free(tmpctx);
-                *indicate_pos = i + 1;
-                return i;
-            }
-        }
-    }
+    size_t ret = find_redeem_output_from_commit_tx(commit_tx, script);
 
     tal_free(tmpctx);
-    return last;
+    return ret;
 }

@@ -2233,6 +2233,38 @@ struct LNchannel *new_LNChannel(struct lightningd_state *dstate,
 	return lnchn;
 }
 
+bool lnchn_try_reconstruct_commit(struct LNchannel *lnchn)
+{
+    if (lnchn->local.commit && ) {
+
+    }
+
+}
+
+static bool *verify_and_reconstruct_commit(struct LNchannel *lnchn,
+    enum side side, const struct commit_info *testcommit)
+{
+    struct bitcoin_tx *tx;
+    struct sha256_double txid;
+    struct htlcs **htlcs_update;
+    bool to_us;
+
+    tx = create_commit_tx(testcommit, lnchn, &testcommit->revocation_hash,
+        testcommit->cstate, side, &to_us, &htlcs_update);
+    bitcoin_txid(tx, &txid);
+
+    if (memcmp(&txid, &testcommit->txid, sizeof(txid)) != 0) {
+        tal_free(tx);
+        tal_free(htlcs_update);
+        return false;
+    }
+
+    update_htlc_in_channel(lnchn, side, htlcs_update);
+    tal_free(tx);
+    tal_free(htlcs_update);
+    return true;
+}
+
 static bool lnchn_first_connected(struct LNchannel *lnchn,
 				 struct io_conn *conn,
 				 int addr_type, int addr_protocol,
@@ -2305,8 +2337,6 @@ struct htlc *lnchn_new_htlc(struct LNchannel *lnchn,
 			h->deadline = abs_locktime_to_blocks(src_expiry)
 				- lnchn->dstate->config.deadline_blocks;
 
-            h->upstream_watch[0] = h->upstream_watch[1] = NULL;
-
 		} else
 			/* If we're paying, give it a little longer. */
 			h->deadline = expiry
@@ -2315,13 +2345,18 @@ struct htlc *lnchn_new_htlc(struct LNchannel *lnchn,
 		assert(htlc_owner(h) == REMOTE && src_expiry == 0);
 	}
 
+    h->history[0] = lnchn->local.commit ? lnchn->local.commit->commit_num : 0;
+    h->history[1] = h->history[0] + 1;
+
 	htlc_map_add(&lnchn->htlcs, h);
 	tal_add_destructor(h, htlc_destroy);
+
 
 //    lite_reg_htlc(lnchn->dstate->channels, lnchn, h);
 
 	return h;
 }
+
 
 static struct io_plan *crypto_on_reconnect(struct io_conn *conn,
 					   struct lightningd_state *dstate,

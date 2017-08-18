@@ -95,6 +95,14 @@ struct htlc {
 	/* The preimage which hashes to rhash (if known) */
 	struct preimage *r;
     const u8 *fail;
+    /* Position in htlc-chain, 1 is upstream and 2 is downstream*/
+    u8 routing;
+
+    /* the "life" history of a htlc: that is, the commit number at which */
+    /* it was added to the number it was resolved (commited or revoked) */
+    u64 history[2];
+
+    /* Following data will not be saved to db but should be reconstructed at suitable time*/
 	///* FIXME: We could union these together: */
 	///* Routing information sent with this HTLC. */
 	//const u8 *routing;
@@ -107,10 +115,12 @@ struct htlc {
     /*output num in local and remote commit, -1 indicate not in */
     int in_commit_output[2];
 
-    /* the "life" history of a htlc: that is, the commit number at which */
-    /* it was added to the number it was resolved (commited or revoked) */
-    u64 history[2];
+
 };
+
+static inline bool htlc_route_is_tip(const struct htlc *h, int flag){return h->routing & 1;}
+static inline bool htlc_route_is_end(const struct htlc *h, int flag) { return h->routing & 2; }
+static inline bool htlc_route_is_chain(const struct htlc *h, int flag) { return h->routing == 3; }
 
 const char *htlc_state_name(enum htlc_state s);
 enum htlc_state htlc_state_from_name(const char *name);

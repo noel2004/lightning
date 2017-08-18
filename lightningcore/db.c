@@ -596,15 +596,18 @@ static void load_lnchn_htlcs(struct LNchannel *lnchn)
 				     sqlite3_column_int64(stmt, 3),
 				     &rhash,
 				     sqlite3_column_int64(stmt, 4),
-                     sqlite3_column_int64(stmt, 5),
+                     sqlite3_column_int64(stmt, 7),
 				     hstate);
+
+        htlc->history[0] = sqlite3_column_int64(stmt, 9);
+        htlc->history[1] = sqlite3_column_int64(stmt, 10);
 
 		if (sqlite3_column_type(stmt, 6) != SQLITE_NULL) {
 			htlc->r = tal(htlc, struct preimage);
 			from_sql_blob(stmt, 6, htlc->r, sizeof(*htlc->r));
 		}
 		if (sqlite3_column_type(stmt, 8) != SQLITE_NULL) {
-			htlc->fail = tal_sql_blob(htlc, stmt, 10);
+			htlc->fail = tal_sql_blob(htlc, stmt, 8);
 		}
 
 		if (htlc->r && htlc->fail)
@@ -673,14 +676,14 @@ static void load_lnchn_htlcs(struct LNchannel *lnchn)
 						  lnchn,
 						  &lnchn->local.commit->revocation_hash,
 						  lnchn->local.commit->cstate,
-						  LOCAL, &to_them_only);
+						  LOCAL, &to_them_only, NULL);
 	bitcoin_txid(lnchn->local.commit->tx, &lnchn->local.commit->txid);
 
 	lnchn->remote.commit->tx = create_commit_tx(lnchn->remote.commit,
 						   lnchn,
 						   &lnchn->remote.commit->revocation_hash,
 						   lnchn->remote.commit->cstate,
-						   REMOTE, &to_us_only);
+						   REMOTE, &to_us_only, NULL);
 	bitcoin_txid(lnchn->remote.commit->tx, &lnchn->remote.commit->txid);
 
 	lnchn->remote.staging_cstate = copy_cstate(lnchn, lnchn->remote.commit->cstate);
@@ -955,8 +958,6 @@ static void db_load_lnchns(struct lightningd_state *dstate)
 	int err;
 	sqlite3_stmt *stmt;
 	struct LNchannel *lnchn;
-    struct htlc_map_iter it;
-    struct htlc *h;
 
 	err = sqlite3_prepare_v2(dstate->db->sql, "SELECT * FROM lnchns;", -1,
 				 &stmt, NULL);
@@ -1017,13 +1018,8 @@ static void db_load_lnchns(struct lightningd_state *dstate)
 		if (lnchn->local.offer_anchor)
 			load_lnchn_anchor_input(lnchn);
 
-        lite_reg_channel(dstate->channels, lnchn);
+        lite_update_channel(dstate->channels, lnchn);
 
-        for (h = htlc_map_first(&lnchn->htlcs, &it);
-            h;
-            h = htlc_map_next(&lnchn->htlcs, &it)) {
-            lite_reg_htlc(dstate->channels, lnchn, h);
-        }        
 	}
 	err = sqlite3_finalize(stmt);
 	if (err != SQLITE_OK)
@@ -1176,8 +1172,9 @@ void db_init(struct lightningd_state *dstate)
 		      SQL_PUBKEY(lnchn), SQL_U64(id) /* we keep this dummy item to avoid changing too much codes*/,
 		      SQL_STATENAME(state), SQL_U64(msatoshi),
 		      SQL_U32(expiry), SQL_RHASH(rhash), SQL_R(r),
-		      SQL_U32(src_expiry), SQL_BLOB(fail),/*SQL_PUBKEY(src_lnchn),
+		      SQL_U32(route), SQL_BLOB(fail),/*SQL_PUBKEY(src_lnchn),
 		      SQL_U64(src_id), SQL_BLOB(fail),*/
+              SQL_U64(history_beg), SQL_U64(history_end),
 		      "PRIMARY KEY(lnchn, rhash)")
 		TABLE(feechanges,
 		      SQL_PUBKEY(lnchn), SQL_STATENAME(state),
@@ -1409,14 +1406,16 @@ void db_new_htlc(struct LNchannel *lnchn, const struct htlc *htlc)
 
 	db_exec(__func__, lnchn->dstate,
 		"INSERT INTO htlcs VALUES"
-		" (x'%s', %"PRIu64", '%s', %"PRIu64", %u, x'%s', NULL, %u, NULL);",
+		" (x'%s', %"PRIu64", '%s', %"PRIu64", %u, x'%s', NULL, %u, NULL, %"PRIu64", %"PRIu64");",
 		lnchnid,
 		0,
 		htlc_state_name(htlc->state),
 		htlc->msatoshi,
 		abs_locktime_to_blocks(&htlc->expiry),
 		tal_hexstr(ctx, &htlc->rhash, sizeof(htlc->rhash)),
-        htlc->src_expiry ? abs_locktime_to_blocks(htlc->src_expiry) : 0);
+        (u32) htlc->routing,
+        htlc->history[0], htlc->history[1])
+        ;
 
 	tal_free(ctx);
 }
@@ -1450,8 +1449,8 @@ void db_update_htlc_state(struct LNchannel *lnchn, const struct htlc *htlc,
 		  htlc_state_name(htlc->state));
 	assert(lnchn->dstate->db->in_transaction);
 	db_exec(__func__, lnchn->dstate,
-		"UPDATE htlcs SET state='%s' WHERE lnchn=x'%s' AND rhash=x'%s';",
-		htlc_state_name(htlc->state), lnchnid,
+		"UPDATE htlcs SET state='%s', commit_num=%"PRIu64" WHERE lnchn=x'%s' AND rhash=x'%s';",
+		htlc_state_name(htlc->state), htlc->history[1], lnchnid,
         tal_hexstr(ctx, &htlc->rhash, sizeof(htlc->rhash)));
 
 	tal_free(ctx);

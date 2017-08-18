@@ -3,23 +3,44 @@
 
 struct LNchannels;
 struct LNchannel;
+struct LNchannelQuery;
+struct LNchannelComm;
 struct htlc;
 struct pubkey;
 struct sha256;
-
-void    lite_reg_channel(struct LNchannels *mgr, const struct LNchannel *lnchn);
-struct LNchannel* lite_query_channel(struct LNchannels *mgr, struct pubkey *id);
-void    lite_release_query_chn(struct LNchannels *mgr, const struct LNchannel* chn);
-
-void    lite_reg_htlc(struct LNchannels *mgr, const struct LNchannel *lnchn, const struct htlc *htlc);
-void    lite_update_htlc_state(struct LNchannels *mgr, const struct htlc *htlc);
-
-/* when one side is unregistered, it was marked, and the pair is removed when both side is unreg*/
-void    lite_unreg_htlc(struct LNchannels *mgr, const struct htlc *htlc);
-
-/* return a copy of updated htlc, but some field (e.g. upstream_watch) is always NULL*/
-const struct htlc *lite_query_htlc_state(struct LNchannels *mgr, const struct sha256* hash, int issrc);
+struct sha256_double;
 
 
+/* 
+   data needed to be query is updated as transaction
+   currently the updated data include:
+   * all htlc data (require deep copy), query by hash and source (upstream/downstream)
+   * commit_info:txid
+*/
+void    lite_update_channel(struct LNchannels *mgr, const struct LNchannel *lnchn);
+
+
+struct LNchannelQuery* lite_query_channel(struct LNchannels *mgr, struct pubkey *id);
+struct LNchannelQuery* lite_query_channel_from_htlc(struct LNchannels *mgr, const struct sha256* hash, int issrc);
+void    lite_release_query_chn(struct LNchannels *mgr, const struct LNchannelQuery* chn);
+
+struct LNchannelComm*  lite_comm_channel(struct LNchannels *mgr, struct LNchannelQuery *q);
+void lite_release_comm(struct LNchannels *mgr, struct LNchannelComm *c);
+
+/*
+   All assigned data MUST be free with tal_free by caller
+   A failed (not actived) channel MUST NOT query anything except default value
+*/
+
+/* query commit_txid: [local, remote], can be NULL*/
+void    lite_query_commit_txid(struct LNchannelQuery *q, struct sha256_double *commit_txid[2]);
+
+/* query a whole HTLC struct for a channel*/
+struct htlc *lite_query_htlc_state(struct LNchannelQuery *q, const struct sha256* hash);
+
+/*
+    Actions
+*/
+void lite_notify_chn_commit(struct LNchannelComm* c);
 
 #endif

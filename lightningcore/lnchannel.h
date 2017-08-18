@@ -26,6 +26,8 @@ struct sha256_double;
 struct LNchannel *new_LNChannel(struct lightningd_state *dstate,
 		      struct log *log);
 
+bool lnchn_try_reconstruct_commit(struct LNchannel *lnchn);
+
 bool lnchn_open_local(struct LNchannel *lnchn, const struct pubkey *chnid);
 
 bool lnchn_open_anchor(struct LNchannel *lnchn, const struct bitcoin_tx *anchor_tx);
