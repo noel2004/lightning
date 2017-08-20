@@ -11,33 +11,34 @@
 #include <ccan/str/str.h>
 
 enum htlc_state {
-    /* only use partiy states ... */
-    SENT_ADD_HTLC, /* purpose to add*/
-    SENT_ADD_COMMIT,
-    RCVD_ADD_REVOCATION,
-    RCVD_ADD_ACK_COMMIT,
-    SENT_ADD_ACK_REVOCATION,
 
-    /* When they remove an htlc, it goes from SENT_ADD_ACK_REVOCATION: */
-    RCVD_REMOVE_HTLC,
-    RCVD_REMOVE_COMMIT,
-    SENT_REMOVE_REVOCATION,
-    SENT_REMOVE_ACK_COMMIT,
-    RCVD_REMOVE_ACK_REVOCATION,
+    PLAN_ADD_HTLC,
+    SENT_ADD_COMMIT,
+//    RCVD_ADD_REVOCATION,
+    RCVD_ADD_ACK_COMMIT, /*fixed*/
+//    SENT_ADD_ACK_REVOCATION, 
+
+    /* When they remove an htlc, it directly comes into RCVD_REMOVE_COMMIT: */
+    PLAN_REMOVE_HTLC, 
+    SENT_REMOVE_HTLC,
+    RCVD_REMOVE_COMMIT, /*dead*/
+//    SENT_REMOVE_REVOCATION, 
+//    SENT_REMOVE_ACK_COMMIT,
+//    RCVD_REMOVE_ACK_REVOCATION,
 
     /* When they add a new htlc, it goes in this order. */
-    RCVD_ADD_HTLC,
-    RCVD_ADD_COMMIT,
-    SENT_ADD_REVOCATION,
-    SENT_ADD_ACK_COMMIT,
-    RCVD_ADD_ACK_REVOCATION,
+    RCVD_ADD_HTLC, /* fixed */
+//   RCVD_ADD_COMMIT, 
+//    SENT_ADD_REVOCATION, 
+//    SENT_ADD_ACK_COMMIT,
+//    RCVD_ADD_ACK_REVOCATION,
 
-    /* When we remove an htlc, it goes from RCVD_ADD_ACK_REVOCATION: */
-    SENT_REMOVE_HTLC,
-    SENT_REMOVE_COMMIT,
-    RCVD_REMOVE_REVOCATION,
-    RCVD_REMOVE_ACK_COMMIT,
-    SENT_REMOVE_ACK_REVOCATION,
+    /* When we remove an htlc, it directly comes into RCVD_REMOVE_ACK_COMMIT: */
+    SENT_RESOLVE_HTLC,
+//    SENT_REMOVE_COMMIT,
+//    RCVD_REMOVE_REVOCATION,
+    RCVD_REMOVE_ACK_COMMIT, /*dead*/
+//    SENT_REMOVE_ACK_REVOCATION,
 
     HTLC_STATE_INVALID
 };
@@ -56,7 +57,7 @@ enum side {
 #define HTLC_F_PENDING			0x01
 /* HTLC is in commit_tx */
 #define HTLC_F_COMMITTED		0x02
-/* We have revoked the previous commit_tx */
+/* We have revoked the previous commit_tx, NOT used this flag now */
 #define HTLC_F_REVOKED			0x04
 /* We offered it it. */
 #define HTLC_F_OWNER			0x08
@@ -80,8 +81,6 @@ enum side {
 
 struct htlc {
 
-	/* Block number where we abort if it's still live (LOCAL only) */
-	u32 deadline;
 	/* What's the status. */
 	enum htlc_state state;
 	///* The unique ID for this peer and this direction (LOCAL or REMOTE) */
@@ -95,7 +94,7 @@ struct htlc {
 	/* The preimage which hashes to rhash (if known) */
 	struct preimage *r;
     const u8 *fail;
-    /* Position in htlc-chain, 1 is upstream and 2 is downstream*/
+    /* Position in htlc-chain, 1 is upstream and 2 is downstream, 4 means it is in chain*/
     u8 routing;
 
     /* the "life" history of a htlc: that is, the commit number at which */
@@ -103,6 +102,10 @@ struct htlc {
     u64 history[2];
 
     /* Following data will not be saved to db but should be reconstructed at suitable time*/
+
+	/* Block number where we abort if it's still live (LOCAL only) */
+	u32 deadline;
+
 	///* FIXME: We could union these together: */
 	///* Routing information sent with this HTLC. */
 	//const u8 *routing;
@@ -118,9 +121,11 @@ struct htlc {
 
 };
 
-static inline bool htlc_route_is_tip(const struct htlc *h, int flag){return h->routing & 1;}
-static inline bool htlc_route_is_end(const struct htlc *h, int flag) { return h->routing & 2; }
-static inline bool htlc_route_is_chain(const struct htlc *h, int flag) { return h->routing == 3; }
+static inline bool htlc_route_is_tip(const struct htlc *h){return h->routing & 1;}
+static inline bool htlc_route_is_end(const struct htlc *h) { return h->routing & 2; }
+static inline bool htlc_route_is_chain(const struct htlc *h) { return h->routing & 4; }
+static inline bool htlc_route_has_source(const struct htlc *h) { return h->routing == 6; }
+static inline bool htlc_route_has_downstream(const struct htlc *h) { return h->routing == 5; }
 
 const char *htlc_state_name(enum htlc_state s);
 enum htlc_state htlc_state_from_name(const char *name);
@@ -209,8 +214,8 @@ static inline size_t htlc_map_count(const struct htlc_map *htlcs)
 /* FIXME: Move these out of the hash! */
 static inline bool htlc_is_dead(const struct htlc *htlc)
 {
-	return htlc->state == RCVD_REMOVE_ACK_REVOCATION
-		|| htlc->state == SENT_REMOVE_ACK_REVOCATION;
+	return htlc->state == RCVD_REMOVE_COMMIT
+		|| htlc->state == RCVD_REMOVE_ACK_COMMIT;
 }
 
 

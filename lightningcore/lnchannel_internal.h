@@ -195,6 +195,17 @@ struct LNchannel {
 };
 
 //many internal api and helpers ...
+
+/* Allocate a new commit_info struct. */
+struct commit_info *internal_new_commit_info(const tal_t *ctx, u64 commit_num);
+
+/* MUST call after the chn is completly initialized! Freeing removes from map, too */
+struct htlc *internal_new_htlc(struct LNchannel *chn,
+			   u64 msatoshi,
+			   const struct sha256 *rhash,
+			   u32 expiry, u32 src_expiry, /* 0 if no source*/
+			   enum htlc_state state);
+
 void internal_lnchn_breakdown(struct LNchannel *lnchn);
 
 void internal_lnchn_fail_on_notify(struct LNchannel *lnchn, const char* msg, ...);

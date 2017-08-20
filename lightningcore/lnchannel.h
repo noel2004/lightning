@@ -26,11 +26,20 @@ struct sha256_double;
 struct LNchannel *new_LNChannel(struct lightningd_state *dstate,
 		      struct log *log);
 
-bool lnchn_try_reconstruct_commit(struct LNchannel *lnchn);
+/* call on every channel after DB is loaded*/
+void reopen_LNChannel(struct LNchannel *lnchn);
 
 bool lnchn_open_local(struct LNchannel *lnchn, const struct pubkey *chnid);
 
 bool lnchn_open_anchor(struct LNchannel *lnchn, const struct bitcoin_tx *anchor_tx);
+
+bool lnchn_add_htlc(struct LNchannel *chn, u64 msatoshi,
+    unsigned int expiry,
+    const struct sha256 *rhash,
+    const u8 route,
+    enum fail_error *error_code);
+
+bool lnchn_resolve_htlc(struct LNchannel *lnchn, enum fail_error *error_code);
 
 //if state is less than first commit, this is safe to redeem anchord txid
 //if force is false, only return valid txid for possible state and chain depth
@@ -59,37 +68,12 @@ bool lnchn_notify_anchor(struct LNchannel *lnchn, const struct pubkey *chnid,
     unsigned long long amount
 );
 
-/* Whenever we send a signature, remember the txid -> commit_num mapping */
-void lnchn_add_their_commit(struct LNchannel *chn,
-			   const struct sha256_double *txid, u64 commit_num);
-
-/* Allocate a new commit_info struct. */
-struct commit_info *new_commit_info(const tal_t *ctx, u64 commit_num);
-
-/* MUST call after the chn is completly initialized! Freeing removes from map, too */
-struct htlc *lnchn_new_htlc(struct LNchannel *chn,
-			   u64 msatoshi,
-			   const struct sha256 *rhash,
-			   u32 expiry, u32 src_expiry, /* 0 if no source*/
-			   enum htlc_state state);
-
-const char *command_htlc_add(struct LNchannel *chn, u64 msatoshi,
-			     unsigned int expiry,
-			     const struct sha256 *rhash,
-			     struct htlc *src,
-			     const u8 *route,
-			     enum fail_error *error_code,
-			     struct htlc **htlc);
-
 /* Peer has an issue, breakdown and fail. */
 void lnchn_fail(struct LNchannel *chn, const char *caller);
 
+void cleanup_lnchn(struct lightningd_state *dstate, struct LNchannel *chn);
+
 //void peer_watch_anchor(struct LNchannel *chn, int depth);
-
-struct bitcoin_tx *lnchn_create_close_tx(const tal_t *ctx,
-					struct LNchannel *chn, u64 fee);
-
-u32 get_peer_min_block(struct lightningd_state *dstate);
 
 void debug_dump_lnchn(struct LNchannel *chn);
 
@@ -108,6 +92,5 @@ void lnchn_notify_txo_delivered(struct LNchannel *chn, const struct txowatch *tx
 void lnchn_notify_tx_delivered(struct LNchannel *chn, const struct bitcoin_tx *tx,
     enum outsourcing_deliver ret, const struct sha256_double *taskid);
 
-void cleanup_lnchn(struct lightningd_state *dstate, struct LNchannel *chn);
 
 #endif /* LIGHTNING_CORE_LNCHANNEL_H */

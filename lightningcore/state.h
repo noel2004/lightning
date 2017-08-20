@@ -86,6 +86,9 @@ struct lightningd_state {
     /* Cached block topology. */
     struct chain_topology *topology;
 
+    /* Manager for payments*/
+    struct Payments *payment;
+
     /* Channel manager register interface*/
     struct LNchannels *channels;
 

@@ -30,26 +30,7 @@
 #include <stdlib.h>
 #include <sys/types.h>
 
-void internal_update_htlc_watch(struct LNchannel *chn, const struct sha256 *rhash, struct txowatch* txo)
-{
-    struct htlc *h = htlc_map_get(&chn->htlcs, rhash);
-    if (h == NULL) {
-        log_broken(chn->log,
-            "Can't find htlc %s in channel %s",
-            tal_hexstr(txo, rhash, sizeof(struct sha256)),
-            type_to_string(txo, struct pubkey, chn->id));
-        return;
-    }
 
-    //htlc have upstream must not have src 
-    assert(!h->src_expiry);
-
-    if (h->upstream_watch) {
-        tal_free(h->upstream_watch);
-    }
-
-    h->upstream_watch = txo;
-}
 
 void internal_resolve_htlc(struct LNchannel *lnchn, const struct sha256 *rhash)
 {

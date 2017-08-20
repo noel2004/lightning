@@ -98,6 +98,24 @@ static bool bitcoin_create_anchor(struct LNchannel *lnchn)
 	return true;
 }
 
+///* We may have gone down before broadcasting the anchor.  Try again. */
+//void rebroadcast_anchors(struct lightningd_state *dstate)
+//{
+//	struct LNchannel *lnchn;
+//
+//	list_for_each(&dstate->lnchns, lnchn, list) {
+//		if (!state_is_waiting_for_anchor(lnchn->state))
+//			continue;
+//		if (!lnchn->anchor.ours)
+//			continue;
+//		if (!bitcoin_create_anchor(lnchn))
+//			lnchn_fail(lnchn, __func__);
+//		else
+//			broadcast_tx(lnchn->dstate->topology,
+//				     lnchn, lnchn->anchor.tx, NULL);
+//	}
+//}
+
 /* Sets up the initial cstate and commit tx for both nodes: false if
  * insufficient funds. */
 static bool setup_first_commit(struct LNchannel *lnchn)
@@ -484,4 +502,162 @@ static bool open_theiranchor_pkt_in(struct LNchannel *lnchn, const Pkt *pkt)
 	queue_pkt_open_commit_sig(lnchn);
 	lnchn_watch_anchor(lnchn, lnchn->local.mindepth);
 	return true;
+}
+
+
+//static void lnchn_depth_ok(struct LNchannel *lnchn)
+//{
+//	queue_pkt_open_complete(lnchn);
+//
+//	db_start_transaction(lnchn);
+//
+//	switch (lnchn->state) {
+//	case STATE_OPEN_WAIT_ANCHORDEPTH_AND_THEIRCOMPLETE:
+//		set_lnchn_state(lnchn, STATE_OPEN_WAIT_THEIRCOMPLETE,
+//			       __func__, true);
+//		break;
+//	case STATE_OPEN_WAIT_ANCHORDEPTH:
+//		lnchn_open_complete(lnchn, NULL);
+//		set_lnchn_state(lnchn, STATE_NORMAL, __func__, true);
+//		announce_channel(lnchn->dstate, lnchn);
+//		sync_routing_table(lnchn->dstate, lnchn);
+//		break;
+//	default:
+//		log_broken(lnchn->log, "%s: state %s",
+//			   __func__, state_name(lnchn->state));
+//		lnchn_fail(lnchn, __func__);
+//		break;
+//	}
+//
+//	if (db_commit_transaction(lnchn))
+//		lnchn_database_err(lnchn);
+//}
+
+//static enum watch_result anchor_depthchange(struct LNchannel *lnchn,
+//					    unsigned int depth,
+//					    const struct sha256_double *txid,
+//					    void *unused)
+//{
+//	log_debug(lnchn->log, "Anchor at depth %u", depth);
+//
+//	/* Still waiting for it to reach depth? */
+//	if (state_is_waiting_for_anchor(lnchn->state)) {
+//		log_debug(lnchn->log, "Waiting for depth %i",
+//			  lnchn->anchor.ok_depth);
+//		/* We can see a run of blocks all at once, so may be > depth */
+//		if ((int)depth >= lnchn->anchor.ok_depth) {
+//			lnchn_depth_ok(lnchn);
+//			lnchn->anchor.ok_depth = -1;
+//		}
+//	} else if (depth == 0)
+//		/* FIXME: Report losses! */
+//		fatal("Funding transaction was unspent!");
+//
+//	/* Since this gets called on every new block, check HTLCs here. */
+//	check_htlc_expiry(lnchn);
+//
+//	/* If fee rate has changed, fire off update to change it. */
+//	if (want_feechange(lnchn) && state_can_commit(lnchn->state)) {
+//		log_debug(lnchn->log, "fee rate changed to %"PRIu64,
+//			  desired_commit_feerate(lnchn->dstate));
+//		/* FIXME: If fee changes back before update, we screw
+//		 * up and send an empty commit.  We need to generate a
+//		 * real packet here! */
+//		remote_changes_pending(lnchn);
+//	}
+//
+//	/* FIXME-OLD #2:
+//	 *
+//	 * A node MUST update bitcoin fees if it estimates that the
+//	 * current commitment transaction will not be processed in a
+//	 * timely manner (see "Risks With HTLC Timeouts").
+//	 */
+//	/* Note: we don't do this when we're told to ignore fees. */
+//	/* FIXME: BOLT should say what to do if it can't!  We drop conn. */
+//	if (!state_is_onchain(lnchn->state) && !state_is_error(lnchn->state)
+//	    && lnchn->dstate->config.commitment_fee_min_percent != 0
+//	    && lnchn->local.commit->cstate->fee_rate < get_feerate(lnchn->dstate->topology)) {
+//		log_broken(lnchn->log, "fee rate %"PRIu64" lower than %"PRIu64,
+//			   lnchn->local.commit->cstate->fee_rate,
+//			   get_feerate(lnchn->dstate->topology));
+//		lnchn_fail(lnchn, __func__);
+//	}
+//
+//	return KEEP_WATCHING;
+//}
+
+static void funding_tx_failed(struct LNchannel *lnchn,
+			      int exitstatus,
+			      const char *err)
+{
+	const char *str = tal_fmt(lnchn, "Broadcasting funding gave %i: %s",
+				  exitstatus, err);
+
+	lnchn_open_complete(lnchn, str);
+	lnchn_breakdown(lnchn);
+	queue_pkt_err(lnchn, pkt_err(lnchn, "Funding failed"));
+}
+
+
+static bool open_wait_pkt_in(struct LNchannel *lnchn, const Pkt *pkt)
+{
+	Pkt *err;
+	const char *db_err;
+
+	/* If they want to shutdown during this, we do mutual close dance. */
+	if (pkt->pkt_case == PKT__PKT_CLOSE_SHUTDOWN) {
+		err = accept_pkt_close_shutdown(lnchn, pkt);
+		if (err)
+			return lnchn_comms_err(lnchn, err);
+
+		lnchn_open_complete(lnchn, "Shutdown request received");
+		db_start_transaction(lnchn);
+		db_set_their_closing_script(lnchn);
+		start_closing_in_transaction(lnchn);
+		if (db_commit_transaction(lnchn) != NULL)
+			return lnchn_database_err(lnchn);
+
+		return false;
+	}
+
+	switch (lnchn->state) {
+	case STATE_OPEN_WAIT_ANCHORDEPTH_AND_THEIRCOMPLETE:
+	case STATE_OPEN_WAIT_THEIRCOMPLETE:
+		if (pkt->pkt_case != PKT__PKT_OPEN_COMPLETE)
+			return lnchn_received_unexpected_pkt(lnchn, pkt, __func__);
+
+		err = accept_pkt_open_complete(lnchn, pkt);
+		if (err) {
+			lnchn_open_complete(lnchn, err->error->problem);
+			return lnchn_comms_err(lnchn, err);
+		}
+
+		db_start_transaction(lnchn);
+		if (lnchn->state == STATE_OPEN_WAIT_THEIRCOMPLETE) {
+			lnchn_open_complete(lnchn, NULL);
+			set_lnchn_state(lnchn, STATE_NORMAL, __func__, true);
+			announce_channel(lnchn->dstate, lnchn);
+			sync_routing_table(lnchn->dstate, lnchn);
+		} else {
+			set_lnchn_state(lnchn, STATE_OPEN_WAIT_ANCHORDEPTH,
+				       __func__, true);
+		}
+
+		db_err = db_commit_transaction(lnchn);
+		if (db_err) {
+			lnchn_open_complete(lnchn, db_err);
+			return lnchn_database_err(lnchn);
+		}
+		return true;
+
+	case STATE_OPEN_WAIT_ANCHORDEPTH:
+		return lnchn_received_unexpected_pkt(lnchn, pkt, __func__);
+
+	default:
+		log_unusual(lnchn->log,
+			    "%s: unexpected state %s",
+			    __func__, state_name(lnchn->state));
+		lnchn_fail(lnchn, __func__);
+		return false;
+	}
 }

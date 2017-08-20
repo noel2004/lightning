@@ -1,10 +1,6 @@
 #ifndef LIGHTNING_CORE_FAILURE_H
 #define LIGHTNING_CORE_FAILURE_H
 #include "config.h"
-#include <ccan/short_types/short_types.h>
-#include <ccan/tal/tal.h>
-
-struct pubkey;
 
 enum fail_error {
 	BAD_REQUEST_400 = 400,
@@ -24,10 +20,5 @@ enum fail_error {
 	VERSION_NOT_SUPPORTED_505 = 505
 };
 
-//create a JSON string for failure description
-const u8 *failinfo_create(const tal_t *ctx,
-			  const struct pubkey *id,
-			  enum fail_error error_code,
-			  const char *reason);
 
 #endif /* LIGHTNING_CORE_FAILURE_H */

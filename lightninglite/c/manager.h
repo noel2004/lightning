@@ -22,11 +22,14 @@ void    lite_update_channel(struct LNchannels *mgr, const struct LNchannel *lnch
 
 struct LNchannelQuery* lite_query_channel(struct LNchannels *mgr, struct pubkey *id);
 struct LNchannelQuery* lite_query_channel_from_htlc(struct LNchannels *mgr, const struct sha256* hash, int issrc);
-void    lite_release_query_chn(struct LNchannels *mgr, const struct LNchannelQuery* chn);
+void    lite_release_chn(struct LNchannels *mgr, const struct LNchannelQuery* chn);
 
 struct LNchannelComm*  lite_comm_channel(struct LNchannels *mgr, struct LNchannelQuery *q);
 void lite_release_comm(struct LNchannels *mgr, struct LNchannelComm *c);
 
+/* query a whole HTLC*/
+struct htlc *lite_query_htlc_direct(struct LNchannels *mgr, const struct sha256* hash, int issrc);
+void    lite_release_htlc(struct LNchannels *mgr, struct htlc *htlc);
 /*
    All assigned data MUST be free with tal_free by caller
    A failed (not actived) channel MUST NOT query anything except default value
@@ -35,8 +38,8 @@ void lite_release_comm(struct LNchannels *mgr, struct LNchannelComm *c);
 /* query commit_txid: [local, remote], can be NULL*/
 void    lite_query_commit_txid(struct LNchannelQuery *q, struct sha256_double *commit_txid[2]);
 
-/* query a whole HTLC struct for a channel*/
-struct htlc *lite_query_htlc_state(struct LNchannelQuery *q, const struct sha256* hash);
+/* query a HTLC from a channel, should be also released by lite_release_htlc*/
+struct htlc *lite_query_htlc(struct LNchannelQuery *q, const struct sha256* hash);
 
 /*
     Actions

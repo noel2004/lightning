@@ -489,7 +489,7 @@ static void load_lnchn_commit_info(struct LNchannel *lnchn)
 			fatal("load_lnchn_commit_info:duplicate side %s",
 			      sqlite3_column_str(stmt, 1));
 
-		*cip = ci = new_commit_info(lnchn, sqlite3_column_int64(stmt, 2));
+		*cip = ci = internal_new_commit_info(lnchn, sqlite3_column_int64(stmt, 2));
 		sha256_from_sql(stmt, 3, &ci->revocation_hash);
 		ci->order = sqlite3_column_int64(stmt, 4);
 
@@ -551,6 +551,7 @@ static void load_lnchn_htlcs(struct LNchannel *lnchn)
 	sqlite3 *sql = lnchn->dstate->db->sql;
 	char *ctx = tal_tmpctx(lnchn);
 	const char *select;
+    struct htlc **htlcs_update;
 	bool to_them_only, to_us_only;
 
 	select = tal_fmt(ctx,
@@ -592,7 +593,7 @@ static void load_lnchn_htlcs(struct LNchannel *lnchn)
 		if (hstate == HTLC_STATE_INVALID)
 			fatal("load_lnchn_htlcs:invalid state %s",
 			      sqlite3_column_str(stmt, 2));
-		htlc = lnchn_new_htlc(lnchn,
+		htlc = internal_new_htlc(lnchn,
 				     sqlite3_column_int64(stmt, 3),
 				     &rhash,
 				     sqlite3_column_int64(stmt, 4),
@@ -676,15 +677,19 @@ static void load_lnchn_htlcs(struct LNchannel *lnchn)
 						  lnchn,
 						  &lnchn->local.commit->revocation_hash,
 						  lnchn->local.commit->cstate,
-						  LOCAL, &to_them_only, NULL);
+						  LOCAL, &to_them_only, &htlcs_update);
 	bitcoin_txid(lnchn->local.commit->tx, &lnchn->local.commit->txid);
+    update_htlc_in_channel(lnchn, LOCAL, htlcs_update);
+    tal_free(htlcs_update);
 
 	lnchn->remote.commit->tx = create_commit_tx(lnchn->remote.commit,
 						   lnchn,
 						   &lnchn->remote.commit->revocation_hash,
 						   lnchn->remote.commit->cstate,
-						   REMOTE, &to_us_only, NULL);
+						   REMOTE, &to_us_only, &htlcs_update);
 	bitcoin_txid(lnchn->remote.commit->tx, &lnchn->remote.commit->txid);
+    update_htlc_in_channel(lnchn, REMOTE, htlcs_update);
+    tal_free(htlcs_update);
 
 	lnchn->remote.staging_cstate = copy_cstate(lnchn, lnchn->remote.commit->cstate);
 	lnchn->local.staging_cstate = copy_cstate(lnchn, lnchn->local.commit->cstate);

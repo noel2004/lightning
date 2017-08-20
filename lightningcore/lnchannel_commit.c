@@ -32,6 +32,103 @@
 #include <stdlib.h>
 #include <sys/types.h>
 
+static void add_their_commit(struct LNchannel *lnchn,
+			   const struct sha256_double *txid, u64 commit_num)
+{
+	struct their_commit *tc = tal(lnchn, struct their_commit);
+	tc->txid = *txid;
+	tc->commit_num = commit_num;
+
+	db_add_commit_map(lnchn, txid, commit_num);
+}
+
+/* Sign and local commit tx */
+static void sign_commit_tx(struct LNchannel *lnchn)
+{
+	ecdsa_signature sig;
+
+	/* Can't be signed already, and can't have scriptsig! */
+	assert(!lnchn->local.commit->tx->input[0].script);
+	assert(!lnchn->local.commit->tx->input[0].witness);
+
+	lnchn_sign_ourcommit(lnchn, lnchn->local.commit->tx, &sig);
+
+	lnchn->local.commit->tx->input[0].witness
+		= bitcoin_witness_2of2(lnchn->local.commit->tx->input,
+				       lnchn->local.commit->sig,
+				       &sig,
+				       &lnchn->remote.commitkey,
+				       &lnchn->local.commitkey);
+}
+
+static u64 commit_tx_fee(const struct bitcoin_tx *commit, u64 anchor_satoshis)
+{
+	uint64_t i, total = 0;
+
+	for (i = 0; i < tal_count(commit->output); i++)
+		total += commit->output[i].amount;
+
+	assert(anchor_satoshis >= total);
+	return anchor_satoshis - total;
+}
+
+static u64 lnchn_commitsigs_received(struct LNchannel *lnchn)
+{
+	return lnchn->their_commitsigs;
+}
+
+static u64 lnchn_revocations_received(struct LNchannel *lnchn)
+{
+	/* How many preimages we've received. */
+	return -lnchn->their_preimages.min_index;
+}
+
+
+static bool lnchn_uncommitted_changes(const struct LNchannel *lnchn)
+{
+	struct htlc_map_iter it;
+	struct htlc *h;
+	enum feechange_state i;
+
+	for (h = htlc_map_first(&lnchn->htlcs, &it);
+	     h;
+	     h = htlc_map_next(&lnchn->htlcs, &it)) {
+		if (htlc_has(h, HTLC_REMOTE_F_PENDING))
+			return true;
+	}
+	/* Pending feechange we sent, or pending ack of theirs. */
+	for (i = 0; i < ARRAY_SIZE(lnchn->feechanges); i++) {
+		if (!lnchn->feechanges[i])
+			continue;
+		if (feechange_state_flags(i) & HTLC_REMOTE_F_PENDING)
+			return true;
+	}
+	return false;
+}
+
+static void remote_changes_pending(struct LNchannel *lnchn)
+{
+	if (!lnchn->commit_timer) {
+		log_debug(lnchn->log, "remote_changes_pending: adding timer");
+		lnchn->commit_timer = new_reltimer(&lnchn->dstate->timers, lnchn,
+						  lnchn->dstate->config.commit_time,
+						  try_commit, lnchn);
+	} else
+		log_debug(lnchn->log, "remote_changes_pending: timer already exists");
+}
+
+static void lnchn_update_complete(struct LNchannel *lnchn)
+{
+	log_debug(lnchn->log, "lnchn_update_complete");
+
+	/* Have we got more changes in the meantime? */
+	if (lnchn_uncommitted_changes(lnchn)) {
+		log_debug(lnchn->log, "lnchn_update_complete: more changes!");
+		remote_changes_pending(lnchn);
+	}
+}
+
+
 struct htlcs_table {
 	enum htlc_state from, to;
 };
@@ -58,8 +155,8 @@ static const char *changestates(struct LNchannel *lnchn,
 
 		for (i = 0; i < n; i++) {
             //any "send purpose" can be commit after its downstream is commited
-            if (htlc_has(h, HTLC_ADDING)) {
-                h_side = lite_query_htlc_state(lnchn->dstate->channels,
+            if (htlc_has(h, HTLC_ADDING) && htlc_route_has_downstream(h)) {
+                h_side = lite_query_htlc_direct(lnchn->dstate->channels,
                     &h->rhash, true);
             }
             //any "remove purpose" can be commit after its upstream is commited
@@ -71,8 +168,7 @@ static const char *changestates(struct LNchannel *lnchn,
 				if (!adjust_cstates(lnchn, h,
 						    table[i].from, table[i].to))
 					return "accounting error";
-				htlc_changestate(h, table[i].from,
-						 table[i].to, db_commit);
+				htlc_changestate(h, table[i].from, table[i].to);
 				check_both_committed(lnchn, h);
 				changed = true;
 			}
@@ -122,6 +218,34 @@ static const char *changestates(struct LNchannel *lnchn,
 	if (!changed)
 		return "no changes made";
 	return NULL;
+}
+
+static void check_both_committed(struct LNchannel *lnchn, struct htlc *h)
+{
+	if (!htlc_has(h, HTLC_ADDING) && !htlc_has(h, HTLC_REMOVING))
+		log_debug(lnchn->log,
+			  "Both committed to %s of %s HTLC %"PRIu64 "(%s)",
+			  h->state == SENT_ADD_ACK_REVOCATION
+			  || h->state == RCVD_ADD_ACK_REVOCATION ? "ADD"
+			  : h->r ? "FULFILL" : "FAIL",
+			  htlc_owner(h) == LOCAL ? "our" : "their",
+			  h->id, htlc_state_name(h->state));
+
+	switch (h->state) {
+	case RCVD_REMOVE_ACK_REVOCATION:
+		/* If it was fulfilled, we handled it immediately. */
+		if (h->fail)
+			our_htlc_failed(lnchn, h);
+		break;
+	case RCVD_ADD_ACK_REVOCATION:
+		//their_htlc_added(lnchn, h, NULL);
+		resolve_invoice(lnchn->dstate, invoice);
+		set_htlc_rval(lnchn, htlc, &invoice->r);
+		command_htlc_fulfill(lnchn, htlc);
+		break;
+	default:
+		break;
+	}
 }
 
 static bool adjust_cstate_side(struct channel_state *cstate,
@@ -222,6 +346,65 @@ static bool lnchn_uncommitted_changes(const struct LNchannel *lnchn)
     return false;
 }
 
+static void set_htlc_rval(struct LNchannel *lnchn,
+			  struct htlc *htlc, const struct preimage *rval)
+{
+	assert(!htlc->r);
+	assert(!htlc->fail);
+	htlc->r = tal_dup(htlc, struct preimage, rval);
+	db_htlc_fulfilled(lnchn, htlc);
+}
+
+static bool command_htlc_fulfill(struct LNchannel *lnchn, struct htlc *htlc)
+{
+	if (lnchn->state == STATE_CLOSE_ONCHAIN_THEIR_UNILATERAL
+	    || lnchn->state == STATE_CLOSE_ONCHAIN_OUR_UNILATERAL) {
+		return fulfill_onchain(lnchn, htlc);
+	}
+
+	if (!state_can_remove_htlc(lnchn->state))
+		return false;
+
+	/* FIXME-OLD #2:
+	 *
+	 * The sending node MUST add the HTLC fulfill/fail to the
+	 * unacked changeset for its remote commitment
+	 */
+	cstate_fulfill_htlc(lnchn->remote.staging_cstate, htlc);
+
+	htlc_changestate(htlc, RCVD_ADD_ACK_REVOCATION, SENT_REMOVE_HTLC, false);
+
+	remote_changes_pending(lnchn);
+
+	queue_pkt_htlc_fulfill(lnchn, htlc);
+	return true;
+}
+
+static void check_both_committed(struct LNchannel *lnchn, struct htlc *h)
+{
+	if (!htlc_has(h, HTLC_ADDING) && !htlc_has(h, HTLC_REMOVING))
+		log_debug(lnchn->log,
+			  "Both committed to %s of %s HTLC %"PRIu64 "(%s)",
+			  h->state == SENT_ADD_ACK_REVOCATION
+			  || h->state == RCVD_ADD_ACK_REVOCATION ? "ADD"
+			  : h->r ? "FULFILL" : "FAIL",
+			  htlc_owner(h) == LOCAL ? "our" : "their",
+			  h->id, htlc_state_name(h->state));
+
+	switch (h->state) {
+	case RCVD_REMOVE_ACK_REVOCATION:
+		/* If it was fulfilled, we handled it immediately. */
+		if (h->fail)
+			our_htlc_failed(lnchn, h);
+		break;
+	case RCVD_ADD_ACK_REVOCATION:
+		their_htlc_added(lnchn, h, NULL);
+		break;
+	default:
+		break;
+	}
+}
+
 static bool do_commit(struct LNchannel *lnchn, struct command *jsoncmd)
 {
     struct commit_info *ci;
@@ -300,7 +483,7 @@ static bool do_commit(struct LNchannel *lnchn, struct command *jsoncmd)
 
     /* We don't need to remember their commit if we don't give sig. */
     if (ci->sig)
-        lnchn_add_their_commit(lnchn, &ci->txid, ci->commit_num);
+        add_their_commit(lnchn, &ci->txid, ci->commit_num);
 
     if (lnchn->state == STATE_SHUTDOWN) {
         set_lnchn_state(lnchn, STATE_SHUTDOWN_COMMITTING, __func__, true);
