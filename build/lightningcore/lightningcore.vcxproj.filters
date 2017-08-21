@@ -80,6 +80,9 @@
     <ClCompile Include="..\..\lightningcore\lnchannel_commit.c">
       <Filter>源文件\LNChannel</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\lightningcore\lnchannel_htlc.c">
+      <Filter>源文件\LNChannel</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\protos\peer.pb.h">

@@ -137,6 +137,41 @@ struct feechanges_table {
 	enum feechange_state from, to;
 };
 
+static void filterhtlcs(struct LNchannel *lnchn, enum side side,
+        struct htlc **add_table,
+        struct htlc **remove_table
+    )
+{
+    struct htlc_map_iter it;
+    struct htlc *h, *add_h,*rem_h;
+    int pending_flag = HTLC_FLAG(side, HTLC_F_PENDING);
+
+    *add_table = tal_arr(lnchn, struct htlc*, htlc_map_count(&lnchn->htlcs));
+    *remove_table = tal_arr(lnchn, struct htlc*, htlc_map_count(&lnchn->htlcs));
+    add_h = *add_table;
+    rem_h = *remove_table;
+
+    for (h = htlc_map_first(&lnchn->htlcs, &it);
+        h;
+        h = htlc_map_next(&lnchn->htlcs, &it)) {
+
+        if (!htlc_has(h, pending_flag))continue;
+
+        if (htlc_has(h, HTLC_FLAG(side, HTLC_ADDING))) {
+            
+            if (htlc_route_has_downstream(h)) {
+
+            }
+        }
+        else{
+            assert(htlc_has(h, HTLC_FLAG(side, HTLC_REMOVING)));
+
+
+        }
+
+    }
+}
+
 static const char *changestates(struct LNchannel *lnchn,
 				const struct htlcs_table *table,
 				size_t n,

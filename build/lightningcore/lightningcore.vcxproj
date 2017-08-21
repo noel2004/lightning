@@ -28,6 +28,7 @@
     <ClCompile Include="..\..\lightningcore\htlc.c" />
     <ClCompile Include="..\..\lightningcore\lnchannel.c" />
     <ClCompile Include="..\..\lightningcore\lnchannel_commit.c" />
+    <ClCompile Include="..\..\lightningcore\lnchannel_htlc.c" />
     <ClCompile Include="..\..\lightningcore\lnchannel_open.c" />
     <ClCompile Include="..\..\lightningcore\lnchannel_redeem.c" />
     <ClCompile Include="..\..\lightningcore\log.c" />

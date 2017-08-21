@@ -14,31 +14,19 @@ enum htlc_state {
 
     PLAN_ADD_HTLC,
     SENT_ADD_COMMIT,
-//    RCVD_ADD_REVOCATION,
     RCVD_ADD_ACK_COMMIT, /*fixed*/
-//    SENT_ADD_ACK_REVOCATION, 
 
     /* When they remove an htlc, it directly comes into RCVD_REMOVE_COMMIT: */
     PLAN_REMOVE_HTLC, 
     SENT_REMOVE_HTLC,
     RCVD_REMOVE_COMMIT, /*dead*/
-//    SENT_REMOVE_REVOCATION, 
-//    SENT_REMOVE_ACK_COMMIT,
-//    RCVD_REMOVE_ACK_REVOCATION,
 
     /* When they add a new htlc, it goes in this order. */
     RCVD_ADD_HTLC, /* fixed */
-//   RCVD_ADD_COMMIT, 
-//    SENT_ADD_REVOCATION, 
-//    SENT_ADD_ACK_COMMIT,
-//    RCVD_ADD_ACK_REVOCATION,
 
-    /* When we remove an htlc, it directly comes into RCVD_REMOVE_ACK_COMMIT: */
+    /* When they remove an htlc, it directly comes into RCVD_REMOVE_ACK_COMMIT: */
     SENT_RESOLVE_HTLC,
-//    SENT_REMOVE_COMMIT,
-//    RCVD_REMOVE_REVOCATION,
     RCVD_REMOVE_ACK_COMMIT, /*dead*/
-//    SENT_REMOVE_ACK_REVOCATION,
 
     HTLC_STATE_INVALID
 };
@@ -211,11 +199,15 @@ static inline size_t htlc_map_count(const struct htlc_map *htlcs)
 	return htlcs->raw.elems;
 }
 
-/* FIXME: Move these out of the hash! */
+static inline bool htlc_state_is_dead(enum htlc_state state)
+{
+    return state == RCVD_REMOVE_COMMIT
+        || state == RCVD_REMOVE_ACK_COMMIT;
+}
+
 static inline bool htlc_is_dead(const struct htlc *htlc)
 {
-	return htlc->state == RCVD_REMOVE_COMMIT
-		|| htlc->state == RCVD_REMOVE_ACK_COMMIT;
+    return htlc_state_is_dead(htlc->state);
 }
 
 
