@@ -137,13 +137,40 @@ struct feechanges_table {
 	enum feechange_state from, to;
 };
 
+/* remove resolved htlcs */
+static void resolvehtlcs(struct LNchannel *lnchn, struct htlc **htlcs) {
+
+    struct htlc *h;
+    size_t i, cnt;
+    cnt = tal_count(htlcs);
+
+    for (i = 0; i < cnt; ++i) {
+
+        h = htlcs[i];
+
+        assert(htlc_is_fixed(h));
+
+		if (!adjust_cstates(lnchn, h,
+					table[i].from, table[i].to))
+			return "accounting error";
+
+        if (htlc_owner(h) == REMOTE){
+            htlc_changestate(h, h->state, SENT_RESOLVE_HTLC);
+        }
+        else {
+            htlc_changestate(h, h->state, SENT_REMOVE_HTLC);
+        }
+
+    }
+}
+
 static void filterhtlcs(struct LNchannel *lnchn, enum side side,
-        struct htlc **add_table,
-        struct htlc **remove_table
+        struct htlc* **add_table,
+        struct htlc* **remove_table
     )
 {
     struct htlc_map_iter it;
-    struct htlc *h, *add_h,*rem_h;
+    struct htlc *h, **add_h, **rem_h, *yah;
     int pending_flag = HTLC_FLAG(side, HTLC_F_PENDING);
 
     *add_table = tal_arr(lnchn, struct htlc*, htlc_map_count(&lnchn->htlcs));
@@ -159,17 +186,28 @@ static void filterhtlcs(struct LNchannel *lnchn, enum side side,
 
         if (htlc_has(h, HTLC_FLAG(side, HTLC_ADDING))) {
             
-            if (htlc_route_has_downstream(h)) {
-
+            if (!htlc_route_has_source(h) || (yah 
+                = lite_query_htlc_direct(lnchn->dstate->channels,
+                    &h->rhash, false)) && 
+                htlc_is_fixed(yah)) {
+                *(add_h++) = h;
             }
         }
         else{
             assert(htlc_has(h, HTLC_FLAG(side, HTLC_REMOVING)));
 
-
+            if (!htlc_route_has_downstream(h) || (yah 
+                = lite_query_htlc_direct(lnchn->dstate->channels,
+                    &h->rhash, true)) && 
+                htlc_is_dead(yah)) {
+                *(rem_h++) = h;
+            }
         }
 
     }
+
+    tal_resize(add_table, add_h - *add_table);
+    tal_resize(remove_table, rem_h - *remove_table);
 }
 
 static const char *changestates(struct LNchannel *lnchn,

@@ -1168,22 +1168,30 @@ void reopen_LNChannel(struct LNchannel *lnchn)
         h;
         h = htlc_map_next(&lnchn->htlcs, &it)) {
 
-        if (!htlc_has(h, HTLC_F_COMMITTED) ||
-            !htlc_route_has_source(h))continue;
+        if (!htlc_has(h, HTLC_F_COMMITTED))continue;
 
-        //lite_query_channel_from_htlc()
-        srchtlc = lite_query_htlc_direct(lnchn->dstate->channels, &h->rhash, false);
-        if (!srchtlc){
-            //TODO: should mark it as something special?
-            continue;
+        /* rebuild deadline and src_expiry*/
+        if (htlc_route_has_source(h)) {
+            srchtlc = lite_query_htlc_direct(lnchn->dstate->channels, &h->rhash, false);
+            if (!srchtlc){
+                //TODO: should mark it as something special?
+                continue;
+            }
+
+            h->src_expiry = tal(h, struct abs_locktime);
+            *h->src_expiry = srchtlc->expiry;
+	        h->deadline = abs_locktime_to_blocks(h->src_expiry)
+				    - lnchn->dstate->config.deadline_blocks;
+
+            lite_release_htlc(lnchn->dstate->channels, srchtlc);
+        }
+        else if (htlc_route_is_end(h)) {
+
+            if (!h->r) {
+                //TODO: notify invoice again
+            }            
         }
 
-        h->src_expiry = tal(h, struct abs_locktime);
-        *h->src_expiry = srchtlc->expiry;
-	    h->deadline = abs_locktime_to_blocks(h->src_expiry)
-				- lnchn->dstate->config.deadline_blocks;
-
-        lite_release_htlc(lnchn->dstate->channels, srchtlc);
     }
 
 }

@@ -210,6 +210,11 @@ static inline bool htlc_is_dead(const struct htlc *htlc)
     return htlc_state_is_dead(htlc->state);
 }
 
+static inline bool htlc_is_fixed(const struct htlc *htlc)
+{
+    return htlc_has(htlc, HTLC_LOCAL_F_COMMITTED) && 
+        htlc_has(htlc, HTLC_REMOTE_F_COMMITTED);
+}
 
 static inline const char *side_to_str(enum side side)
 {
