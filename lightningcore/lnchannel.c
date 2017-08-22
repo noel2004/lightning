@@ -1099,11 +1099,11 @@ struct LNchannel *new_LNChannel(struct lightningd_state *dstate,
 	return lnchn;
 }
 
-static void htlc_destroy(struct htlc *htlc)
-{
-	if (!htlc_map_del(&htlc->lnchn->htlcs, htlc))
-		fatal("Could not find htlc to destroy");
-}
+//static void htlc_destroy(struct htlc *htlc)
+//{
+//	if (!htlc_map_del(&htlc->lnchn->htlcs, htlc))
+//		fatal("Could not find htlc to destroy");
+//}
 
 struct htlc *internal_new_htlc(struct LNchannel *lnchn,
 			   u64 msatoshi,
@@ -1135,8 +1135,8 @@ struct htlc *internal_new_htlc(struct LNchannel *lnchn,
     h->history[0] = lnchn->local.commit ? lnchn->local.commit->commit_num : 0;
     h->history[1] = h->history[0] + 1;
 
-	htlc_map_add(&lnchn->htlcs, h);
-	tal_add_destructor(h, htlc_destroy);
+	//htlc_map_add(&lnchn->htlcs, h);
+	//tal_add_destructor(h, htlc_destroy);
 
 	return h;
 }

@@ -137,11 +137,64 @@ struct feechanges_table {
 	enum feechange_state from, to;
 };
 
-/* remove resolved htlcs */
-static void resolvehtlcs(struct LNchannel *lnchn, struct htlc **htlcs) {
+static bool adjust_cstate_side(struct log *log, struct channel_state *cstate,
+    struct htlc *h,
+    enum htlc_state old, enum htlc_state new,
+    enum side side)
+{
+    int oldf = htlc_state_flags(old), newf = htlc_state_flags(new);
+    bool old_committed, new_committed;
+
+    ///* We applied changes to staging_cstate when we first received
+    // * add/remove packet, so we could make sure it was valid.  Don't
+    // * do that again. */
+    //if (old == SENT_ADD_HTLC || old == RCVD_REMOVE_HTLC
+    //    || old == RCVD_ADD_HTLC || old == SENT_REMOVE_HTLC)
+    //	return true;
+
+    old_committed = (oldf & HTLC_FLAG(side, HTLC_F_COMMITTED));
+    new_committed = (newf & HTLC_FLAG(side, HTLC_F_COMMITTED));
+
+    if (old_committed && !new_committed) {
+        if (h->r)
+            cstate_fulfill_htlc(cstate, h);
+        else
+            cstate_fail_htlc(cstate, h);
+    }
+    else if (!old_committed && new_committed) {
+        if (!cstate_add_htlc(cstate, h, false)) {
+            log_broken_struct(log,
+                "Cannot afford htlc %s",
+                struct htlc, h);
+            log_add_struct(log, " channel state %s",
+                struct channel_state, cstate);
+            return false;
+        }
+    }
+    return true;
+}
+
+/* We apply changes to staging_cstate when we first PENDING, so we can
+* make sure they're valid.  So here we change the staging_cstate on
+* the revocation receive (ie. when acked). */
+static bool adjust_cstates(struct LNchannel *lnchn, struct htlc *h,
+    enum htlc_state old, enum htlc_state new)
+{
+    return adjust_cstate_side(lnchn->log, lnchn->remote.staging_cstate, h, old, new,
+        REMOTE)
+        && adjust_cstate_side(lnchn->log, lnchn->local.staging_cstate, h, old, new,
+            LOCAL);
+}
+
+/* add or remove changed htlcs */
+static void resolvehtlcs(struct LNchannel *lnchn, 
+    const struct htlcs_table *table,
+    size_t n,
+    struct htlc **htlcs) {
 
     struct htlc *h;
-    size_t i, cnt;
+    size_t i, j, cnt;
+    enum htlc_state new_state;
     cnt = tal_count(htlcs);
 
     for (i = 0; i < cnt; ++i) {
@@ -149,17 +202,21 @@ static void resolvehtlcs(struct LNchannel *lnchn, struct htlc **htlcs) {
         h = htlcs[i];
 
         assert(htlc_is_fixed(h));
-
-		if (!adjust_cstates(lnchn, h,
-					table[i].from, table[i].to))
-			return "accounting error";
-
-        if (htlc_owner(h) == REMOTE){
-            htlc_changestate(h, h->state, SENT_RESOLVE_HTLC);
+        new_state = h->state;
+        for (j = 0; j < n; ++j) {
+            if (h->state == table[j].from) {
+                new_state = table[j].to;
+                break;
+            }
         }
-        else {
-            htlc_changestate(h, h->state, SENT_REMOVE_HTLC);
-        }
+
+        assert(new_state == h->state);
+        if (new_state == h->state)continue;
+
+        if (!adjust_cstates(lnchn, h, h->state, new_state))
+            continue;//simply pass it (so warning should have been made)
+
+        htlc_changestate(h, h->state, new_state);
 
     }
 }
@@ -319,54 +376,6 @@ static void check_both_committed(struct LNchannel *lnchn, struct htlc *h)
 	default:
 		break;
 	}
-}
-
-static bool adjust_cstate_side(struct channel_state *cstate,
-			       struct htlc *h,
-			       enum htlc_state old, enum htlc_state new,
-			       enum side side)
-{
-	int oldf = htlc_state_flags(old), newf = htlc_state_flags(new);
-	bool old_committed, new_committed;
-
-	/* We applied changes to staging_cstate when we first received
-	 * add/remove packet, so we could make sure it was valid.  Don't
-	 * do that again. */
-	if (old == SENT_ADD_HTLC || old == RCVD_REMOVE_HTLC
-	    || old == RCVD_ADD_HTLC || old == SENT_REMOVE_HTLC)
-		return true;
-
-	old_committed = (oldf & HTLC_FLAG(side, HTLC_F_COMMITTED));
-	new_committed = (newf & HTLC_FLAG(side, HTLC_F_COMMITTED));
-
-	if (old_committed && !new_committed) {
-		if (h->r)
-			cstate_fulfill_htlc(cstate, h);
-		else
-			cstate_fail_htlc(cstate, h);
-	} else if (!old_committed && new_committed) {
-		if (!cstate_add_htlc(cstate, h, false)) {
-			log_broken_struct(h->lnchn->log,
-					  "Cannot afford htlc %s",
-					  struct htlc, h);
-			log_add_struct(h->lnchn->log, " channel state %s",
-				       struct channel_state, cstate);
-			return false;
-		}
-	}
-	return true;
-}
-
-/* We apply changes to staging_cstate when we first PENDING, so we can
- * make sure they're valid.  So here we change the staging_cstate on
- * the revocation receive (ie. when acked). */
-static bool adjust_cstates(struct LNchannel *lnchn, struct htlc *h,
-			   enum htlc_state old, enum htlc_state new)
-{
-	return adjust_cstate_side(lnchn->remote.staging_cstate, h, old, new,
-				  REMOTE)
-		&& adjust_cstate_side(lnchn->local.staging_cstate, h, old, new,
-				      LOCAL);
 }
 
 static void adjust_cstate_fee_side(struct channel_state *cstate,

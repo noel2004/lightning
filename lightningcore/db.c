@@ -593,10 +593,7 @@ static void load_lnchn_htlcs(struct LNchannel *lnchn)
 		if (hstate == HTLC_STATE_INVALID)
 			fatal("load_lnchn_htlcs:invalid state %s",
 			      sqlite3_column_str(stmt, 2));
-        else if (htlc_state_is_dead(hstate)) {
-            //don't add removed (dead) htlc again
-            continue;
-        }
+
 		htlc = internal_new_htlc(lnchn,
 				     sqlite3_column_int64(stmt, 3),
 				     &rhash,
@@ -627,6 +624,15 @@ static void load_lnchn_htlcs(struct LNchannel *lnchn)
 		/* Update cstate with this HTLC. */
 		apply_htlc(lnchn->log, lnchn->local.commit->cstate, htlc, LOCAL);
 		apply_htlc(lnchn->log, lnchn->remote.commit->cstate, htlc, REMOTE);
+
+        /* Only add "not dead" htlc to channel, so we save many cost and memory while running */
+        if (!htlc_is_dead(htlc)) {
+            htlc_map_add(&lnchn->htlcs, htlc);
+        }
+        else {
+            tal_free(htlc);
+        }
+            
 	}
 
 	err = sqlite3_finalize(stmt);

@@ -17,7 +17,7 @@ enum htlc_state {
     RCVD_ADD_ACK_COMMIT, /*fixed*/
 
     /* When they remove an htlc, it directly comes into RCVD_REMOVE_COMMIT: */
-    PLAN_REMOVE_HTLC, 
+    //PLAN_REMOVE_HTLC, 
     SENT_REMOVE_HTLC,
     RCVD_REMOVE_COMMIT, /*dead*/
 
