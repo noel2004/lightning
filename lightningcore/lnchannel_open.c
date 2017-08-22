@@ -146,14 +146,14 @@ static bool setup_first_commit(struct LNchannel *lnchn)
 						  lnchn,
 						  &lnchn->local.commit->revocation_hash,
 						  lnchn->local.commit->cstate,
-						  LOCAL, &to_them_only);
+						  LOCAL, &to_them_only, NULL);
 	bitcoin_txid(lnchn->local.commit->tx, &lnchn->local.commit->txid);
 
 	lnchn->remote.commit->tx = create_commit_tx(lnchn->remote.commit,
 						   lnchn,
 						   &lnchn->remote.commit->revocation_hash,
 						   lnchn->remote.commit->cstate,
-						   REMOTE, &to_us_only);
+						   REMOTE, &to_us_only, NULL);
 	assert(to_them_only != to_us_only);
 
 	/* If we offer anchor, their commit is to-us only. */
@@ -166,6 +166,21 @@ static bool setup_first_commit(struct LNchannel *lnchn)
 	return true;
 }
 
+static bool lnchn_first_open(struct LNchannel *lnchn, 
+    const struct pubkey *chnid,
+    bool offer_anchor) {
+
+    lnchn->id = tal_dup(lnchn, struct pubkey, chnid);
+    lnchn->local.commit_fee_rate = desired_commit_feerate(lnchn->dstate);
+    log_debug(lnchn->log, "Using local fee rate %"PRIu64, lnchn->local.commit_fee_rate);
+
+    lnchn->local.offer_anchor = offer_anchor;
+    lnchn->remote.offer_anchor = !offer_anchor;
+
+    //TODO: add redeem addr option
+    return lnchn_crypto_on(lnchn, NULL);
+
+}
 
 /* Crypto is on, we are live. */
 static bool lnchn_crypto_on(struct LNchannel *lnchn, char *redeem_addr)
@@ -234,6 +249,11 @@ bool lnchn_notify_open_remote(struct LNchannel *lnchn,
 {
 	struct commit_info *ci;
 
+    if (lnchn->state > STATE_OPEN_WAIT_FOR_OPENPKT) {
+        //consider message is duplicated and omit it
+        return true;
+    }
+
     if (!check_config_compatible(lnchn->dstate, nego_config)) {
         //TODO: print out the config
         log_broken(lnchn->log, "Not compatible config for channel");
@@ -243,42 +263,25 @@ bool lnchn_notify_open_remote(struct LNchannel *lnchn,
     }
 
     if (lnchn->state == STATE_INIT) {
-        u64 feerate = get_feerate(lnchn->dstate->topology);
-
         assert(chnid != NULL && nego_config != NULL);
 
-        //TODO: add redeem addr option
-        if (!lnchn_crypto_on(lnchn, NULL)) {           
+        if (!lnchn_first_open(lnchn, chnid, false)) {
+            internal_lnchn_fail_on_notify(lnchn, "open failure");
             return false;
         }
-
-        lnchn->id = tal_steal(lnchn, chnid);
-        lnchn->remote.offer_anchor = true;
-        //feerate is adjusted first ...
-        if (feerate > nego_config->initial_fee_rate) {
-            lnchn->local.commit_fee_rate = feerate - nego_config->initial_fee_rate;
-        }
-        else {
-            /* if he is generous enough */
-            lnchn->local.commit_fee_rate = 0;
-        }
-	    log_debug(lnchn->log, "Using local fee rate %"PRIu64, lnchn->local.commit_fee_rate);
-
-        lnchn->local.offer_anchor = false;
 
         db_start_transaction(lnchn);
         db_create_lnchn(lnchn);
     }
-    else if (lnchn->state == STATE_OPEN_WAIT_FOR_OPENPKT) {
-        assert(!lnchn->remote.offer_anchor);
+    else {
+        assert(lnchn->state == STATE_OPEN_WAIT_FOR_OPENPKT 
+            && !lnchn->remote.offer_anchor);
         db_start_transaction(lnchn);
     }
-    else {
-        return false;
-    }	
 
     //update remote data and corresponding local one
     lnchn->remote.commit_fee_rate = nego_config->initial_fee_rate;
+    log_debug(lnchn->log, "Using remote fee rate %"PRIu64, lnchn->remote.commit_fee_rate);
     lnchn->remote.locktime = nego_config->delay;
 	lnchn->remote.mindepth = nego_config->min_depth;
 
@@ -301,27 +304,20 @@ bool lnchn_notify_open_remote(struct LNchannel *lnchn,
         STATE_OPEN_WAIT_FOR_ANCHORPKT : STATE_OPEN_WAIT_FOR_CREATEANCHOR, 
         __func__, true);
 
-    if (db_commit_transaction(lnchn) != NULL)
+    if (db_commit_transaction(lnchn) != NULL) {
+        internal_lnchn_fail_on_notify(lnchn, "open db failure");
         return false;
-
+    }
+        
     if (lnchn->state == STATE_INIT)send_open_message(lnchn);
-
     return true;
 }
 
 bool lnchn_open_local(struct LNchannel *lnchn, const struct pubkey *chnid) {
 
-    lnchn->id = tal_dup(lnchn, struct pubkey, chnid);
-    lnchn->local.commit_fee_rate = desired_commit_feerate(lnchn->dstate);
-    log_debug(lnchn->log, "Using local fee rate %"PRIu64, lnchn->local.commit_fee_rate);
-
-    //TODO: add redeem addr option
-    if (!lnchn_crypto_on(lnchn, NULL)) {           
+    if (!lnchn_first_open(lnchn, chnid, true)) {           
         return false;
     }
-
-    lnchn->local.offer_anchor = true;
-    lnchn->remote.offer_anchor = false;
 
 	db_start_transaction(lnchn);
 	db_create_lnchn(lnchn);
