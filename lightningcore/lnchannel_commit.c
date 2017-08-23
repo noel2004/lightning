@@ -186,6 +186,17 @@ static bool adjust_cstates(struct LNchannel *lnchn, struct htlc *h,
             LOCAL);
 }
 
+static void cleardeadhtlcs(struct LNchannel *lnchn)
+{
+
+}
+
+struct htlc_commit_tasks
+{
+    struct htlc *ref_h;
+    struct msg_htlc_entry* gen_entry;
+};
+
 /* add or remove changed htlcs */
 static void resolvehtlcs(struct LNchannel *lnchn, 
     const struct htlcs_table *table,
@@ -194,7 +205,7 @@ static void resolvehtlcs(struct LNchannel *lnchn,
 
     struct htlc *h;
     size_t i, j, cnt;
-    enum htlc_state new_state;
+    enum htlc_state new_state, old_state;
     cnt = tal_count(htlcs);
 
     for (i = 0; i < cnt; ++i) {
@@ -216,22 +227,35 @@ static void resolvehtlcs(struct LNchannel *lnchn,
         if (!adjust_cstates(lnchn, h, h->state, new_state))
             continue;//simply pass it (so warning should have been made)
 
+        old_state = h->state;
         htlc_changestate(h, h->state, new_state);
 
+        /* commit htlc */
+		if (htlc_state_flags(old_state) & HTLC_ADDING) {
+			db_new_htlc(lnchn, h);
+			return;
+		}
+		db_update_htlc_state(lnchn, h, old_state);
     }
 }
 
-static void filterhtlcs(struct LNchannel *lnchn, enum side side,
-        struct htlc* **add_table,
-        struct htlc* **remove_table
+static void applyfeechange(struct LNchannel *lnchn) {
+
+}
+
+static void filterhtlcs_and_genentries(const tal_t *ctx, 
+        struct LNchannel *lnchn, 
+        struct msg_htlc_entry *msg_arr, /*suppose the arr is long enough to held all possible entries*/
+        struct htlc_commit_tasks **add_table,
+        struct htlc_commit_tasks **remove_table
     )
 {
     struct htlc_map_iter it;
-    struct htlc *h, **add_h, **rem_h, *yah;
-    int pending_flag = HTLC_FLAG(side, HTLC_F_PENDING);
+    struct htlc *h, *yah;
+    struct htlc_commit_tasks *add_h, *rem_h;
+    *add_table = tal_arr(ctx, struct htlc_commit_tasks, htlc_map_count(&lnchn->htlcs));
+    *remove_table = tal_arr(ctx, struct htlc_commit_tasks, htlc_map_count(&lnchn->htlcs));
 
-    *add_table = tal_arr(lnchn, struct htlc*, htlc_map_count(&lnchn->htlcs));
-    *remove_table = tal_arr(lnchn, struct htlc*, htlc_map_count(&lnchn->htlcs));
     add_h = *add_table;
     rem_h = *remove_table;
 
@@ -239,27 +263,61 @@ static void filterhtlcs(struct LNchannel *lnchn, enum side side,
         h;
         h = htlc_map_next(&lnchn->htlcs, &it)) {
 
-        if (!htlc_has(h, pending_flag))continue;
+        if (htlc_owner(h) == REMOTE)continue;
 
-        if (htlc_has(h, HTLC_FLAG(side, HTLC_ADDING))) {
+        yah = NULL;
+        //for pending (purpose to added), check if it can be added now
+        if (htlc_has(h, HTLC_LOCAL_F_PENDING)) {
             
-            if (!htlc_route_has_source(h) || (yah 
+            /* 
+                is tip or its source has been fixed, case for a broken source 
+                is rared, but in case we save some works ...
+            */
+            if (htlc_route_is_tip(h) || (yah 
                 = lite_query_htlc_direct(lnchn->dstate->channels,
                     &h->rhash, false)) && 
                 htlc_is_fixed(yah)) {
-                *(add_h++) = h;
-            }
-        }
-        else{
-            assert(htlc_has(h, HTLC_FLAG(side, HTLC_REMOVING)));
 
-            if (!htlc_route_has_downstream(h) || (yah 
-                = lite_query_htlc_direct(lnchn->dstate->channels,
-                    &h->rhash, true)) && 
-                htlc_is_dead(yah)) {
-                *(rem_h++) = h;
+                add_h->ref_h = h;
+                add_h->gen_entry = msg_arr++;
+                add_h->gen_entry->rhash = &h->rhash;
+                add_h->gen_entry->action_type = 1;
+                add_h->gen_entry->action.add.expiry = &h->expiry;
+                add_h->gen_entry->action.add.mstatoshi = h->msatoshi;
+                ++add_h;
             }
         }
+        //for fixed task, check if it can be resolved
+        else if(htlc_is_fixed(h)){
+
+            /* not harm even no action is taken*/
+            rem_h->ref_h = h;
+            rem_h->gen_entry = msg_arr;
+
+            /*
+                is end and has been resolved, or its downstream has been resolved
+            */
+            if ((htlc_route_is_end(h) && h->r)){
+                rem_h->gen_entry->action.del.r = h->r;
+            }
+            else if (yah = lite_query_htlc_direct(lnchn->dstate->channels,
+                    &h->rhash, true) && htlc_is_dead(yah)) {
+                //*(rem_h++) = h;
+                /*don't take pointer only*/
+                rem_h->gen_entry->action.del.r = yah->r ? 
+                    tal_dup(msg_arr, struct preimage, yah->r) : NULL;
+            }
+            else goto noaction; //well, ugly goto ...
+
+            rem_h->gen_entry->action_type = 0;
+            /* the setrval is left for resolvehtlcs, htlcs is immuatable here*/
+
+            ++rem_h;
+            ++msg_arr;
+noaction:
+        }
+
+        lite_release_htlc(lnchn->dstate->channels, yah);
 
     }
 

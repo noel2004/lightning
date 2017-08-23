@@ -8,6 +8,7 @@ struct sha256_double;
 struct pubkey;
 struct abs_locktime;
 struct preimage;
+struct htlc;
 
 /*take target id from channel id*/
 void    lite_msg_open(struct LNmessage *msg, const struct pubkey *target, 

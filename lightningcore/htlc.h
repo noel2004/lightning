@@ -22,7 +22,8 @@ enum htlc_state {
     RCVD_REMOVE_COMMIT, /*dead*/
 
     /* When they add a new htlc, it goes in this order. */
-    RCVD_ADD_HTLC, /* fixed */
+    RCVD_ADD_HTLC,
+    RCVD_ADD_COMMIT, /* fixed */
 
     /* When they remove an htlc, it directly comes into RCVD_REMOVE_ACK_COMMIT: */
     SENT_RESOLVE_HTLC,
@@ -109,8 +110,8 @@ struct htlc {
 
 };
 
-static inline bool htlc_route_is_tip(const struct htlc *h){return h->routing & 1;}
-static inline bool htlc_route_is_end(const struct htlc *h) { return h->routing & 2; }
+static inline bool htlc_route_is_tip(const struct htlc *h){return h->routing == 1;}
+static inline bool htlc_route_is_end(const struct htlc *h) { return h->routing == 2; }
 static inline bool htlc_route_is_chain(const struct htlc *h) { return h->routing & 4; }
 static inline bool htlc_route_has_source(const struct htlc *h) { return h->routing == 6; }
 static inline bool htlc_route_has_downstream(const struct htlc *h) { return h->routing == 5; }
