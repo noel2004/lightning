@@ -553,6 +553,8 @@ static void load_lnchn_htlcs(struct LNchannel *lnchn)
 	const char *select;
     struct htlc **htlcs_update;
 	bool to_them_only, to_us_only;
+    /* current applied feechanges:  [local, remote] */
+    struct feechange *feechanges[2];
 
 	select = tal_fmt(ctx,
 			 "SELECT * FROM htlcs WHERE lnchn = x'%s' ORDER BY id;",
@@ -651,32 +653,48 @@ static void load_lnchn_htlcs(struct LNchannel *lnchn)
 		      sqlite3_errstr(err), sqlite3_errmsg(sql));
 
 	while ((err = sqlite3_step(stmt)) != SQLITE_DONE) {
-		enum feechange_state feechange_state;
+		enum side side;
+        struct feechange *f;
+        struct commit_info *ci;
 
 		if (err != SQLITE_ROW)
 			fatal("load_lnchn_htlcs:step gave %s:%s",
 			      sqlite3_errstr(err), sqlite3_errmsg(sql));
 
-		if (sqlite3_column_count(stmt) != 3)
+		if (sqlite3_column_count(stmt) != 4)
 			fatal("load_lnchn_htlcs:step gave %i cols, not 3",
 			      sqlite3_column_count(stmt));
 
-		feechange_state
-			= feechange_state_from_name(sqlite3_column_str(stmt, 1));
-		if (feechange_state == FEECHANGE_STATE_INVALID)
-			fatal("load_lnchn_htlcs:invalid feechange state %s",
-			      sqlite3_column_str(stmt, 1));
-		if (lnchn->feechanges[feechange_state])
-			fatal("load_lnchn_htlcs: second feechange in state %s",
-			      sqlite3_column_str(stmt, 1));
-		lnchn->feechanges[feechange_state]
-			= new_feechange(lnchn, sqlite3_column_int64(stmt, 2),
-					feechange_state);
+		side = str_to_side(sqlite3_column_str(stmt, 1));
+        ci = side == LOCAL ? lnchn->local.commit : lnchn->remote.commit;
+
+        if (!feechanges[side]) {
+            feechanges[side] = talz(ctx, struct feechange);
+        }
+
+        f = feechanges[side];
+        if (f->commit_num < sqlite3_column_int64(stmt, 3)) {
+            //update and apply updated feerate ...
+            f->side = side;
+            f->fee_rate = sqlite3_column_int64(stmt, 2);
+            f->commit_num = sqlite3_column_int64(stmt, 3);
+        }
+
 	}
 	err = sqlite3_finalize(stmt);
 	if (err != SQLITE_OK)
 		fatal("load_lnchn_htlcs:finalize gave %s:%s",
 		      sqlite3_errstr(err), sqlite3_errmsg(sql));
+
+    if (feechanges[LOCAL]) {
+        assert(feechanges[LOCAL]->commit_num <= lnchn->local.commit->commit_num);
+        lnchn->local.commit->cstate->fee_rate = feechanges[LOCAL]->fee_rate;
+    }
+
+    if (feechanges[REMOTE]) {
+        assert(feechanges[REMOTE]->commit_num <= lnchn->remote.commit->commit_num);
+        lnchn->remote.commit->cstate->fee_rate = feechanges[REMOTE]->fee_rate;
+    }
 
 	if (!balance_after_force(lnchn->local.commit->cstate)
 	    || !balance_after_force(lnchn->remote.commit->cstate))
@@ -1192,9 +1210,9 @@ void db_init(struct lightningd_state *dstate)
               SQL_U64(history_beg), SQL_U64(history_end),
 		      "PRIMARY KEY(lnchn, rhash)")
 		TABLE(feechanges,
-		      SQL_PUBKEY(lnchn), SQL_STATENAME(state),
-		      SQL_U32(fee_rate),
-		      "PRIMARY KEY(lnchn,state)")
+		      SQL_PUBKEY(lnchn), SQL_STATENAME(side),
+		      SQL_U32(fee_rate), SQL_U64(commit_num),
+		      "PRIMARY KEY(lnchn,side,commit_num)")
 		TABLE(commit_info,
 		      SQL_PUBKEY(lnchn), SQL_U32(side),
 		      SQL_U64(commit_num), SQL_SHA256(revocation_hash),
@@ -1445,10 +1463,11 @@ void db_new_feechange(struct LNchannel *lnchn, const struct feechange *feechange
 
 	db_exec(__func__, lnchn->dstate,
 		"INSERT INTO feechanges VALUES"
-		" (x'%s', '%s', %"PRIu64");",
+		" (x'%s', '%s', %"PRIu64", %"PRIu64");",
 		lnchnid,
-		feechange_state_name(feechange->state),
-		feechange->fee_rate);
+        side_to_str(feechange->side),
+		feechange->fee_rate,
+        feechange->commit_num);
 
 	tal_free(ctx);
 }
@@ -1471,40 +1490,55 @@ void db_update_htlc_state(struct LNchannel *lnchn, const struct htlc *htlc,
 	tal_free(ctx);
 }
 
-void db_update_feechange_state(struct LNchannel *lnchn,
-			       const struct feechange *f,
-			       enum feechange_state oldstate)
+void db_update_feechange(struct LNchannel *lnchn, const struct feechange *oldf, u64 feerate)
 {
-	const char *ctx = tal_tmpctx(lnchn);
-	const char *lnchnid = pubkey_to_hexstr(ctx, lnchn->id);
-
-	log_debug(lnchn->log, "%s(%s): %s->%s", __func__, lnchnid,
-		  feechange_state_name(oldstate),
-		  feechange_state_name(f->state));
-	assert(lnchn->dstate->db->in_transaction);
-	db_exec(__func__, lnchn->dstate,
-		"UPDATE feechanges SET state='%s' WHERE lnchn=x'%s' AND state='%s';",
-		feechange_state_name(f->state), lnchnid,
-		feechange_state_name(oldstate));
-
-	tal_free(ctx);
+    const char *ctx = tal_tmpctx(lnchn);
+    const char *lnchnid = pubkey_to_hexstr(ctx, lnchn->id);
+    
+    log_debug(lnchn->log, "%s(%s): %"PRIu64"->%"PRIu64, __func__, lnchnid,
+    		oldf->fee_rate, feerate);
+    assert(lnchn->dstate->db->in_transaction);
+    db_exec(__func__, lnchn->dstate,
+    	"UPDATE feechanges SET fee_rate=%"PRIu64" WHERE lnchn=x'%s' AND side='%s' AND commit_num=%"PRIu64";",
+    	feerate, lnchnid, side_to_str(oldf->side), oldf->commit_num);
+    
+    tal_free(ctx);
 }
 
-void db_remove_feechange(struct LNchannel *lnchn, const struct feechange *feechange,
-			 enum feechange_state oldstate)
-{
-	const char *ctx = tal(lnchn, char);
-	const char *lnchnid = pubkey_to_hexstr(ctx, lnchn->id);
-
-	log_debug(lnchn->log, "%s(%s)", __func__, lnchnid);
-	assert(lnchn->dstate->db->in_transaction);
-
-	db_exec(__func__, lnchn->dstate,
-		"DELETE FROM feechanges WHERE lnchn=x'%s' AND state='%s';",
-		lnchnid, feechange_state_name(oldstate));
-
-	tal_free(ctx);
-}
+//void db_update_feechange_state(struct LNchannel *lnchn,
+//			       const struct feechange *f,
+//			       enum feechange_state oldstate)
+//{
+//	const char *ctx = tal_tmpctx(lnchn);
+//	const char *lnchnid = pubkey_to_hexstr(ctx, lnchn->id);
+//
+//	log_debug(lnchn->log, "%s(%s): %s->%s", __func__, lnchnid,
+//		  feechange_state_name(oldstate),
+//		  feechange_state_name(f->state));
+//	assert(lnchn->dstate->db->in_transaction);
+//	db_exec(__func__, lnchn->dstate,
+//		"UPDATE feechanges SET state='%s' WHERE lnchn=x'%s' AND state='%s';",
+//		feechange_state_name(f->state), lnchnid,
+//		feechange_state_name(oldstate));
+//
+//	tal_free(ctx);
+//}
+//
+//void db_remove_feechange(struct LNchannel *lnchn, const struct feechange *feechange,
+//			 enum feechange_state oldstate)
+//{
+//	const char *ctx = tal(lnchn, char);
+//	const char *lnchnid = pubkey_to_hexstr(ctx, lnchn->id);
+//
+//	log_debug(lnchn->log, "%s(%s)", __func__, lnchnid);
+//	assert(lnchn->dstate->db->in_transaction);
+//
+//	db_exec(__func__, lnchn->dstate,
+//		"DELETE FROM feechanges WHERE lnchn=x'%s' AND state='%s';",
+//		lnchnid, feechange_state_name(oldstate));
+//
+//	tal_free(ctx);
+//}
 
 void db_update_state(struct LNchannel *lnchn)
 {

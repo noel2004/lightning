@@ -159,8 +159,7 @@ struct LNchannel {
 	/* All HTLCs. */
 	struct htlc_map htlcs;
 
-	/* We only track one feechange per state: last one counts. */
-	struct feechange *feechanges[FEECHANGE_STATE_INVALID];
+	//struct feechange *feechanges[2];
 
 	/* What happened. */
 	struct log *log;

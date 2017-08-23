@@ -28,15 +28,17 @@ void db_set_visible_state(struct LNchannel *lnchn);
 void db_set_anchor(struct LNchannel *lnchn);
 void db_new_htlc(struct LNchannel *lnchn, const struct htlc *htlc);
 void db_new_feechange(struct LNchannel *lnchn, const struct feechange *feechange);
+void db_update_feechange(struct LNchannel *lnchn, const struct feechange *oldf, u64 feerate);
 void db_htlc_fulfilled(struct LNchannel *lnchn, const struct htlc *htlc);
 void db_htlc_failed(struct LNchannel *lnchn, const struct htlc *htlc);
 void db_update_htlc_state(struct LNchannel *lnchn, const struct htlc *htlc,
 				 enum htlc_state oldstate);
-void db_update_feechange_state(struct LNchannel *lnchn,
-			       const struct feechange *f,
-			       enum feechange_state oldstate);
-void db_remove_feechange(struct LNchannel *lnchn, const struct feechange *feechange,
-			 enum feechange_state oldstate);
+//void db_update_feechange_state(struct LNchannel *lnchn,
+//			       const struct feechange *f,
+//			       enum feechange_state oldstate);
+//
+//void db_remove_feechange(struct LNchannel *lnchn, const struct feechange *feechange,
+//			 enum feechange_state oldstate);
 void db_new_commit_info(struct LNchannel *lnchn, enum side side,
 			const struct sha256 *prev_rhash);
 void db_remove_their_prev_revocation_hash(struct LNchannel *lnchn);

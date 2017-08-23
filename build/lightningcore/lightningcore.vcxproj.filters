@@ -56,9 +56,6 @@
     <ClCompile Include="..\..\lightningcore\version.c">
       <Filter>源文件\LNChannel</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\lightningcore\feechange.c">
-      <Filter>源文件\LNChannel</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\lightningcore\permute_tx.c">
       <Filter>源文件\LNChannel</Filter>
     </ClCompile>
