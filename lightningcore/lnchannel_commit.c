@@ -186,7 +186,8 @@ static bool adjust_cstates(struct LNchannel *lnchn, struct htlc *h,
             LOCAL);
 }
 
-static void cleardeadhtlcs(struct LNchannel *lnchn)
+/* cleanning dead htlcs, mark expiry htlcs and some other cleannings ...*/
+static void checkhtlcs(struct LNchannel *lnchn)
 {
 
 }
@@ -197,20 +198,38 @@ struct htlc_commit_tasks
     struct msg_htlc_entry* gen_entry;
 };
 
+static void set_htlc_rval(struct LNchannel *lnchn,
+    struct htlc *htlc, const struct preimage *rval)
+{
+    assert(!htlc->r);
+    assert(!htlc->fail);
+    htlc->r = tal_dup(htlc, struct preimage, rval);
+    db_htlc_fulfilled(lnchn, htlc);
+}
+
+static void set_htlc_fail(struct LNchannel *lnchn,
+    struct htlc *htlc, const void *fail, size_t len)
+{
+    assert(!htlc->r);
+    assert(!htlc->fail);
+    htlc->fail = tal_dup_arr(htlc, u8, fail, len, 0);
+    db_htlc_failed(lnchn, htlc);
+}
+
 /* add or remove changed htlcs */
 static void resolvehtlcs(struct LNchannel *lnchn, 
     const struct htlcs_table *table,
     size_t n,
-    struct htlc **htlcs) {
+    struct htlc_commit_tasks *tasks) {
 
     struct htlc *h;
     size_t i, j, cnt;
     enum htlc_state new_state, old_state;
-    cnt = tal_count(htlcs);
+    cnt = tal_count(tasks);
 
     for (i = 0; i < cnt; ++i) {
 
-        h = htlcs[i];
+        h = tasks[i].ref_h;
 
         assert(htlc_is_fixed(h));
         new_state = h->state;
@@ -230,6 +249,19 @@ static void resolvehtlcs(struct LNchannel *lnchn,
         old_state = h->state;
         htlc_changestate(h, h->state, new_state);
 
+        if (tasks[i].gen_entry->action_type == 0) {
+            if (tasks[i].gen_entry->action.del.r) {
+                set_htlc_rval(lnchn, h, tasks[i].gen_entry->action.del.r);
+            }                
+            else if(!h->fail){//only apply when htlc is not failed explictily
+                set_htlc_fail(lnchn, h, tasks[i].gen_entry->action.del.fail, 
+                    tal_count(tasks[i].gen_entry->action.del.fail));
+            }                
+        }
+        else {
+            db_new_htlc(lnchn, h);
+        }
+
         /* commit htlc */
 		if (htlc_state_flags(old_state) & HTLC_ADDING) {
 			db_new_htlc(lnchn, h);
@@ -239,7 +271,30 @@ static void resolvehtlcs(struct LNchannel *lnchn,
     }
 }
 
-static void applyfeechange(struct LNchannel *lnchn) {
+/* the only thing should do is just dump feechange data to db*/
+static void applyfeechange(struct LNchannel *lnchn, enum side side) {
+
+    struct feechange f;
+    struct LNChannel_visible_state *state = side == LOCAL ? &lnchn->local : &lnchn->remote;
+    
+    if (!state->commit) {
+        return;//nothing to do
+    }
+
+    if (state->commit->cstate->fee_rate != state->staging_cstate->fee_rate) {
+        log_debug(lnchn->log,
+            "Fee rate has been changed from %"PRIu64" to "PRIu64,
+            state->commit->cstate->fee_rate,
+            state->staging_cstate->fee_rate
+        );
+
+        f.commit_num = state->commit->commit_num + 1;//apply to next commit
+        f.fee_rate = state->staging_cstate->fee_rate;
+        f.side = side;
+
+        db_new_feechange(lnchn, &f);
+        return true;
+    }
 
 }
 
@@ -262,8 +317,6 @@ static void filterhtlcs_and_genentries(const tal_t *ctx,
     for (h = htlc_map_first(&lnchn->htlcs, &it);
         h;
         h = htlc_map_next(&lnchn->htlcs, &it)) {
-
-        if (htlc_owner(h) == REMOTE)continue;
 
         yah = NULL;
         //for pending (purpose to added), check if it can be added now
@@ -303,10 +356,26 @@ static void filterhtlcs_and_genentries(const tal_t *ctx,
             else if (yah = lite_query_htlc_direct(lnchn->dstate->channels,
                     &h->rhash, true) && htlc_is_dead(yah)) {
                 //*(rem_h++) = h;
-                /*don't take pointer only*/
-                rem_h->gen_entry->action.del.r = yah->r ? 
-                    tal_dup(msg_arr, struct preimage, yah->r) : NULL;
+                if (yah->r) {
+                    /*don't take pointer only*/
+                    rem_h->gen_entry->action.del.r = tal_dup(msg_arr, struct preimage, yah->r);
+                }
+                else {
+                    assert(yah->fail);
+                    rem_h->gen_entry->action.del.r = NULL;
+                    rem_h->gen_entry->action.del.fail = yah->fail;
+                    rem_h->gen_entry->action.del.failflag = 0;
+                }
             }
+            //finally check any htlc which is resolved, fail explicitly or expired
+            else if (h->r) {
+                rem_h->gen_entry->action.del.r = h->r;
+            }
+            else if (h->fail) {
+                rem_h->gen_entry->action.del.fail = yah->fail;
+                rem_h->gen_entry->action.del.failflag = htlc_route_is_end(h) ? 1 : 0;
+            }
+
             else goto noaction; //well, ugly goto ...
 
             rem_h->gen_entry->action_type = 0;
@@ -323,6 +392,41 @@ noaction:
 
     tal_resize(add_table, add_h - *add_table);
     tal_resize(remove_table, rem_h - *remove_table);
+}
+
+/* update ref_htlc in tasks, and verify each one (also add and apply to staged cstate)*/
+static bool verify_commit_tasks(struct LNchannel *lnchn, 
+    const tal_t *ctx,
+    struct msg_htlc_entry *msgs,
+    size_t n,
+    struct htlc_commit_tasks **tasks) {
+
+    struct htlc *h;
+    struct msg_htlc_entry *t_beg, *t_end;
+    struct htlc_commit_tasks *task_h;
+    t_end = msgs + tal_count(tasks);
+
+    *tasks = tal_arr(ctx, struct htlc_commit_tasks, n);
+    task_h = *tasks;
+
+    for (t_beg = msgs; t_beg != t_end; ++t_beg, ++task_h) {
+
+        h = htlc_get_any(&lnchn->htlcs, t_beg->rhash);
+
+        if (t_beg->action_type == 1) {//add
+            if (h) { //fail! add duplicated htlc!
+                return false;
+            }
+        }
+        else {//removed
+            if (!h) { //fail! no corresponding htlc!
+                return false;
+            }
+
+        }
+    }
+
+    return true;
 }
 
 static const char *changestates(struct LNchannel *lnchn,
@@ -486,14 +590,7 @@ static bool lnchn_uncommitted_changes(const struct LNchannel *lnchn)
     return false;
 }
 
-static void set_htlc_rval(struct LNchannel *lnchn,
-			  struct htlc *htlc, const struct preimage *rval)
-{
-	assert(!htlc->r);
-	assert(!htlc->fail);
-	htlc->r = tal_dup(htlc, struct preimage, rval);
-	db_htlc_fulfilled(lnchn, htlc);
-}
+
 
 static bool command_htlc_fulfill(struct LNchannel *lnchn, struct htlc *htlc)
 {

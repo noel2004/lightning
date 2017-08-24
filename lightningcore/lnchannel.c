@@ -1092,7 +1092,7 @@ struct LNchannel *new_LNChannel(struct lightningd_state *dstate,
     lnchn->remote.offer_anchor = false;
 
 	htlc_map_init(&lnchn->htlcs);
-	memset(lnchn->feechanges, 0, sizeof(lnchn->feechanges));
+//	memset(lnchn->feechanges, 0, sizeof(lnchn->feechanges));
 	shachain_init(&lnchn->their_preimages);
 
 	tal_add_destructor(lnchn, destroy_lnchn);

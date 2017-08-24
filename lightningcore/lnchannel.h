@@ -55,6 +55,38 @@ struct LNchannel_config
 
 void lnchn_negotiate_from_remote(struct LNchannel *lnchn);
 
+/*
+    process of commiting:
+  * negotation: which side and other parameters (currently only feerate)
+  * A send remote commit
+  * B reply remote commit and revoking-hash
+  * A send revoking-hash
+
+  * channel state is persisted to "COMMITING" when commit is sent
+  * for the restored channel, always start with a re-sent commit
+  * a restored channel may stay in COMMITE state (while another side
+  * is COMMITING), in this case, commit message from another side
+  * is rejected and re-negotation is required. 
+*/
+
+/* 
+    when channel is under COMMITING state, help to restore 
+    all required negotation data and rebuild the committing process
+
+    there is three possible state for restored-channel:
+
+    invoked side ----- received side ---------- action
+    COMMITE            COMMITE                  previous negotation is lost, 
+                                                can start a new one
+    COMMITING          COMMITE                  COMMITING side reject new negotation, and
+                                                send message to restore the processing one
+                                                COMMITE side reject the first re-sent commit
+                                                message and wait for a new negotation for
+                                                the processing one
+    COMMITING          COMMITING                both side simply re-send their commit
+*/
+void lnchn_restore_commit_state(struct LNchannel *lnchn);
+
 bool lnchn_notify_open_remote(struct LNchannel *lnchn, 
     const struct pubkey *chnid,                /*if replay from remote, this is NULL*/
     const struct LNchannel_config *nego_config,

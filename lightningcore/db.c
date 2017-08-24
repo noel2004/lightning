@@ -656,6 +656,7 @@ static void load_lnchn_htlcs(struct LNchannel *lnchn)
 		enum side side;
         struct feechange *f;
         struct commit_info *ci;
+        u64 cm;
 
 		if (err != SQLITE_ROW)
 			fatal("load_lnchn_htlcs:step gave %s:%s",
@@ -665,19 +666,20 @@ static void load_lnchn_htlcs(struct LNchannel *lnchn)
 			fatal("load_lnchn_htlcs:step gave %i cols, not 3",
 			      sqlite3_column_count(stmt));
 
+        cm = sqlite3_column_int64(stmt, 3);
 		side = str_to_side(sqlite3_column_str(stmt, 1));
-        ci = side == LOCAL ? lnchn->local.commit : lnchn->remote.commit;
+//        ci = side == LOCAL ? lnchn->local.commit : lnchn->remote.commit;
 
         if (!feechanges[side]) {
             feechanges[side] = talz(ctx, struct feechange);
         }
 
         f = feechanges[side];
-        if (f->commit_num < sqlite3_column_int64(stmt, 3)) {
+        if (f->commit_num < cm) {
             //update and apply updated feerate ...
             f->side = side;
             f->fee_rate = sqlite3_column_int64(stmt, 2);
-            f->commit_num = sqlite3_column_int64(stmt, 3);
+            f->commit_num = cm;
         }
 
 	}

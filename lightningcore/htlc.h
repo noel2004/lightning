@@ -180,6 +180,19 @@ static inline size_t htlc_hash(const struct sha256* hash)
 
 HTABLE_DEFINE_TYPE(struct htlc, htlc_key, htlc_hash, htlc_cmp, htlc_map);
 
+static inline struct htlc *htlc_get_any(struct htlc_map *htlcs, struct sha256* hash)
+{
+    struct htlc *h;
+    struct htlc_map_iter it;
+
+    for (h = htlc_map_getfirst(htlcs, hash, &it);
+        h;
+        h = htlc_map_getnext(htlcs, hash, &it)) {
+        if (htlc_cmp(h, hash))
+            return h;
+    }
+    return NULL;
+}
 
 static inline struct htlc *htlc_get(struct htlc_map *htlcs, struct sha256* hash, enum side owner)
 {
