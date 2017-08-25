@@ -128,6 +128,11 @@ static void lnchn_update_complete(struct LNchannel *lnchn)
 	}
 }
 
+/* cleanning dead htlcs, mark expiry htlcs and some other cleannings ...*/
+static void checkhtlcs(struct LNchannel *lnchn)
+{
+    //internal_htlc_update_deadline(lnchn, h);
+}
 
 struct htlcs_table {
 	enum htlc_state from, to;
@@ -184,12 +189,6 @@ static bool adjust_cstates(struct LNchannel *lnchn, struct htlc *h,
         REMOTE)
         && adjust_cstate_side(lnchn->log, lnchn->local.staging_cstate, h, old, new,
             LOCAL);
-}
-
-/* cleanning dead htlcs, mark expiry htlcs and some other cleannings ...*/
-static void checkhtlcs(struct LNchannel *lnchn)
-{
-
 }
 
 struct htlc_commit_tasks
@@ -394,6 +393,12 @@ noaction:
     tal_resize(remove_table, rem_h - *remove_table);
 }
 
+static bool check_adding_htlc_compitable(const struct msg_htlc_add* incoming, const struct htlc *purposed)
+{
+    //TODO: also check expiry
+    return incoming->mstatoshi >= purposed->msatoshi;
+}
+
 /* update ref_htlc in tasks, and verify each one (also add and apply to staged cstate)*/
 static bool verify_commit_tasks(struct LNchannel *lnchn, 
     const tal_t *ctx,
@@ -401,6 +406,7 @@ static bool verify_commit_tasks(struct LNchannel *lnchn,
     size_t n,
     struct htlc_commit_tasks **tasks) {
 
+    const tal_t *tmpctx = tal_tmpctx(ctx);
     struct htlc *h;
     struct msg_htlc_entry *t_beg, *t_end;
     struct htlc_commit_tasks *task_h;
@@ -412,20 +418,41 @@ static bool verify_commit_tasks(struct LNchannel *lnchn,
     for (t_beg = msgs; t_beg != t_end; ++t_beg, ++task_h) {
 
         h = htlc_get_any(&lnchn->htlcs, t_beg->rhash);
+        if (!h) { //fail! no corresponding htlc!
+            log_broken(lnchn->log, "receive non-exist htlc notify for hash %s",
+                tal_hexstr(tmpctx, &h->rhash, sizeof(h->rhash)));
+            tal_free(tmpctx);
+            return false;
+        }
 
         if (t_beg->action_type == 1) {//add
-            if (h) { //fail! add duplicated htlc!
+            if (h->state != RCVD_ADD_HTLC || !check_adding_htlc_compitable(
+                &t_beg->action.add, h)) {
+                log_broken_struct(lnchn->log, "Not a pending or compatible htlc for adding: %s",
+                    struct htlc, h);
+                tal_free(tmpctx);
                 return false;
             }
+
+            h->msatoshi = t_beg->action.add.mstatoshi;
+            h->expiry = *t_beg->action.add.expiry;
         }
         else {//removed
-            if (!h) { //fail! no corresponding htlc!
+
+            if (!htlc_is_fixed(h)) {
+                log_broken_struct(lnchn->log, "Not a fixed htlc for removing: %s",
+                    struct htlc, h);
+                tal_free(tmpctx);
                 return false;
             }
-
+            //nothing to do ...
         }
+
+        task_h->ref_h = h;
+        task_h->gen_entry = t_beg;
     }
 
+    tal_free(tmpctx);
     return true;
 }
 
@@ -739,6 +766,17 @@ database_error:
     db_abort_transaction(lnchn);
     lnchn_fail(lnchn, __func__);
     return false;
+}
+
+bool lnchn_add_htlc(struct LNchannel *chn, u64 msatoshi,
+    unsigned int expiry,
+    const struct sha256 *rhash,
+    const u8 route,
+    enum fail_error *error_code) {
+
+    h = internal_new_htlc(lnchn, t_beg->action.add.mstatoshi,
+        t_beg->rhash, t_beg->action.add.expiry, 0, RCVD_ADD_HTLC);
+
 }
 
 /* We can get update_commit in both normal and shutdown states. */

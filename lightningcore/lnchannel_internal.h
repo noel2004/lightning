@@ -205,6 +205,8 @@ struct htlc *internal_new_htlc(struct LNchannel *chn,
 			   u32 expiry, u32 src_expiry, /* 0 if no source*/
 			   enum htlc_state state);
 
+void internal_htlc_update_deadline(struct LNchannel *lnchn, struct htlc *h);
+
 void internal_lnchn_breakdown(struct LNchannel *lnchn);
 
 void internal_lnchn_fail_on_notify(struct LNchannel *lnchn, const char* msg, ...);

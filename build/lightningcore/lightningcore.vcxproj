@@ -62,6 +62,7 @@
     <ClInclude Include="..\..\lightningcore\version.h" />
     <ClInclude Include="..\..\lightninglite\c\manager.h" />
     <ClInclude Include="..\..\lightninglite\c\message.h" />
+    <ClInclude Include="..\..\lightninglite\c\payment.h" />
     <ClInclude Include="..\..\protos\peer.pb.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">

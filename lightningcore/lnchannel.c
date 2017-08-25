@@ -1168,7 +1168,7 @@ void reopen_LNChannel(struct LNchannel *lnchn)
         h;
         h = htlc_map_next(&lnchn->htlcs, &it)) {
 
-        if (!htlc_has(h, HTLC_F_COMMITTED))continue;
+        if (!htlc_is_fixed(h))continue;
 
         /* rebuild deadline and src_expiry*/
         if (htlc_route_has_source(h)) {
@@ -1194,6 +1194,24 @@ void reopen_LNChannel(struct LNchannel *lnchn)
 
     }
 
+}
+
+void internal_htlc_update_deadline(struct LNchannel *lnchn, struct htlc *h)
+{
+    struct htlc * srchtlc = lite_query_htlc_direct(lnchn->dstate->channels, 
+        &h->rhash, false);
+    if (!srchtlc) {
+        log_broken(lnchn->log, "can't get source of htlc [%s]",
+            tal_hexstr(h, &h->rhash, sizeof(h->rhash)));
+        return;
+    }
+
+    h->src_expiry = tal(h, struct abs_locktime);
+    *h->src_expiry = srchtlc->expiry;
+    h->deadline = abs_locktime_to_blocks(h->src_expiry)
+        - lnchn->dstate->config.deadline_blocks;
+
+    lite_release_htlc(lnchn->dstate->channels, srchtlc);
 }
 
 

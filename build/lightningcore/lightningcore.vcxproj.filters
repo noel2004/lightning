@@ -142,5 +142,8 @@
     <ClInclude Include="..\..\lightninglite\c\message.h">
       <Filter>lite_c</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\lightninglite\c\payment.h">
+      <Filter>lite_c</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
