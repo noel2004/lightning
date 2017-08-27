@@ -7,7 +7,6 @@
 
 struct bitcoin_tx;
 struct outsourcing;
-struct LNchannel;
 
 enum outsourcing_tasktype {
     OUTSOURCING_PASSIVE,
@@ -87,31 +86,28 @@ struct lnwatch_verifytask {
 
 void outsourcing_task_init(struct lnwatch_task* task, const struct sha256_double* commitid);
 
-void outsourcing_htlctasks_create(const tal_t *ctx, struct lnwatch_task* task, size_t count);
+void outsourcing_htlctasks_create(struct lnwatch_task *task, size_t count);
 
 void outsourcing_htlctask_init(struct lnwatch_htlc_task* task, const struct sha256* rhash);
-
-/* create or sync outsourcing task */
-void outsourcing_initchannel(struct outsourcing* svr, const struct LNchannel* lnchn);
-
-/* clear corresponding task */
-void outsourcing_clear(struct outsourcing* svr, const struct LNchannel* lnchn);
 
 /* 
    task with same commitid will be updated (e.g. switch a commit from up-to-date to expired) 
    any member is not NULL will be replaced while NULL members is just omited (not deleted)
 */
-void outsourcing_tasks(struct outsourcing* svr, const struct LNchannel* lnchn, 
+void outsourcing_tasks(struct outsourcing* svr,  
     const struct lnwatch_task *tasks, unsigned int taskcnt,//array of tasks
-    void(*notify)(const struct LNchannel* lnchn, enum outsourcing_result, void *cbdata),
+    void(*notify)(enum outsourcing_result, void *cbdata),
     void *cbdata
     );
 
-void outsourcing_verifytask(struct outsourcing* svr, const struct LNchannel* lnchn, 
+void outsourcing_verifytask(struct outsourcing* svr,
     const struct lnwatch_verifytask *tasks, unsigned int taskcnt,//array of tasks
-    void(*notify)(const struct LNchannel* lnchn, enum outsourcing_result, void *cbdata),
+    void(*notify)(enum outsourcing_result, void *cbdata),
     void *cbdata
     );
+
+/* clear corresponding task */
+void outsourcing_task_clear(struct outsourcing* svr, const struct sha256_double* commitid);
 
 //TODO: a batch update for all outsourcing task should be added 
 //TODO: the old fashion watch can be added 

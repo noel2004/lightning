@@ -187,14 +187,14 @@ bool can_afford_feerate(const struct channel_state *cstate, uint64_t fee_rate,
 		>= fee_msat;
 }
 
-void adjust_fee(struct channel_state *cstate, uint64_t fee_rate)
-{
-	uint64_t fee_msat;
-
-	fee_msat = calculate_fee_msat(cstate->num_nondust, fee_rate);
-
-	recalculate_fees(&cstate->side[LOCAL], &cstate->side[REMOTE], fee_msat);
-}
+//void adjust_fee(struct channel_state *cstate, uint64_t fee_rate)
+//{
+//	uint64_t fee_msat;
+//
+//	fee_msat = calculate_fee_msat(cstate->num_nondust, fee_rate);
+//
+//	recalculate_fees(&cstate->side[LOCAL], &cstate->side[REMOTE], fee_msat);
+//}
 
 bool force_fee(struct channel_state *cstate, uint64_t fee)
 {

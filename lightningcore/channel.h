@@ -105,8 +105,9 @@ bool can_afford_feerate(const struct channel_state *cstate, uint64_t fee_rate,
  * adjust_fee: Change fee rate.
  * @cstate: The channel state
  * @fee_rate: fee in satoshi per 1000 bytes.
+ * We should obsolete it
  */
-void adjust_fee(struct channel_state *cstate, uint64_t fee_rate);
+//void adjust_fee(struct channel_state *cstate, uint64_t fee_rate);
 
 /**
  * force_fee: Change fee to a specific value.

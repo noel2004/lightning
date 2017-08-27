@@ -1063,6 +1063,9 @@ struct LNchannel *new_LNChannel(struct lightningd_state *dstate,
 	lnchn->secrets = NULL;
 	lnchn->anchor.ok_depth = -1;
 //	lnchn->order_counter = 0;
+    lnchn->outsourcing_counter = 0;
+    lnchn->outsourcing_lock = false;
+    lnchn->outsourcing_f = NULL;
 	lnchn->their_commitsigs = 0;
 	lnchn->closing.their_sig = NULL;
 	lnchn->closing.our_script = NULL;

@@ -52,6 +52,7 @@ static const int per_state_bits[] = {
     + HTLC_LOCAL_F_PENDING,
 
     [SENT_ADD_COMMIT] = HTLC_ADDING + HTLC_LOCAL_F_OWNER
+    + HTLC_REMOTE_F_PENDING
     + HTLC_LOCAL_F_COMMITTED
     + HTLC_LOCAL_F_WAS_COMMITTED,
 /*

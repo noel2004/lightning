@@ -285,7 +285,52 @@ static struct lnwatch_task* create_watch_tasks_from_commit(struct LNchannel *lnc
     return tasks + active_tasks;
 }
 
-void lnchn_internal_watch_for_commit(struct LNchannel *chn)
+struct watch_task {
+    struct LNchannel *chn;
+    u64    counter;
+    void   (*callback)(struct LNchannel *, enum outsourcing_result, u64);
+};
+
+static void outsourcing_callback_helper(enum outsourcing_result ret, void *cbdata)
+{
+    struct watch_task *t = (struct watch_task *) cbdata;
+    if (t->chn->outsourcing_counter != t->counter) {
+        log_broken(t->chn->log, 
+            "outsourcing callback has unmatched counter "PRIi64" vs "PRIi64,
+            t->chn->outsourcing_counter, t->counter);
+        return;
+    }
+    t->callback(t->chn, ret, t->counter);
+
+    /* 
+        if callback not invoked another outsourcing, counter not change
+        and lock is released
+    */
+    if (t->chn->outsourcing_counter == t->counter) {
+        t->chn->outsourcing_lock = false;
+    }
+    
+    tal_free(cbdata);
+}
+
+static void* outsourcing_invoke_helper(struct LNchannel *chn)
+{
+    struct watch_task *t = tal(chn, struct watch_task);
+    assert(chn->outsourcing_f);
+    if (chn->outsourcing_f == NULL) {
+        log_broken(chn->log, 
+            "outsourcing is called without corresponding callback");
+        return;
+    }
+
+    chn->outsourcing_counter++;
+    chn->outsourcing_lock = true;
+    t->callback = chn->outsourcing_f;
+    t->chn = chn;
+    t->counter = chn->outsourcing_counter;
+}
+
+void internal_watch_for_commit(struct LNchannel *chn)
 {
     const tal_t *tmpctx = tal_tmpctx(chn);
     /* we have at most 2*htlc + 2 tasks (all htlcs are local and have src, plus two main task) */
@@ -308,7 +353,8 @@ void lnchn_internal_watch_for_commit(struct LNchannel *chn)
     tal_resize(&tasks, tasks_end - tasks);
 
     outsourcing_tasks(chn->dstate->outsourcing_svr, chn, tasks, tal_count(tasks),
-        /*TODO*/ NULL, NULL);
+        outsourcing_callback_helper, 
+        outsourcing_invoke_helper(chn));
 
 }
 

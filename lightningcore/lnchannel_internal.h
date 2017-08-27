@@ -189,6 +189,14 @@ struct LNchannel {
 	/* this is where we will store their revocation preimages*/
 	struct shachain their_preimages;
 
+    /* counter for outsourcing callback */
+    u64 outsourcing_counter;
+
+    /* internal_watch_xxx use this to generate callback */
+    void(*outsourcing_f)(struct LNchannel *, enum outsourcing_result, u64);
+
+    bool outsourcing_lock;
+
 	/* High water mark for the staggered broadcast */
 	u64 broadcast_index;
 };
@@ -222,6 +230,10 @@ void internal_update_htlc_watch(struct LNchannel *chn,
 void internal_fail_own_htlc(struct LNchannel *lnchn, struct htlc *htlc);
 
 void internal_openphase_retry_msg(struct LNchannel *lnchn);
+
+void internal_commitphase_retry_msg(struct LNchannel *lnchn);
+
+void internal_watch_for_commit(struct LNchannel *chn);
 
 static bool outputscript_eq(const struct bitcoin_tx_output *out,
     size_t i, const u8 *script)
