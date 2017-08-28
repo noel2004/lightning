@@ -38,10 +38,10 @@ struct txdeliver {
     u8 *wscript;
 
     /* lock-time must be clear to apply this signature*/
-    ecdsa_signature sig_nolocked;
+    ecdsa_signature *sig_nolocked;
 
     /* sign with lock-time, no needed for "their" HTLC */
-    ecdsa_signature* sig;
+    ecdsa_signature *sig;
 };
 
 struct lnwatch_htlc_task {

@@ -214,9 +214,8 @@ static bool create_watch_subtask(const tal_t *ctx,
 }
 
 static bool create_watch_output_task(const tal_t *ctx,
-    struct LNchannel *lnchn, u32 out_num,
-    const struct sha256_double *commitid, const struct htlc* h,
-    struct lnwatch_task *outtask) {
+    struct LNchannel *lnchn, const struct sha256_double *commitid, 
+    const struct htlc* h, struct lnwatch_task *outtask) {
 
     struct txowatch* txo = NULL;
     struct LNchannel* srcchn = lite_query_htlc_src(lnchn->dstate->channels, &h->rhash);
@@ -225,7 +224,7 @@ static bool create_watch_output_task(const tal_t *ctx,
 
     assert(srcchn->local.commit);
 
-    txo = tal(ctx, struct txowatch);
+    txo = tal(outtask, struct txowatch);
     memcpy(&txo->commitid, commitid, sizeof(*commitid));
     txo->output_num = out_num;
 
@@ -233,9 +232,10 @@ static bool create_watch_output_task(const tal_t *ctx,
     outsourcing_task_init(outtask, &srcchn->local.commit->txid);
 
     //update the task with one HTLCtask
-    outsourcing_htlctasks_create(ctx, outtask, 1);
+    outsourcing_htlctasks_create(outtask, 1);
     outsourcing_htlctask_init(outtask->htlctxs, &h->rhash);
-    outtask->htlctxs->txowatch = txo;
+    outtask->htlctxs->txowatchs = txo;
+    outtask->htlctxs->txowatch_num = 1;
 
     //task done, we also update the srcchn ...
     internal_update_htlc_watch(srcchn, &h->rhash, tal_dup(srcchn, struct txowatch, txo));
@@ -246,8 +246,8 @@ static bool create_watch_output_task(const tal_t *ctx,
 }
 
 /* create a watch task from visible state (current commit)*/
-static struct lnwatch_task* create_watch_tasks_from_commit(struct LNchannel *lnchn,
-    const tal_t *ctx,
+static struct lnwatch_task* create_watch_tasks_from_commit(
+    const tal_t *ctx, struct LNchannel *lnchn,
     const struct bitcoin_tx *commit_tx, const struct sha256_double *commitid, 
     const struct sha256 *rhash,
     enum side side, struct lnwatch_task* tasks)
@@ -260,7 +260,6 @@ static struct lnwatch_task* create_watch_tasks_from_commit(struct LNchannel *lnc
     u8     *to_us_wscript;
     size_t redeem_outnum;
     size_t active_tasks = 1;
-    size_t search_i = 0;
 
     /*main task (the 1st task)*/
     outsourcing_task_init(tasks, commitid);
@@ -268,8 +267,7 @@ static struct lnwatch_task* create_watch_tasks_from_commit(struct LNchannel *lnc
 
     /* update redeem tx*/
     redeem_outnum = find_redeem_output_from_commit_tx(commit_tx,
-        commit_output_to_us(ctx, lnchn, rhash, side, &to_us_wscript),
-        &search_i);
+        commit_output_to_us(ctx, lnchn, rhash, side, &to_us_wscript));
     if (redeem_outnum >= tal_count(commit_tx->output)) {
         log_debug(lnchn->log, 
                 "this commit %s (%s) has no output for us", 
@@ -307,7 +305,7 @@ static struct lnwatch_task* create_watch_tasks_from_commit(struct LNchannel *lnc
 
         wscript = wscript_for_htlc(ctx, lnchn, h, rhash, side);
         //find the corresponding output for this htlc
-        outnum = find_htlc_output_from_commit_tx(commit_tx, wscript, &search_i);
+        outnum = find_htlc_output_from_commit_tx(commit_tx, wscript);
         if (outnum >= tal_count(commit_tx->output)) {
             log_debug(lnchn->log, 
                 "htlc %s has no correponding output in commit-tx", 
@@ -451,7 +449,7 @@ static void reset_onchain_closing(struct LNchannel *lnchn, const struct bitcoin_
     for (h = htlc_map_first(&lnchn->htlcs, &it);
         h;
         h = htlc_map_next(&lnchn->htlcs, &it)) {
-        if (h->state == SENT_ADD_HTLC) {
+        if (!htlc_is_fixed(h)) {
             internal_fail_own_htlc(lnchn, h);
         }
     }
