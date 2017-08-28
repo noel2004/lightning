@@ -35,7 +35,7 @@ void    lite_release_htlc(struct LNchannels *mgr, struct htlc *htlc);
    A failed (not actived) channel MUST NOT query anything except default value
 */
 
-/* query commit_txid: [local, remote], can be NULL*/
+/* query commit_txid: [local, remote], can be NULL, allocation is responsed by LNchannelQuery*/
 void    lite_query_commit_txid(struct LNchannelQuery *q, struct sha256_double *commit_txid[2]);
 
 /* query a HTLC from a channel, should be also released by lite_release_htlc*/

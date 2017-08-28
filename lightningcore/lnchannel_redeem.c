@@ -152,6 +152,67 @@ static struct txdeliver *create_watch_our_redeem_task(const tal_t *ctx,
     return task;
 }
 
+static bool create_watch_subtask(const tal_t *ctx,
+    struct LNchannel *lnchn, const struct htlc* h,
+    struct lnwatch_htlc_task *outtask) {
+
+    struct LNchannel *farchn;
+    struct LNchannelQuery *farchnq;
+    struct htlc *farh;
+    struct sha256_double *commit_txid[2];
+    size_t i, commit_num = 0;
+    struct txowatch *txow;
+
+    assert(htlc_route_has_downstream(h));
+
+    farchnq = lite_query_channel_from_htlc(lnchn->dstate->channels, &h->rhash, true);
+
+    if (!farchnq) {
+
+        log_broken(lnchn->log, "Can't find chnannel for htlc with hash [%s]",
+            tal_hexstr(ctx, &h->rhash, sizeof(h->rhash)));
+        return false;
+    }
+
+    lite_query_commit_txid(farchnq, commit_txid);
+
+    commit_num = (commit_txid[0] ? 1 : 0) + (commit_txid[1] ? 1 : 0);
+
+    /* this is impossible, even one-side uncommit MUST impossible ...*/
+    if (commit_num == 0) {
+        log_broken(lnchn->log, "Target chnannel for htlc with hash [%s] has not commit yet",
+            tal_hexstr(ctx, &h->rhash, sizeof(h->rhash)));
+        return false;
+    }
+
+    farh = lite_query_htlc(farchnq, &h->rhash);
+    assert(farh);//can't fail
+    if (!farh) {
+        lite_release_chn(lnchn->dstate->channels, farchnq);
+        return false;
+    }
+
+    if (!outtask->txowatchs) {
+        tal_free(outtask->txowatchs);
+    }
+
+    outtask->txowatch_num = commit_num;
+    outtask->txowatchs = tal_arr(outtask, struct txowatch, outtask->txowatch_num);
+    txow = outtask->txowatchs;
+
+    for (i = 0; i < 2; ++i) {
+        if (!commit_txid[i])continue;
+
+        txow->output_num = farh->in_commit_output[i];
+        memcpy(&txow->commitid, commit_txid + i, sizeof(commit_txid[i]));
+        ++txow;
+    }
+
+    lite_release_htlc(lnchn->dstate->channels, farh);
+    lite_release_chn(lnchn->dstate->channels, farchnq);
+    return false;
+}
+
 static bool create_watch_output_task(const tal_t *ctx,
     struct LNchannel *lnchn, u32 out_num,
     const struct sha256_double *commitid, const struct htlc* h,
@@ -260,15 +321,15 @@ static struct lnwatch_task* create_watch_tasks_from_commit(struct LNchannel *lnc
             commit_tx, outnum, &tasks->commitid, h);
 
         //create additional txo watch task
-        if (htlc_owner(h) == LOCAL && h->src_expiry) {
-            //a local htlc with source should update its source
+        if (htlc_route_has_source(h)) {
+            //a local htlc with source should help updating its source
             if(create_watch_output_task(ctx, lnchn, outnum, 
                 commitid, h, tasks + active_tasks))
                 ++active_tasks;
         }
-        else if (htlc_owner(h) == REMOTE && tasks->tasktype == OUTSOURCING_AGGRESSIVE) {
+        else if (htlc_route_has_downstream(h) && tasks->tasktype == OUTSOURCING_AGGRESSIVE) {
             //in agressive mode, a remote htlc should take a twowatch
-            htlctaskscur->txowatch = h->upstream_watch;
+            create_watch_subtask(ctx, lnchn, h, htlctaskscur);
         }
 
         htlctaskscur++;
@@ -285,7 +346,52 @@ static struct lnwatch_task* create_watch_tasks_from_commit(struct LNchannel *lnc
     return tasks + active_tasks;
 }
 
-void lnchn_internal_watch_for_commit(struct LNchannel *chn)
+struct watch_task {
+    struct LNchannel *chn;
+    u64    counter;
+    void   (*callback)(struct LNchannel *, enum outsourcing_result, u64);
+};
+
+static void outsourcing_callback_helper(enum outsourcing_result ret, void *cbdata)
+{
+    struct watch_task *t = (struct watch_task *) cbdata;
+    if (t->chn->outsourcing_counter != t->counter) {
+        log_broken(t->chn->log, 
+            "outsourcing callback has unmatched counter "PRIi64" vs "PRIi64,
+            t->chn->outsourcing_counter, t->counter);
+        return;
+    }
+    t->callback(t->chn, ret, t->counter);
+
+    /* 
+        if callback not invoked another outsourcing, counter not change
+        and lock is released
+    */
+    if (t->chn->outsourcing_counter == t->counter) {
+        t->chn->outsourcing_lock = false;
+    }
+    
+    tal_free(cbdata);
+}
+
+static void* outsourcing_invoke_helper(struct LNchannel *chn)
+{
+    struct watch_task *t = tal(chn, struct watch_task);
+    assert(chn->outsourcing_f);
+    if (chn->outsourcing_f == NULL) {
+        log_broken(chn->log, 
+            "outsourcing is called without corresponding callback");
+        return;
+    }
+
+    chn->outsourcing_counter++;
+    chn->outsourcing_lock = true;
+    t->callback = chn->outsourcing_f;
+    t->chn = chn;
+    t->counter = chn->outsourcing_counter;
+}
+
+void internal_watch_for_commit(struct LNchannel *chn)
 {
     const tal_t *tmpctx = tal_tmpctx(chn);
     /* we have at most 2*htlc + 2 tasks (all htlcs are local and have src, plus two main task) */
@@ -308,7 +414,8 @@ void lnchn_internal_watch_for_commit(struct LNchannel *chn)
     tal_resize(&tasks, tasks_end - tasks);
 
     outsourcing_tasks(chn->dstate->outsourcing_svr, chn, tasks, tal_count(tasks),
-        /*TODO*/ NULL, NULL);
+        outsourcing_callback_helper, 
+        outsourcing_invoke_helper(chn));
 
 }
 

@@ -12,9 +12,9 @@ void outsourcing_task_init(struct lnwatch_task* task, const struct sha256_double
     task->redeem_tx = NULL;
 }
 
-void outsourcing_htlctasks_create(const tal_t *ctx, struct lnwatch_task* task, size_t count)
+void outsourcing_htlctasks_create(struct lnwatch_task* task, size_t count)
 {
-    task->htlctxs = tal_arr(ctx, struct lnwatch_htlc_task, count);
+    task->htlctxs = tal_arr(task, struct lnwatch_htlc_task, count);
 }
 
 void outsourcing_htlctask_init(struct lnwatch_htlc_task* task, const struct sha256* rhash)

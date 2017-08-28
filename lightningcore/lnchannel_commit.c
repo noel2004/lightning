@@ -32,20 +32,63 @@
 #include <stdlib.h>
 #include <sys/types.h>
 
+static void add_their_commit(struct LNchannel *lnchn,
+			   const struct sha256_double *txid, u64 commit_num)
+{
+	struct their_commit *tc = tal(lnchn, struct their_commit);
+	tc->txid = *txid;
+	tc->commit_num = commit_num;
+
+	db_add_commit_map(lnchn, txid, commit_num);
+}
+
+/* Sign and local commit tx */
+static void sign_commit_tx(struct LNchannel *lnchn)
+{
+	ecdsa_signature sig;
+
+	/* Can't be signed already, and can't have scriptsig! */
+	assert(!lnchn->local.commit->tx->input[0].script);
+	assert(!lnchn->local.commit->tx->input[0].witness);
+
+	lnchn_sign_ourcommit(lnchn, lnchn->local.commit->tx, &sig);
+
+	lnchn->local.commit->tx->input[0].witness
+		= bitcoin_witness_2of2(lnchn->local.commit->tx->input,
+				       lnchn->local.commit->sig,
+				       &sig,
+				       &lnchn->remote.commitkey,
+				       &lnchn->local.commitkey);
+}
+
+static u64 commit_tx_fee(const struct bitcoin_tx *commit, u64 anchor_satoshis)
+{
+	uint64_t i, total = 0;
+
+	for (i = 0; i < tal_count(commit->output); i++)
+		total += commit->output[i].amount;
+
+	assert(anchor_satoshis >= total);
+	return anchor_satoshis - total;
+}
+
+static u64 lnchn_commitsigs_received(struct LNchannel *lnchn)
+{
+	return lnchn->their_commitsigs;
+}
+
+static u64 lnchn_revocations_received(struct LNchannel *lnchn)
+{
+	/* How many preimages we've received. */
+	return -lnchn->their_preimages.min_index;
+}
+
 
 /* cleanning dead htlcs, mark expiry htlcs and some other cleannings ...*/
 static void checkhtlcs(struct LNchannel *lnchn)
 {
     //internal_htlc_update_deadline(lnchn, h);
 }
-
-struct htlcs_table {
-	enum htlc_state from, to;
-};
-
-struct feechanges_table {
-	enum feechange_state from, to;
-};
 
 static bool adjust_cstate_side(struct log *log, struct channel_state *cstate,
     struct htlc *h,
@@ -120,10 +163,12 @@ static void set_htlc_fail(struct LNchannel *lnchn,
     db_htlc_failed(lnchn, htlc);
 }
 
-/* add or remove changed htlcs */
-static void resolvehtlcs(struct LNchannel *lnchn, 
-    const struct htlcs_table *table,
-    size_t n,
+/* 
+    add or remove changed htlcs, return handling task counts because
+    adding maybe rejected
+*/
+static size_t resolvehtlcs(struct LNchannel *lnchn, 
+    enum htlc_state new_states[2], /*0: del, 1: add*/
     struct htlc_commit_tasks *tasks) {
 
     struct htlc *h;
@@ -136,19 +181,13 @@ static void resolvehtlcs(struct LNchannel *lnchn,
         h = tasks[i].ref_h;
 
         assert(htlc_is_fixed(h));
-        new_state = h->state;
-        for (j = 0; j < n; ++j) {
-            if (h->state == table[j].from) {
-                new_state = table[j].to;
-                break;
-            }
+        new_state = new_states[tasks[i].gen_entry->action_type];
+
+        if (!adjust_cstates(lnchn, h, h->state, new_state)) {
+            //simply return at broken tasks! so following tasks
+            //will be rejected (we suppose tasks is a priority queue)
+            return i;
         }
-
-        assert(new_state == h->state);
-        if (new_state == h->state)continue;
-
-        if (!adjust_cstates(lnchn, h, h->state, new_state))
-            continue;//simply pass it (so warning should have been made)
 
         old_state = h->state;
         htlc_changestate(h, h->state, new_state);
@@ -163,16 +202,14 @@ static void resolvehtlcs(struct LNchannel *lnchn,
             }                
         }
         else {
-            db_new_htlc(lnchn, h);
+            //nothing to do for adding task
+            //db_new_htlc(lnchn, h);
         }
 
-        /* commit htlc */
-		if (htlc_state_flags(old_state) & HTLC_ADDING) {
-			db_new_htlc(lnchn, h);
-			return;
-		}
 		db_update_htlc_state(lnchn, h, old_state);
     }
+
+    return cnt;
 }
 
 /* the only thing should do is just dump feechange data to db*/
@@ -361,32 +398,32 @@ static bool verify_commit_tasks(struct LNchannel *lnchn,
     return true;
 }
 
-static void adjust_cstate_fee_side(struct channel_state *cstate,
-				   const struct feechange *f,
-				   enum feechange_state old,
-				   enum feechange_state new,
-				   enum side side)
+static void check_both_committed(struct LNchannel *lnchn, struct htlc *h)
 {
-	/* We applied changes to staging_cstate when we first received
-	 * feechange packet, so we could make sure it was valid.  Don't
-	 * do that again. */
-	if (old == SENT_FEECHANGE || old == RCVD_FEECHANGE)
-		return;
+	if (!htlc_has(h, HTLC_ADDING) && !htlc_has(h, HTLC_REMOVING))
+		log_debug(lnchn->log,
+			  "Both committed to %s of %s HTLC %"PRIu64 "(%s)",
+			  h->state == SENT_ADD_ACK_REVOCATION
+			  || h->state == RCVD_ADD_ACK_REVOCATION ? "ADD"
+			  : h->r ? "FULFILL" : "FAIL",
+			  htlc_owner(h) == LOCAL ? "our" : "their",
+			  h->id, htlc_state_name(h->state));
 
-	/* Feechanges only ever get applied to the side which created them:
-	 * ours gets applied when they ack, theirs gets applied when we ack. */
-	if (side == LOCAL && new == RCVD_FEECHANGE_REVOCATION)
-		adjust_fee(cstate, f->fee_rate);
-	else if (side == REMOTE && new == SENT_FEECHANGE_REVOCATION)
-		adjust_fee(cstate, f->fee_rate);
-}
-
-static void adjust_cstates_fee(struct LNchannel *lnchn, const struct feechange *f,
-			       enum feechange_state old,
-			       enum feechange_state new)
-{
-	adjust_cstate_fee_side(lnchn->remote.staging_cstate, f, old, new, REMOTE);
-	adjust_cstate_fee_side(lnchn->local.staging_cstate, f, old, new, LOCAL);
+	switch (h->state) {
+	case RCVD_REMOVE_ACK_REVOCATION:
+		/* If it was fulfilled, we handled it immediately. */
+		if (h->fail)
+			our_htlc_failed(lnchn, h);
+		break;
+	case RCVD_ADD_ACK_REVOCATION:
+		//their_htlc_added(lnchn, h, NULL);
+		resolve_invoice(lnchn->dstate, invoice);
+		set_htlc_rval(lnchn, htlc, &invoice->r);
+		command_htlc_fulfill(lnchn, htlc);
+		break;
+	default:
+		break;
+	}
 }
 
 static bool lnchn_uncommitted_changes(const struct LNchannel *lnchn)
@@ -438,89 +475,88 @@ static bool command_htlc_fulfill(struct LNchannel *lnchn, struct htlc *htlc)
 	return true;
 }
 
-static void add_their_commit(struct LNchannel *lnchn,
-    const struct sha256_double *txid, u64 commit_num)
+void internal_commitphase_retry_msg(struct LNchannel *lnchn)
 {
-    struct their_commit *tc = tal(lnchn, struct their_commit);
-    tc->txid = *txid;
-    tc->commit_num = commit_num;
-
-    db_add_commit_map(lnchn, txid, commit_num);
+    
 }
 
-/* Sign and local commit tx */
-static void sign_commit_tx(struct LNchannel *lnchn)
+static bool has_new_feechange_instate_side(const struct channel_state *stage_state,
+    const struct channel_state *commit_state)
 {
-    ecdsa_signature sig;
-
-    /* Can't be signed already, and can't have scriptsig! */
-    assert(!lnchn->local.commit->tx->input[0].script);
-    assert(!lnchn->local.commit->tx->input[0].witness);
-
-    lnchn_sign_ourcommit(lnchn, lnchn->local.commit->tx, &sig);
-
-    lnchn->local.commit->tx->input[0].witness
-        = bitcoin_witness_2of2(lnchn->local.commit->tx->input,
-            lnchn->local.commit->sig,
-            &sig,
-            &lnchn->remote.commitkey,
-            &lnchn->local.commitkey);
+    return stage_state->fee_rate != commit_state->fee_rate;
 }
 
-static u64 commit_tx_fee(const struct bitcoin_tx *commit, u64 anchor_satoshis)
+static bool has_new_feechange_instate(struct LNchannel *lnchn, enum side side)
 {
-    uint64_t i, total = 0;
-
-    for (i = 0; i < tal_count(commit->output); i++)
-        total += commit->output[i].amount;
-
-    assert(anchor_satoshis >= total);
-    return anchor_satoshis - total;
+    return side == LOCAL ? has_new_feechange_instate_side(lnchn->local.staging_cstate,
+            lnchn->local.commit->cstate) : 
+        has_new_feechange_instate_side(lnchn->remote.staging_cstate,
+            lnchn->remote.commit->cstate);
 }
 
-static u64 lnchn_commitsigs_received(struct LNchannel *lnchn)
+static void swap_htlc_entries(struct msg_htlc_entry *a, struct msg_htlc_entry *b)
 {
-    return lnchn->their_commitsigs;
+    struct msg_htlc_entry t;
+    t = *a;
+    *a = *b;
+    *b = t;
 }
 
-static u64 lnchn_revocations_received(struct LNchannel *lnchn)
+static size_t clean_rejected_messages(struct msg_htlc_entry *msgs, 
+    const struct htlc_commit_tasks *rej_t, size_t rej_n)
 {
-    /* How many preimages we've received. */
-    return -lnchn->their_preimages.min_index;
+    size_t n, i, j, beg_j = 0;
+
+    n = tal_count(msgs);
+
+    for (i = 0; i < rej_n; i++) {
+
+        //find matched rejeced task (trick is we should found it from beg_j
+        for (j = beg_j; j < n; j++) {
+            if (msgs + j == rej_t[i].gen_entry)break;
+        }
+
+        if (j == n) {
+            for (j = 0; j < beg_j; j++) {
+                if (msgs + j == rej_t[i].gen_entry)break;
+            }
+        }
+
+        assert(j != beg_j);//we must find!
+        if (j == beg_j)continue;
+
+        beg_j = j + 1;
+        --n;
+        swap(msgs + j, msgs + n);
+    }
+
+    return n;
 }
 
-static bool do_commit(struct LNchannel *lnchn, struct command *jsoncmd)
+static void on_commit_outsourcing_finish(struct LNchannel *lnchn, enum outsourcing_result ret, u64 num)
+{
+    //outsourcing is done and we can deliver commit message
+}
+
+bool lnchn_do_commit(struct LNchannel *lnchn)
 {
     struct commit_info *ci;
     const char *errmsg;
-    static const struct htlcs_table changes[] = {
-        { SENT_ADD_HTLC, SENT_ADD_COMMIT },
-        { SENT_REMOVE_REVOCATION, SENT_REMOVE_ACK_COMMIT },
-        { SENT_ADD_REVOCATION, SENT_ADD_ACK_COMMIT },
-        { SENT_REMOVE_HTLC, SENT_REMOVE_COMMIT }
-    };
-    static const struct feechanges_table feechanges[] = {
-        { SENT_FEECHANGE, SENT_FEECHANGE_COMMIT },
-        { SENT_FEECHANGE_REVOCATION, SENT_FEECHANGE_ACK_COMMIT }
-    };
+    struct htlc_commit_tasks *add_t, *rem_t;
+    static const enum htlc_state changed_states[] = 
+        { RCVD_REMOVE_COMMIT, SENT_ADD_COMMIT };
+
+    const tal_t *tmpctx = tal_tmpctx(lnchn);
+
+    struct msg_htlc_entry *msgs = tal_arr(tmpctx, struct msg_htlc_entry, 
+        htlc_map_count(&lnchn->htlcs));
     bool to_us_only;
+    size_t applied_t;
 
-    /* We can have changes we suggested, or changes they suggested. */
-    if (!lnchn_uncommitted_changes(lnchn)) {
-        log_debug(lnchn->log, "do_commit: no changes to commit");
-        if (jsoncmd)
-            command_fail(jsoncmd, "no changes to commit");
-        return true;
-    }
+    filterhtlcs_and_genentries(tmpctx, lnchn, msgs, &add_t, &rem_t);
+    tal_resize(&msgs, tal_count(add_t) + tal_count(rem_t));
 
-    log_debug(lnchn->log, "do_commit: sending commit command %"PRIu64,
-        lnchn->remote.commit->commit_num + 1);
-
-    assert(state_can_commit(lnchn->state));
-    assert(!lnchn->commit_jsoncmd);
-
-    lnchn->commit_jsoncmd = jsoncmd;
-    ci = new_commit_info(lnchn, lnchn->remote.commit->commit_num + 1);
+    ci = internal_new_commit_info(lnchn, lnchn->remote.commit->commit_num + 1);
 
     assert(!lnchn->their_prev_revocation_hash);
     lnchn->their_prev_revocation_hash
@@ -529,11 +565,30 @@ static bool do_commit(struct LNchannel *lnchn, struct command *jsoncmd)
 
     db_start_transaction(lnchn);
 
-    errmsg = changestates(lnchn, changes, ARRAY_SIZE(changes),
-        feechanges, ARRAY_SIZE(feechanges), true);
-    if (errmsg) {
-        log_broken(lnchn->log, "queue_pkt_commit: %s", errmsg);
-        goto database_error;
+   //we apply remove tasks, finally adding
+    applied_t = resolvehtlcs(lnchn, changed_states, rem_t);
+    //all remove task should be handled
+    assert(applied_t == tal_count(rem_t));
+
+   //we apply remove tasks first, then feechange, finally adding
+    applied_t = resolvehtlcs(lnchn, changed_states, add_t);
+    //all remove task should be handled
+    if (applied_t != tal_count(add_t)) {
+        size_t clean_msg;
+        log_info(lnchn->log, "%d htlcs is not applied for the purposed %d htlcs", 
+            applied_t , tal_count(add_t));
+
+        clean_msg = clean_rejected_messages(msgs, add_t + applied_t, 
+            tal_count(add_t) - applied_t);
+
+        tal_resize(&add_t, applied_t);
+        tal_resize(&msgs, clean_msg);
+    }
+
+    if (tal_count(msgs) == 0 && has_new_feechange_instate(lnchn, REMOTE)) {
+        //no change ...
+        log_broken(lnchn->log, "channel have no change");
+        return false;
     }
 
     /* Create new commit info for this commit tx. */
@@ -569,23 +624,17 @@ static bool do_commit(struct LNchannel *lnchn, struct command *jsoncmd)
     if (ci->sig)
         add_their_commit(lnchn, &ci->txid, ci->commit_num);
 
-    if (lnchn->state == STATE_SHUTDOWN) {
-        set_lnchn_state(lnchn, STATE_SHUTDOWN_COMMITTING, __func__, true);
-    }
-    else {
-        assert(lnchn->state == STATE_NORMAL);
-        set_lnchn_state(lnchn, STATE_NORMAL_COMMITTING, __func__, true);
-    }
-    if (db_commit_transaction(lnchn) != NULL)
-        goto database_error;
+    internal_set_lnchn_state(lnchn, STATE_NORMAL_COMMITTING, __func__, true);
+    if (db_commit_transaction(lnchn) != NULL) {
 
-    queue_pkt_commit(lnchn, ci->sig);
+        return false;
+    }
+
+    //set outsourcing
+    lnchn->outsourcing_f = on_commit_outsourcing_finish;
+
     return true;
 
-database_error:
-    db_abort_transaction(lnchn);
-    lnchn_fail(lnchn, __func__);
-    return false;
 }
 
 bool lnchn_add_htlc(struct LNchannel *chn, u64 msatoshi,
@@ -594,9 +643,11 @@ bool lnchn_add_htlc(struct LNchannel *chn, u64 msatoshi,
     const u8 route,
     enum fail_error *error_code) {
 
-    h = internal_new_htlc(lnchn, t_beg->action.add.mstatoshi,
-        t_beg->rhash, t_beg->action.add.expiry, 0, RCVD_ADD_HTLC);
+    //h = internal_new_htlc(lnchn, t_beg->action.add.mstatoshi,
+    //    t_beg->rhash, t_beg->action.add.expiry, 0, RCVD_ADD_HTLC);
 
+
+    return false;
 }
 
 /* We can get update_commit in both normal and shutdown states. */
@@ -739,5 +790,4 @@ static Pkt *handle_pkt_commit(struct LNchannel *lnchn, const Pkt *pkt)
 
     return NULL;
 }
-
 
