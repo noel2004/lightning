@@ -7,6 +7,7 @@
 
 struct bitcoin_tx;
 struct outsourcing;
+struct preimage;
 
 enum outsourcing_tasktype {
     OUTSOURCING_PASSIVE,
@@ -36,6 +37,9 @@ struct txdeliver {
 
     /* data to build witness */
     u8 *wscript;
+
+    /* preimage */
+    struct preimage *r;
 
     /* lock-time must be clear to apply this signature*/
     ecdsa_signature *sig_nolocked;

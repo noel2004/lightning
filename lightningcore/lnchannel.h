@@ -121,7 +121,9 @@ enum outsourcing_deliver{
 };
 
 /* watch message, incoming struct MUST be allocated as children of lnchn ...*/
-void lnchn_notify_txo_delivered(struct LNchannel *chn, const struct txowatch *txo);
+void lnchn_notify_txo_delivered(struct LNchannel *chn, const struct txowatch *txo,
+    const struct bitcoin_tx *tx, const struct sha256_double *taskid,
+    const struct sha256 *rhash);
 
 void lnchn_notify_tx_delivered(struct LNchannel *chn, const struct bitcoin_tx *tx,
     enum outsourcing_deliver ret, const struct sha256_double *taskid);

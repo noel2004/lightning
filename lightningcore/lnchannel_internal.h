@@ -245,6 +245,8 @@ void internal_commitphase_retry_msg(struct LNchannel *lnchn);
 
 void internal_watch_for_commit(struct LNchannel *chn);
 
+void internal_watch_fullfilled_htlc(struct LNchannel *chn, struct htlc *h);
+
 static bool outputscript_eq(const struct bitcoin_tx_output *out,
     size_t i, const u8 *script)
 {

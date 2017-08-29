@@ -33,7 +33,6 @@ const struct htlc *lite_query_htlc_direct(struct LNchannels *mgr, const struct s
 void    lite_release_htlc(struct LNchannels *mgr, const struct htlc *htlc);
 /*
    All allocation in query is responsed by LNchannelQuery
-   A failed (not actived) channel MUST NOT query anything except default value
 */
 
 /* 
@@ -43,6 +42,9 @@ void    lite_release_htlc(struct LNchannels *mgr, const struct htlc *htlc);
 void    lite_query_commit_txid(const struct LNchannelQuery *q, struct sha256_double *commit_txid[3]);
 
 const struct pubkey *lite_query_pubkey(const struct LNchannelQuery *q);
+
+/* 0 indicate normal (active) and other is for different cases*/
+int lite_query_isactive(const struct LNchannelQuery *q);
 
 const struct sha256_double *lite_query_anchor_txid(const struct LNchannelQuery *q);
 /* query a HTLC from a channel, should be also released by lite_release_htlc*/

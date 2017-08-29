@@ -124,6 +124,8 @@ static struct txdeliver* create_deliver_task(const tal_t *ctx,
         lnchn_sign_htlc(lnchn, work_tx, wscript, task->sig);
     }
 
+    task->r = h->r;
+
     task->deliver_tx = work_tx;
     return task;
 }
@@ -187,7 +189,7 @@ static struct txowatch *create_watch_subtask_from_downsource(const tal_t *ctx,
     struct sha256_double *commit_txid[3];
     struct txowatch *ret;
 
-    farchnq = lite_query_channel_from_htlc(lnchn->dstate->channels, rhash, true);
+    farchnq = lite_query_channel_from_htlc(lnchn->dstate->channels, rhash, false);
 
     if (!farchnq) {
 
@@ -289,13 +291,12 @@ static struct lnwatch_task *create_watch_tasks_for_src(
 
         if (!htlc_is_fixed(h) || !htlc_route_has_source(h))continue;
 
-        q = lite_query_channel_from_htlc(lnchn->dstate->channels, &h->rhash, false);
+        q = lite_query_channel_from_htlc(lnchn->dstate->channels, &h->rhash, true);
 
         //should not have no corresponding source, but source can be closed
-        if (!q || !lite_query_anchor_txid(q)) {
+        if (!q) {
             log_debug(lnchn->log, "htlc with hash [%s] has not valid source",
                 tal_hexstr(ctx, &h->rhash, sizeof(h->rhash)));
-            if (q)lite_release_chn(lnchn->dstate->channels, q);
             continue;
         }
         
@@ -353,11 +354,13 @@ static struct lnwatch_task *create_watch_tasks_for_src(
        
     }
 
+    channelq_map_clear(&work_channelqs);
+    tal_free(tmpctx);
     return activetask;
 }
 
 /* create a watch task from visible state (current commit)*/
-static void create_watch_tasks_from_commit(
+static void create_tasks_from_commit(
     const tal_t *ctx, struct LNchannel *lnchn,
     enum side side, struct lnwatch_task* tasks)
 {
@@ -499,10 +502,10 @@ void internal_watch_for_commit(struct LNchannel *chn)
         htlc_map_count(&chn->htlcs) * 2 + 2); 
     struct lnwatch_task* tasks_end = tasks;
 
-    create_watch_tasks_from_commit(tmpctx, chn, 
+    create_tasks_from_commit(tmpctx, chn, 
         LOCAL, tasks);
 
-    create_watch_tasks_from_commit(tmpctx, chn,
+    create_tasks_from_commit(tmpctx, chn,
         REMOTE, tasks + 1);
 
     assert(tasks_end != tasks);
@@ -515,9 +518,24 @@ void internal_watch_for_commit(struct LNchannel *chn)
 
 }
 
-void lnchn_notify_txo_delivered(struct LNchannel *chn, const struct txowatch *txo)
+void internal_watch_fullfilled_htlc(struct LNchannel *chn, struct htlc *h)
 {
+    const tal_t *tmpctx;
+    struct txdeliver *task;
+    struct LNchannelQuery *q = lite_query_channel_from_htlc(chn->dstate->channels, &h->rhash, true);
 
+    if (!q || lite_query_isactive(q) == 0) {
+        log_debug_struct(chn->log, "fullfilleded htlc %s has no dead source", struct htlc, h);
+        return;
+    }
+
+    tmpctx = tal_tmpctx(chn);
+    task = talz(tmpctx, struct txdeliver);
+    
+    assert(h->r);
+    task->r = h->r;
+    
+    tal_free(tmpctx);
 }
 
 static void reset_onchain_closing(struct LNchannel *lnchn, const struct bitcoin_tx *tx)
@@ -757,7 +775,7 @@ static void handle_htlc_tx_finished(struct LNchannel *lnchn, const struct bitcoi
     }
 
     if (tx->input[0].index >= tal_count(lnchn->onchain.resolved)) {
-         /*outsourcing svr mus breakdown*/
+         /*outsourcing svr must breakdown*/
         struct sha256_double txid;
         bitcoin_txid(tx, &txid);
 
@@ -770,16 +788,22 @@ static void handle_htlc_tx_finished(struct LNchannel *lnchn, const struct bitcoi
 
     h = lnchn->onchain.htlcs[tx->input[0].index];
 
-    //if fail, it was only normal when htlc is ours
+    //if fail, it was only normal when htlc is ours (resolved by remoted)
     if (!isdelivered) {
+        struct sha256_double txid;
+        bitcoin_txid(tx, &txid);
+
         if (htlc_owner(h) != LOCAL) {
-            struct sha256_double txid;
-            bitcoin_txid(tx, &txid);
             log_broken(lnchn->log,
                 "redeem their htlc tx %s fail!",
                 tal_hexstr(lnchn, &txid, sizeof(txid)));
             internal_set_lnchn_state(lnchn, STATE_ERR_INFORMATION_LEAK, "htlc_spent", false);
-            return;
+            
+        }else if(!lnchn->onchain.resolved[tx->input[0].index]){
+            log_broken(lnchn->log,
+                "htlc tx %s fail and htlc is redeemed by other unknown tx!",
+                    tal_hexstr(lnchn, &txid, sizeof(txid)));
+            internal_set_lnchn_state(lnchn, STATE_ERR_BREAKDOWN, "htlc_spent", false);        
         }
     }
     else {
@@ -787,7 +811,7 @@ static void handle_htlc_tx_finished(struct LNchannel *lnchn, const struct bitcoi
         //source htlc
         if (htlc_route_has_source(h) && tx->lock_time != 0) {
             /*we simply use locktime in tx to judge if it is expired-htlc tx*/           
-            struct LNchannelComm* comm = lite_comm_channel_from_htlc(lnchn->dstate->channels, &h->rhash, false);
+            struct LNchannelComm* comm = lite_comm_channel_from_htlc(lnchn->dstate->channels, &h->rhash, true);
 
             if(comm){
                 lite_notify_chn_commit(comm);
@@ -795,10 +819,10 @@ static void handle_htlc_tx_finished(struct LNchannel *lnchn, const struct bitcoi
             }            
         }
         //(for their htlc, redeem is just redeem)
+        //simply resolve one
+        lnchn->onchain.resolved[tx->input[0].index] = tx;
     }
 
-    //simply resolve one
-    lnchn->onchain.resolved[tx->input[0].index] = tx;
 }
 
 void lnchn_notify_tx_delivered(struct LNchannel *lnchn, const struct bitcoin_tx *tx, 
@@ -855,5 +879,22 @@ void lnchn_notify_tx_delivered(struct LNchannel *lnchn, const struct bitcoin_tx 
             //deliver is just logged
         }
     }
+
+}
+
+void lnchn_notify_txo_delivered(struct LNchannel *chn, const struct txowatch *txo,
+    const struct bitcoin_tx *tx, const struct sha256_double *taskid, 
+    const struct sha256 *rhash)
+{
+    /* only active htlc should receive watching notify, or we just log and omit it*/
+    struct htlc *h = htlc_map_get(&chn->htlcs, rhash);
+
+    if (h || !htlc_is_fixed(h)) {
+        log_broken(chn->log,
+            "We receive unexpected htlc [%s] relatived tx delivered",
+            tal_hexstr(chn, rhash, sizeof(*rhash)));
+        return;
+    }
+
 
 }
