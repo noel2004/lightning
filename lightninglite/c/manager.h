@@ -25,6 +25,7 @@ struct LNchannelQuery* lite_query_channel_from_htlc(struct LNchannels *mgr, cons
 void    lite_release_chn(struct LNchannels *mgr, const struct LNchannelQuery* chn);
 
 struct LNchannelComm*  lite_comm_channel(struct LNchannels *mgr, struct LNchannelQuery *q);
+struct LNchannelComm* lite_comm_channel_from_htlc(struct LNchannels *mgr, const struct sha256* hash, int issrc);
 void lite_release_comm(struct LNchannels *mgr, struct LNchannelComm *c);
 
 /* query a whole HTLC*/

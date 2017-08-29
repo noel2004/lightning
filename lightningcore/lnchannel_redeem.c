@@ -90,7 +90,7 @@ static struct bitcoin_tx *htlc_deliver_tx(const struct LNchannel *lnchn,
     return generate_deliver_tx(lnchn, ctx, commitid, out_num, satoshis, 539);
 }
 
-static struct txdeliver* create_watch_deliver_task(const tal_t *ctx, 
+static struct txdeliver* create_deliver_task(const tal_t *ctx, 
     struct LNchannel *lnchn, u8 *wscript, 
     const struct bitcoin_tx *commit_tx, u32 out_num,
     const struct sha256_double *commitid, const struct htlc* h) {
@@ -114,7 +114,8 @@ static struct txdeliver* create_watch_deliver_task(const tal_t *ctx,
     }
 
     //sign for a "immediately" redeem (with preimage or revocation hash)
-    lnchn_sign_htlc(lnchn, work_tx, wscript, &task->sig_nolocked);
+    task->sig_nolocked = tal(ctx, ecdsa_signature);
+    lnchn_sign_htlc(lnchn, work_tx, wscript, task->sig_nolocked);
 
     //if htlc is ours, we also set locktime and sign the "expire" redeem
     if (htlc_owner(h) == LOCAL) {
@@ -127,7 +128,7 @@ static struct txdeliver* create_watch_deliver_task(const tal_t *ctx,
     return task;
 }
 
-static struct txdeliver *create_watch_our_redeem_task(const tal_t *ctx,
+static struct txdeliver *create_our_redeem_task(const tal_t *ctx,
     struct LNchannel *lnchn, u8 *wscript,
     const struct bitcoin_tx *commit_tx, u32 out_num,
     const struct sha256_double *commitid) {
@@ -145,7 +146,8 @@ static struct txdeliver *create_watch_our_redeem_task(const tal_t *ctx,
         return NULL;
     }
 
-    lnchn_sign_spend(lnchn, work_tx, wscript, &task->sig_nolocked);
+    task->sig_nolocked = tal(ctx, ecdsa_signature);
+    lnchn_sign_spend(lnchn, work_tx, wscript, task->sig_nolocked);
     //no lock-time, redeem tx use CSV
     task->deliver_tx = work_tx;
 
@@ -156,7 +158,7 @@ static struct txowatch *create_watch_subtask(const tal_t *ctx,
     const struct htlc* h, 
     struct sha256_double *commit_txid[3]) {
 
-    size_t i, commit_num;
+    size_t i;
     struct txowatch *txow, *txoi;
 
     txoi = txow = tal_arr(ctx, struct txowatch, 3);
@@ -180,9 +182,8 @@ static struct txowatch *create_watch_subtask(const tal_t *ctx,
 static struct txowatch *create_watch_subtask_from_downsource(const tal_t *ctx,
     struct LNchannel *lnchn, const struct sha256* rhash) {
 
-    struct LNchannel *farchn;
     struct LNchannelQuery *farchnq;
-    struct htlc *farh;
+    const struct htlc *farh;
     struct sha256_double *commit_txid[3];
     struct txowatch *ret;
 
@@ -251,7 +252,7 @@ static inline size_t channelq_hash(const struct sha256_double* hash)
 #define HTABLE_KTYPE(keyof, type) struct sha256_double*
 #endif
 
-HTABLE_DEFINE_TYPE(struct LNchannelQuery, channelq_key, channelq_hash, channelq_cmp, channelq_map);
+HTABLE_DEFINE_TYPE(struct worked_source_channel, channelq_key, channelq_hash, channelq_cmp, channelq_map);
 
 /* 
     help updating channels' watching task which have source htlc 
@@ -385,7 +386,7 @@ static void create_watch_tasks_from_commit(
         tasks->redeem_tx = NULL;
     }
     else {
-        tasks->redeem_tx = create_watch_our_redeem_task(ctx, lnchn, to_us_wscript,
+        tasks->redeem_tx = create_our_redeem_task(ctx, lnchn, to_us_wscript,
             commit_tx, redeem_outnum, commitid);
     }
 
@@ -416,7 +417,7 @@ static void create_watch_tasks_from_commit(
 
         outsourcing_htlctask_init(htlctaskscur, &h->rhash);
         //add deliver task for each active htlc
-        htlctaskscur->txdeliver = create_watch_deliver_task(ctx, lnchn, wscript,
+        htlctaskscur->txdeliver = create_deliver_task(ctx, lnchn, wscript,
             commit_tx, h->in_commit_output[side], &tasks->commitid, h);
 
         if (htlc_route_has_downstream(h) && tasks->tasktype == OUTSOURCING_AGGRESSIVE) {
@@ -447,6 +448,8 @@ struct watch_task {
 static void outsourcing_callback_helper(enum outsourcing_result ret, void *cbdata)
 {
     struct watch_task *t = (struct watch_task *) cbdata;
+    if (!t)return;
+
     if (t->chn->rt.outsourcing_counter != t->counter) {
         log_broken(t->chn->log, 
             "outsourcing callback has unmatched counter "PRIi64" vs "PRIi64,
@@ -473,7 +476,8 @@ static void* outsourcing_invoke_helper(struct LNchannel *chn)
     if (chn->rt.outsourcing_f == NULL) {
         log_broken(chn->log, 
             "outsourcing is called without corresponding callback");
-        return;
+        tal_free(t);
+        return NULL;
     }
 
     chn->rt.outsourcing_counter++;
@@ -483,6 +487,8 @@ static void* outsourcing_invoke_helper(struct LNchannel *chn)
     t->counter = chn->rt.outsourcing_counter;
     /* callback is clear once invoked*/
     chn->rt.outsourcing_f = NULL;
+
+    return t;
 }
 
 void internal_watch_for_commit(struct LNchannel *chn)
@@ -493,17 +499,17 @@ void internal_watch_for_commit(struct LNchannel *chn)
         htlc_map_count(&chn->htlcs) * 2 + 2); 
     struct lnwatch_task* tasks_end = tasks;
 
-    create_watch_tasks_from_commit(chn, tmpctx,
+    create_watch_tasks_from_commit(tmpctx, chn, 
         LOCAL, tasks);
 
-    create_watch_tasks_from_commit(chn, tmpctx,
+    create_watch_tasks_from_commit(tmpctx, chn,
         REMOTE, tasks + 1);
 
     assert(tasks_end != tasks);
 
     tal_resize(&tasks, tasks_end - tasks);
 
-    outsourcing_tasks(chn->dstate->outsourcing_svr, chn, tasks, tal_count(tasks),
+    outsourcing_tasks(chn->dstate->outsourcing_svr, tasks, tal_count(tasks),
         outsourcing_callback_helper, 
         outsourcing_invoke_helper(chn));
 
@@ -779,20 +785,18 @@ static void handle_htlc_tx_finished(struct LNchannel *lnchn, const struct bitcoi
     else {
         //if htlc is delivered for timeout, we MUST also resolve the 
         //source htlc
-        if (htlc_owner(h) == LOCAL && h->src_expiry
-            && tx->lock_time != 0 /*we simply use locktime in tx to judge if it is expired-htlc tx*/
-            ) {
-            struct LNchannel* srcchn = lite_query_htlc_src(lnchn->dstate->channels, &h->rhash);
+        if (htlc_route_has_source(h) && tx->lock_time != 0) {
+            /*we simply use locktime in tx to judge if it is expired-htlc tx*/           
+            struct LNchannelComm* comm = lite_comm_channel_from_htlc(lnchn->dstate->channels, &h->rhash, false);
 
-            if(srcchn){
-                internal_resolve_htlc(srcchn, &h->rhash);
-                lite_release_query_chn(lnchn->dstate->channels, srcchn);
+            if(comm){
+                lite_notify_chn_commit(comm);
+                lite_release_comm(lnchn->dstate->channels, comm);
             }            
         }
         //(for their htlc, redeem is just redeem)
     }
 
-    lite_unreg_htlc(lnchn->dstate->channels, h);
     //simply resolve one
     lnchn->onchain.resolved[tx->input[0].index] = tx;
 }
