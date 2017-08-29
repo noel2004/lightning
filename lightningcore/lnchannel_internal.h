@@ -65,6 +65,22 @@ struct LNChannel_visible_state {
 	struct channel_state *staging_cstate;
 };
 
+struct LNChannel_rt
+{
+    /* last commit which is not revoked yet */
+    struct sha256_double *their_last_commit_txid;
+
+    /* counter for outsourcing callback */
+    u64 outsourcing_counter;
+
+    /* internal_watch_xxx use this to generate callback */
+    void(*outsourcing_f)(struct LNchannel *, enum outsourcing_result, u64);
+
+    bool outsourcing_lock;
+
+    struct msg_htlc_entry *commit_msg_cache;
+};
+
 struct LNchannel {
 	/* dstate->peers list */
 	struct list_node list;
@@ -189,15 +205,7 @@ struct LNchannel {
 	/* this is where we will store their revocation preimages*/
 	struct shachain their_preimages;
 
-    /* counter for outsourcing callback */
-    u64 outsourcing_counter;
-
-    /* internal_watch_xxx use this to generate callback */
-    void(*outsourcing_f)(struct LNchannel *, enum outsourcing_result, u64);
-
-    bool outsourcing_lock;
-
-    struct msg_htlc_entry *commit_msg_cache;
+    struct LNChannel_rt rt;
 
 	/* High water mark for the staggered broadcast */
 	u64 broadcast_index;

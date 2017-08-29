@@ -20,7 +20,7 @@ struct sha256_double;
 void    lite_update_channel(struct LNchannels *mgr, const struct LNchannel *lnchn);
 
 
-struct LNchannelQuery* lite_query_channel(struct LNchannels *mgr, struct pubkey *id);
+struct LNchannelQuery* lite_query_channel(struct LNchannels *mgr, const struct pubkey *id);
 struct LNchannelQuery* lite_query_channel_from_htlc(struct LNchannels *mgr, const struct sha256* hash, int issrc);
 void    lite_release_chn(struct LNchannels *mgr, const struct LNchannelQuery* chn);
 
@@ -28,18 +28,24 @@ struct LNchannelComm*  lite_comm_channel(struct LNchannels *mgr, struct LNchanne
 void lite_release_comm(struct LNchannels *mgr, struct LNchannelComm *c);
 
 /* query a whole HTLC*/
-struct htlc *lite_query_htlc_direct(struct LNchannels *mgr, const struct sha256* hash, int issrc);
-void    lite_release_htlc(struct LNchannels *mgr, struct htlc *htlc);
+const struct htlc *lite_query_htlc_direct(struct LNchannels *mgr, const struct sha256* hash, int issrc);
+void    lite_release_htlc(struct LNchannels *mgr, const struct htlc *htlc);
 /*
-   All assigned data MUST be free with tal_free by caller
+   All allocation in query is responsed by LNchannelQuery
    A failed (not actived) channel MUST NOT query anything except default value
 */
 
-/* query commit_txid: [local, remote], can be NULL, allocation is responsed by LNchannelQuery*/
-void    lite_query_commit_txid(struct LNchannelQuery *q, struct sha256_double *commit_txid[2]);
+/* 
+   query commit_txid: [local, remote, <previous remote>], can be NULL, 
+   previous remote only exist when channel is under commting state   
+*/
+void    lite_query_commit_txid(const struct LNchannelQuery *q, struct sha256_double *commit_txid[3]);
 
+const struct pubkey *lite_query_pubkey(const struct LNchannelQuery *q);
+
+const struct sha256_double *lite_query_anchor_txid(const struct LNchannelQuery *q);
 /* query a HTLC from a channel, should be also released by lite_release_htlc*/
-struct htlc *lite_query_htlc(struct LNchannelQuery *q, const struct sha256* hash);
+const struct htlc *lite_query_htlc(const struct LNchannelQuery *q, const struct sha256* hash);
 
 /*
     Actions

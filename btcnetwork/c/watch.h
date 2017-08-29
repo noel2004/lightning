@@ -11,8 +11,8 @@ struct outsourcing;
 enum outsourcing_tasktype {
     OUTSOURCING_PASSIVE,
     OUTSOURCING_AGGRESSIVE,
-    OUTSOURCING_DELETE,
     OUTSOURCING_UPDATE,
+    OUTSOURCING_RESOLVED, //a resolved task never accept more update, and remove all watching task 
 };
 
 enum outsourcing_result {
@@ -85,8 +85,6 @@ struct lnwatch_verifytask {
 };
 
 void outsourcing_task_init(struct lnwatch_task* task, const struct sha256_double* commitid);
-
-void outsourcing_htlctasks_create(struct lnwatch_task *task, size_t count);
 
 void outsourcing_htlctask_init(struct lnwatch_htlc_task* task, const struct sha256* rhash);
 

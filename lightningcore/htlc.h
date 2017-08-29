@@ -104,8 +104,8 @@ struct htlc {
     struct abs_locktime *src_expiry;
 	/* FIXME: actually an enum onion_type */
 	//u8 malformed;
-    /*output num in local and remote commit, -1 indicate not in */
-    int in_commit_output[2];
+    /*output num in commit: (local, remote and "previous remote"), -1 indicate not in */
+    int in_commit_output[3];
 
 
 };

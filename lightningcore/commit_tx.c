@@ -256,12 +256,18 @@ struct bitcoin_tx *create_commit_tx(const tal_t *ctx,
 void   update_htlc_in_channel(struct LNchannel *lnchn,
     enum side side, struct htlc **htlc_updates)
 {
+    struct htlc *h;
     size_t i, cnt;
     cnt = tal_count(htlc_updates);
 
     for (i = 0; i < cnt; ++i) {
-        if (htlc_updates[i]) 
-            htlc_updates[i]->in_commit_output[side] = i;        
+        h = htlc_updates[i];
+        if (h) {            
+            if (side == REMOTE) {
+                h->in_commit_output[2] = h->in_commit_output[side];
+            }
+            h->in_commit_output[side] = i;
+        }
     }
 }
 

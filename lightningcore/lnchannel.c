@@ -1051,6 +1051,7 @@ struct commit_info *internal_new_commit_info(const tal_t *ctx, u64 commit_num)
 }
 
 
+
 struct LNchannel *new_LNChannel(struct lightningd_state *dstate,
 		      struct log *log)
 {
@@ -1063,10 +1064,6 @@ struct LNchannel *new_LNChannel(struct lightningd_state *dstate,
 	lnchn->secrets = NULL;
 	lnchn->anchor.ok_depth = -1;
 //	lnchn->order_counter = 0;
-    lnchn->outsourcing_counter = 0;
-    lnchn->outsourcing_lock = false;
-    lnchn->outsourcing_f = NULL;
-    lnchn->commit_msg_cache = NULL;
 	lnchn->their_commitsigs = 0;
 	lnchn->closing.their_sig = NULL;
 	lnchn->closing.our_script = NULL;
@@ -1098,6 +1095,13 @@ struct LNchannel *new_LNChannel(struct lightningd_state *dstate,
 	htlc_map_init(&lnchn->htlcs);
 //	memset(lnchn->feechanges, 0, sizeof(lnchn->feechanges));
 	shachain_init(&lnchn->their_preimages);
+
+    /* init runtime */
+    lnchn->rt.outsourcing_counter = 0;
+    lnchn->rt.outsourcing_lock = false;
+    lnchn->rt.outsourcing_f = NULL;
+    lnchn->rt.commit_msg_cache = NULL;
+    lnchn->rt.their_last_commit_txid = NULL;
 
 	tal_add_destructor(lnchn, destroy_lnchn);
 	return lnchn;
@@ -1141,6 +1145,8 @@ struct htlc *internal_new_htlc(struct LNchannel *lnchn,
 
 	//htlc_map_add(&lnchn->htlcs, h);
 	//tal_add_destructor(h, htlc_destroy);
+    h->in_commit_output[0] = h->in_commit_output[1] 
+        = h->in_commit_output[2] = -1;
 
 	return h;
 }

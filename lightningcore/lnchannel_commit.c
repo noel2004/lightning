@@ -247,7 +247,8 @@ static void filterhtlcs_and_genentries(const tal_t *ctx,
     )
 {
     struct htlc_map_iter it;
-    struct htlc *h, *yah;
+    struct htlc *h;
+    const struct htlc *yah;
     struct htlc_commit_tasks *add_h, *rem_h;
     *add_table = tal_arr(ctx, struct htlc_commit_tasks, htlc_map_count(&lnchn->htlcs));
     *remove_table = tal_arr(ctx, struct htlc_commit_tasks, htlc_map_count(&lnchn->htlcs));
