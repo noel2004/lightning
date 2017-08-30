@@ -359,6 +359,12 @@ static struct lnwatch_task *create_watch_tasks_for_src(
     return activetask;
 }
 
+static void create_tasks_from_revocation(
+    const tal_t *ctx, struct LNchannel *lnchn)
+{
+
+}
+
 /* create a watch task from visible state (current commit)*/
 static void create_tasks_from_commit(
     const tal_t *ctx, struct LNchannel *lnchn,
