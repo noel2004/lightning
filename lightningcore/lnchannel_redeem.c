@@ -15,6 +15,7 @@
 #include <bitcoin/address.h>
 #include <bitcoin/script.h>
 #include <bitcoin/tx.h>
+#include <bitcoin/preimage.h>
 #include <ccan/array_size/array_size.h>
 #include <ccan/cast/cast.h>
 #include <ccan/list/list.h>
@@ -770,9 +771,13 @@ static void handle_htlc_tx_finished(struct LNchannel *lnchn, const struct bitcoi
     bool isdelivered) {
 
     struct htlc *h;
+    size_t i, input_num;
 
+    for (i = 0; i < tal_count(tx->input); ++i) {
+        if (structeq(&lnchn->onchain.txid, &tx->input[i].txid))break;
+    }
     //only check first input, done or fail (even we use ANYONECANPAY and SINGLE sigops later)
-    if (!structeq(&lnchn->onchain.txid, &tx->input[0].txid)) {
+    if (i == tal_count(tx->input)) {
         log_broken(lnchn->log,
                 "Not correct htlc tx for corresponding task %s!",
                 tal_hexstr(lnchn, &lnchn->onchain.txid, sizeof(lnchn->onchain.txid)));
@@ -780,7 +785,9 @@ static void handle_htlc_tx_finished(struct LNchannel *lnchn, const struct bitcoi
         return;
     }
 
-    if (tx->input[0].index >= tal_count(lnchn->onchain.resolved)) {
+    input_num = i;
+
+    if (tx->input[input_num].index >= tal_count(lnchn->onchain.resolved)) {
          /*outsourcing svr must breakdown*/
         struct sha256_double txid;
         bitcoin_txid(tx, &txid);
@@ -792,7 +799,7 @@ static void handle_htlc_tx_finished(struct LNchannel *lnchn, const struct bitcoi
         return;
     }
 
-    h = lnchn->onchain.htlcs[tx->input[0].index];
+    h = lnchn->onchain.htlcs[tx->input[input_num].index];
 
     //if fail, it was only normal when htlc is ours (resolved by remoted)
     if (!isdelivered) {
@@ -805,7 +812,7 @@ static void handle_htlc_tx_finished(struct LNchannel *lnchn, const struct bitcoi
                 tal_hexstr(lnchn, &txid, sizeof(txid)));
             internal_set_lnchn_state(lnchn, STATE_ERR_INFORMATION_LEAK, "htlc_spent", false);
             
-        }else if(!lnchn->onchain.resolved[tx->input[0].index]){
+        }else if(!lnchn->onchain.resolved[tx->input[input_num].index]){
             log_broken(lnchn->log,
                 "htlc tx %s fail and htlc is redeemed by other unknown tx!",
                     tal_hexstr(lnchn, &txid, sizeof(txid)));
@@ -826,7 +833,7 @@ static void handle_htlc_tx_finished(struct LNchannel *lnchn, const struct bitcoi
         }
         //(for their htlc, redeem is just redeem)
         //simply resolve one
-        lnchn->onchain.resolved[tx->input[0].index] = tx;
+        lnchn->onchain.resolved[tx->input[input_num].index] = tx;
     }
 
 }
@@ -892,15 +899,73 @@ void lnchn_notify_txo_delivered(struct LNchannel *chn, const struct txowatch *tx
     const struct bitcoin_tx *tx, const struct sha256_double *taskid, 
     const struct sha256 *rhash)
 {
+    struct sha256 sha;
+    struct preimage preimage;
+    size_t i, input_num;
+    enum fail_error e;
     /* only active htlc should receive watching notify, or we just log and omit it*/
     struct htlc *h = htlc_map_get(&chn->htlcs, rhash);
 
-    if (h || !htlc_is_fixed(h)) {
+    if (!h || !htlc_is_fixed(h)) {
         log_broken(chn->log,
             "We receive unexpected htlc [%s] relatived tx delivered",
             tal_hexstr(chn, rhash, sizeof(*rhash)));
         return;
     }
 
+    /* search input */
+    for (i = 0; i < tal_count(tx->input); ++i) {
+        if (structeq(&tx->input[i].txid, &txo->commitid)
+            && tx->input[i].index == txo->output_num)
+            break;
+    }
+
+    /* impossible, maybe server has been ruin? */
+    if (i == tal_count(tx->input)) {
+        log_broken(chn->log,
+            "txo notify tx without corresponding watch: [%s:%d]",
+                tal_hexstr(chn, &txo->commitid, sizeof(txo->commitid)));
+        return;
+    }
+
+    input_num = i;
+	/* FIXME-OLD #onchain:
+	 *
+	 * If a node sees a redemption transaction...the node MUST extract the
+	 * preimage from the transaction input witness.  This is either to
+	 * prove payment (if this node originated the payment), or to redeem
+	 * the corresponding incoming HTLC from another peer.
+	 */
+
+	/* This is the form of all HTLC spends. */
+    if (!tx->input[input_num].witness
+        || tal_count(tx->input[input_num].witness) != 3
+        || tal_count(tx->input[input_num].witness[1]) != sizeof(preimage)) {
+
+        log_unusual_struct(chn->log,
+            "Impossible HTLC spend %s",
+            struct bitcoin_tx, tx);
+        return;
+    }
+
+	/* Our timeout tx has all-zeroes, so we can distinguish it (just omit). */
+    if (memeqzero(tx->input[input_num].witness[1], sizeof(preimage)))return;
+
+	memcpy(&preimage, tx->input[input_num].witness[1], sizeof(preimage));
+	sha256(&sha, &preimage, sizeof(preimage));
+
+    if (!structeq(&sha, &h->rhash)) {
+        log_broken(chn->log,
+            "We receive unexpected preimage [%s] which should not resolve the hash %s",
+            tal_hexstr(chn, preimage.r, sizeof(preimage)),
+            tal_hexstr(chn, rhash, sizeof(*rhash)));
+        return;
+    }
+
+    /* If channel is not active we should just omit (tx will be delivered later)*/
+    if (!state_is_normal(chn->state))return;
+
+    /* OK, our htlc is resolved (fullfil)*/
+    lnchn_resolve_htlc(chn, &h->rhash, &preimage, &e);
 
 }

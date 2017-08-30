@@ -7,6 +7,7 @@
 #include "bitcoin/address.h"
 #include "bitcoin/script.h"
 #include "bitcoin/shadouble.h"
+#include "bitcoin/preimage.h"
 #include "failure.h"
 #include "feechange.h"
 #include "htlc.h"
@@ -41,7 +42,9 @@ bool lnchn_add_htlc(struct LNchannel *chn, u64 msatoshi,
 
 bool lnchn_do_commit(struct LNchannel *chn);
 
-bool lnchn_resolve_htlc(struct LNchannel *lnchn, enum fail_error *error_code);
+bool lnchn_resolve_htlc(struct LNchannel *lnchn, const struct sha256 *rhash, 
+    const struct preimage *r, enum fail_error *error_code);
+
 
 //if state is less than first commit, this is safe to redeem anchord txid
 //if force is false, only return valid txid for possible state and chain depth
@@ -120,7 +123,9 @@ enum outsourcing_deliver{
     OUTSOURCING_DELIVER_CONFIRMED,
 };
 
-/* watch message, incoming struct MUST be allocated as children of lnchn ...*/
+/* watch message, incoming tx struct MUST be allocated as children of lnchn ...*/
+
+/* if handling normally, it call lnchn_resolve_htlc*/
 void lnchn_notify_txo_delivered(struct LNchannel *chn, const struct txowatch *txo,
     const struct bitcoin_tx *tx, const struct sha256_double *taskid,
     const struct sha256 *rhash);

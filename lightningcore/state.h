@@ -150,16 +150,16 @@ static inline bool state_is_opening(enum state s)
 	return s <= STATE_OPEN_WAIT_THEIRCOMPLETE;
 }
 
-static inline bool state_can_io(enum state s)
-{
-	if (state_is_error(s))
-		return false;
-	if (s == STATE_CLOSED)
-		return false;
-	if (state_is_onchain(s))
-		return false;
-	return true;
-}
+//static inline bool state_can_io(enum state s)
+//{
+//	if (state_is_error(s))
+//		return false;
+//	if (s == STATE_CLOSED)
+//		return false;
+//	if (state_is_onchain(s))
+//		return false;
+//	return true;
+//}
 
 static inline bool state_can_commit(enum state s)
 {

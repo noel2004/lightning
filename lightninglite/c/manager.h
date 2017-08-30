@@ -55,4 +55,5 @@ const struct htlc *lite_query_htlc(const struct LNchannelQuery *q, const struct 
 */
 void lite_notify_chn_commit(struct LNchannelComm* c);
 
+
 #endif
