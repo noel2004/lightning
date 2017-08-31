@@ -468,21 +468,24 @@ static void load_lnchn_commit_info(struct LNchannel *lnchn)
 
 		if (streq(sqlite3_column_str(stmt, 1), "LOCAL"))
 			cip = &lnchn->local.commit;
-		else {
-			if (!streq(sqlite3_column_str(stmt, 1), "REMOTE"))
-				fatal("load_lnchn_commit_info:bad side %s",
-				      sqlite3_column_str(stmt, 1));
+		else if (streq(sqlite3_column_str(stmt, 1), "REMOTE")) {
 			cip = &lnchn->remote.commit;
 			/* This is a hack where we temporarily store their
 			 * previous revocation hash before we get their
 			 * revocation. */
-			if (sqlite3_column_type(stmt, 6) != SQLITE_NULL) {
-				lnchn->their_prev_revocation_hash
-					= tal(lnchn, struct sha256);
-				sha256_from_sql(stmt, 6,
-						lnchn->their_prev_revocation_hash);
-			}
-		}
+			//if (sqlite3_column_type(stmt, 6) != SQLITE_NULL) {
+			//	lnchn->their_prev_revocation_hash
+			//		= tal(lnchn, struct sha256);
+			//	sha256_from_sql(stmt, 6,
+			//			lnchn->their_prev_revocation_hash);
+			//}
+        }
+        else {
+            if (!streq(sqlite3_column_str(stmt, 1), "REMOTE_LAST"))
+                fatal("load_lnchn_commit_info:bad side %s",
+                    sqlite3_column_str(stmt, 1));
+            cip = &lnchn->rt.their_last_commit;
+        }
 
 		/* Do we already have this one? */
 		if (*cip)
@@ -628,13 +631,13 @@ static void load_lnchn_htlcs(struct LNchannel *lnchn)
 		apply_htlc(lnchn->log, lnchn->remote.commit->cstate, htlc, REMOTE);
 
         /* Only add "not dead" htlc to channel, so we save many cost and memory while running */
-        if (!htlc_is_dead(htlc)) {
-            htlc_map_add(&lnchn->htlcs, htlc);
+        if (htlc->state == RCVD_DOWNSTREAM_DEAD 
+            || htlc->state == RCVD_REMOVE_COMMIT) {
+            tal_free(htlc);            
         }
         else {
-            tal_free(htlc);
+            htlc_map_add(&lnchn->htlcs, htlc);
         }
-            
 	}
 
 	err = sqlite3_finalize(stmt);
@@ -655,7 +658,6 @@ static void load_lnchn_htlcs(struct LNchannel *lnchn)
 	while ((err = sqlite3_step(stmt)) != SQLITE_DONE) {
 		enum side side;
         struct feechange *f;
-        struct commit_info *ci;
         u64 cm;
 
 		if (err != SQLITE_ROW)
@@ -1303,6 +1305,11 @@ void db_set_anchor(struct LNchannel *lnchn)
 		lnchn->remote.commit->order,
 		sig_to_sql(ctx, lnchn->remote.commit->sig));
 
+    db_exec(__func__, lnchn->dstate,
+        "INSERT INTO commit_info VALUES(x'%s', '%s', 0, NULL, 0, NULL, NULL);",
+        lnchnid,
+        side_to_str(REMOTE_LAST));
+
 	db_exec(__func__, lnchn->dstate,
 		"INSERT INTO shachain VALUES (x'%s', x'%s');",
 		lnchnid,
@@ -1590,8 +1597,7 @@ void db_htlc_failed(struct LNchannel *lnchn, const struct htlc *htlc)
 	tal_free(ctx);
 }
 
-void db_new_commit_info(struct LNchannel *lnchn, enum side side,
-			const struct sha256 *prev_rhash)
+void db_new_commit_info(struct LNchannel *lnchn, enum side side)
 {
 	struct commit_info *ci;
 	const char *ctx = tal_tmpctx(lnchn);
@@ -1602,9 +1608,12 @@ void db_new_commit_info(struct LNchannel *lnchn, enum side side,
 	assert(lnchn->dstate->db->in_transaction);
 	if (side == LOCAL) {
 		ci = lnchn->local.commit;
-	} else {
+	} else if (side == REMOTE){
 		ci = lnchn->remote.commit;
-	}
+    }
+    else {
+        ci = lnchn->rt.their_last_commit;
+    }
 
 	db_exec(__func__, lnchn->dstate, "UPDATE commit_info SET commit_num=%"PRIu64", revocation_hash=x'%s', sig=%s, xmit_order=%"PRIi64", prev_revocation_hash=%s WHERE lnchn=x'%s' AND side='%s';",
 		ci->commit_num,
@@ -1612,7 +1621,7 @@ void db_new_commit_info(struct LNchannel *lnchn, enum side side,
 			   sizeof(ci->revocation_hash)),
 		sig_to_sql(ctx, ci->sig),
 		ci->order,
-		sql_hex_or_null(ctx, prev_rhash, sizeof(*prev_rhash)),
+        "NULL",//sql_hex_or_null(ctx, prev_rhash, sizeof(*prev_rhash)),
 		lnchnid, side_to_str(side));
 	tal_free(ctx);
 }

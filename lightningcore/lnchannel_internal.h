@@ -68,7 +68,7 @@ struct LNChannel_visible_state {
 struct LNChannel_rt
 {
     /* last commit which is not revoked yet */
-    struct sha256_double *their_last_commit_txid;
+    struct commit_info *their_last_commit;
 
     /* counter for outsourcing callback */
     u64 outsourcing_counter;
@@ -79,6 +79,8 @@ struct LNChannel_rt
     bool outsourcing_lock;
 
     struct msg_htlc_entry *commit_msg_cache;
+
+    u8* temp_errormsg;
 };
 
 struct LNchannel {
@@ -199,9 +201,6 @@ struct LNchannel {
 	/* Stuff we have in common. */
 	struct LNChannel_visible_state local, remote;
 
-	/* If we have sent a new commit tx, but not received their revocation */
-	struct sha256 *their_prev_revocation_hash;
-
 	/* this is where we will store their revocation preimages*/
 	struct shachain their_preimages;
 
@@ -227,12 +226,12 @@ void internal_htlc_update_deadline(struct LNchannel *lnchn, struct htlc *h);
 
 void internal_lnchn_breakdown(struct LNchannel *lnchn);
 
+void internal_lnchn_temp_breakdown(struct LNchannel *lnchn, const char* reason);
+
 void internal_lnchn_fail_on_notify(struct LNchannel *lnchn, const char* msg, ...);
 
 void internal_set_lnchn_state(struct LNchannel *lnchn, enum state newstate,
     const char *caller, bool db_commit);
-
-void internal_resolve_htlc(struct LNchannel *lnchn, const struct sha256 *rhash);
 
 void internal_update_htlc_watch(struct LNchannel *chn, 
                  const struct sha256 *rhash, struct txowatch* txo);
@@ -243,9 +242,9 @@ void internal_openphase_retry_msg(struct LNchannel *lnchn);
 
 void internal_commitphase_retry_msg(struct LNchannel *lnchn);
 
-void internal_watch_for_commit(struct LNchannel *chn);
+void internal_outsourcing_for_committing(struct LNchannel *chn, enum side side);
 
-void internal_watch_fullfilled_htlc(struct LNchannel *chn, struct htlc *h);
+void internal_outsourcing_for_commit(struct LNchannel *chn, enum side side);
 
 static bool outputscript_eq(const struct bitcoin_tx_output *out,
     size_t i, const u8 *script)

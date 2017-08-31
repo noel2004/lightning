@@ -39,8 +39,7 @@ void db_update_htlc_state(struct LNchannel *lnchn, const struct htlc *htlc,
 //
 //void db_remove_feechange(struct LNchannel *lnchn, const struct feechange *feechange,
 //			 enum feechange_state oldstate);
-void db_new_commit_info(struct LNchannel *lnchn, enum side side,
-			const struct sha256 *prev_rhash);
+void db_new_commit_info(struct LNchannel *lnchn, enum side side);
 void db_remove_their_prev_revocation_hash(struct LNchannel *lnchn);
 void db_update_next_revocation_hash(struct LNchannel *lnchn);
 void db_save_shachain(struct LNchannel *lnchn);

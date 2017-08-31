@@ -50,6 +50,8 @@ bool lnchn_resolve_htlc(struct LNchannel *lnchn, const struct sha256 *rhash,
 //if force is false, only return valid txid for possible state and chain depth
 const struct sha256_double* lnchn_get_anchor_txid(struct LNchannel *lnchn, bool force);
 
+enum state  lnchn_get_state(struct LNchannel *lnchn);
+
 struct LNchannel_config
 {
     struct rel_locktime delay;

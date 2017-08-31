@@ -16,4 +16,5 @@ void outsourcing_htlctask_init(struct lnwatch_htlc_task* task, const struct sha2
     memcpy(&task->rhash, rhash, sizeof(task->rhash));
     task->txdeliver = NULL;
     task->txowatchs = NULL;
+    task->r = NULL;
 }

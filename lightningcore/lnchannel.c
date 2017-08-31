@@ -114,6 +114,15 @@ void internal_lnchn_fail_on_notify(struct LNchannel *lnchn, const char* msg, ...
 
 }
 
+void internal_lnchn_temp_breakdown(struct LNchannel *lnchn, const char* reason)
+{
+    size_t len = strlen(reason);
+    assert(!lnchn->rt.temp_errormsg);
+
+    lnchn->rt.temp_errormsg = tal_arrz(lnchn, u8, len + 1);
+    memcpy(lnchn->rt.temp_errormsg, reason, len);
+}
+
 void internal_lnchn_breakdown(struct LNchannel *lnchn)
 {
 
@@ -1101,7 +1110,8 @@ struct LNchannel *new_LNChannel(struct lightningd_state *dstate,
     lnchn->rt.outsourcing_lock = false;
     lnchn->rt.outsourcing_f = NULL;
     lnchn->rt.commit_msg_cache = NULL;
-    lnchn->rt.their_last_commit_txid = NULL;
+    lnchn->rt.their_last_commit = NULL;
+    lnchn->rt.temp_errormsg = NULL;
 
 	tal_add_destructor(lnchn, destroy_lnchn);
 	return lnchn;
@@ -1143,10 +1153,11 @@ struct htlc *internal_new_htlc(struct LNchannel *lnchn,
     h->history[0] = lnchn->local.commit ? lnchn->local.commit->commit_num : 0;
     h->history[1] = h->history[0] + 1;
 
-	//htlc_map_add(&lnchn->htlcs, h);
-	//tal_add_destructor(h, htlc_destroy);
     h->in_commit_output[0] = h->in_commit_output[1] 
         = h->in_commit_output[2] = -1;
+
+    //htlc_map_add(&lnchn->htlcs, h);
+    //tal_add_destructor(h, htlc_destroy);
 
 	return h;
 }

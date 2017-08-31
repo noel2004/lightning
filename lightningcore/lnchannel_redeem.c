@@ -15,7 +15,6 @@
 #include <bitcoin/address.h>
 #include <bitcoin/script.h>
 #include <bitcoin/tx.h>
-#include <bitcoin/preimage.h>
 #include <ccan/array_size/array_size.h>
 #include <ccan/cast/cast.h>
 #include <ccan/list/list.h>
@@ -32,11 +31,25 @@
 #include <sys/types.h>
 
 
+/*
 
-void internal_resolve_htlc(struct LNchannel *lnchn, const struct sha256 *rhash)
-{
+    Some edge cases on redeeming:
 
-}
+    watching: may require 3x3=9 watches if both channel is under commiting status
+
+    LOCAL (downloadsource) htlc resolvtion and outsourcing task updating: 
+       * resolved on dead channel (corresponding redeem tx is delivered): 
+         no action required, source's txo watching will found the delivered tx and
+         update its deliver task on outsourcing service
+
+       * TIP is resolved by invoice:
+         only set the resolved htlc's preimage. if it was not committed, just consider
+         as a "not paid" case
+
+       * resolved on commiting:
+         need to update source's tasks
+
+*/
 
 static struct bitcoin_tx *generate_deliver_tx(const struct LNchannel *lnchn,
     const tal_t *ctx, const struct sha256_double *commitid,
@@ -124,8 +137,6 @@ static struct txdeliver* create_deliver_task(const tal_t *ctx,
         work_tx->lock_time = h->expiry.locktime;
         lnchn_sign_htlc(lnchn, work_tx, wscript, task->sig);
     }
-
-    task->r = h->r;
 
     task->deliver_tx = work_tx;
     return task;
@@ -261,7 +272,7 @@ HTABLE_DEFINE_TYPE(struct worked_source_channel, channelq_key, channelq_hash, ch
     help updating channels' watching task which have source htlc 
     a little tough ...
 */
-static struct lnwatch_task *create_watch_tasks_for_src(
+static struct lnwatch_task *create_tasks_for_src(
     const tal_t *ctx,
     struct LNchannel *lnchn, struct lnwatch_task *outtask) {
 
@@ -277,7 +288,7 @@ static struct lnwatch_task *create_watch_tasks_for_src(
     /* init commit txid */
     if (lnchn->local.commit)commit_txid[0] = &lnchn->local.commit->txid;
     if (lnchn->remote.commit)commit_txid[1] = &lnchn->remote.commit->txid;
-    if (lnchn->rt.their_last_commit_txid)commit_txid[2] = lnchn->rt.their_last_commit_txid;
+    if (lnchn->rt.their_last_commit)commit_txid[2] = &lnchn->rt.their_last_commit->txid;
 
     channelq_map_init(&work_channelqs);
 
@@ -288,9 +299,8 @@ static struct lnwatch_task *create_watch_tasks_for_src(
         struct channelq_map_iter chnq_it;
         struct LNchannelQuery *q;
         struct worked_source_channel *worked;
-        struct txowatch*   srctxow;
 
-        if (!htlc_is_fixed(h) || !htlc_route_has_source(h))continue;
+        if (!htlc_route_has_source(h))continue;
 
         q = lite_query_channel_from_htlc(lnchn->dstate->channels, &h->rhash, true);
 
@@ -300,9 +310,6 @@ static struct lnwatch_task *create_watch_tasks_for_src(
                 tal_hexstr(ctx, &h->rhash, sizeof(h->rhash)));
             continue;
         }
-        
-        //for one htlc, we have at most 3x3=9 watching generated (for 3 different tasks)
-        srctxow = create_watch_subtask(ctx, h, commit_txid);
 
         worked = channelq_map_getfirst(&work_channelqs, lite_query_anchor_txid(q), &chnq_it);
         //found nothing, init it
@@ -345,9 +352,36 @@ static struct lnwatch_task *create_watch_tasks_for_src(
             }
             
             outsourcing_htlctask_init(h_task, &h->rhash);
-            h_task->txowatchs = srctxow;
-            h_task->txowatch_num = tal_count(srctxow);
 
+            if (h->r) {
+                h_task->r = h->r;
+                h_task->txowatch_num = 0;//this clear the watching task
+            }
+            else {
+                struct txowatch*   srctxow;
+                if (htlc_has(h, HTLC_ADDING)) {
+                    /* 
+                        TODO: 
+                        "adding" should only for the SENT_ADD_COMMIT case, so
+                        REMOTE may deliver the commited tx but LOCAL could not,
+                        we may seek a better way to decide the updated txid array
+                    */
+                    struct sha256_double *commit_txid_updated[3] = 
+                    { NULL, commit_txid[1], NULL };
+                    srctxow = create_watch_subtask(ctx, h, commit_txid_updated);
+                }
+                else if (htlc_has(h, HTLC_REMOVING)) {
+                    struct sha256_double *commit_txid_updated[3] = 
+                    { NULL, NULL, commit_txid[2] };
+                    srctxow = create_watch_subtask(ctx, h, commit_txid_updated);
+                }
+                else if (htlc_is_fixed(h)) {
+                    srctxow = create_watch_subtask(ctx, h, commit_txid);
+                }
+
+                h_task->txowatchs = srctxow;
+                h_task->txowatch_num = tal_count(srctxow);/*safe for NULL*/
+            }
             worked = channelq_map_getnext(&work_channelqs, lite_query_anchor_txid(q), &chnq_it);
         };
 
@@ -361,9 +395,26 @@ static struct lnwatch_task *create_watch_tasks_for_src(
 }
 
 static void create_tasks_from_revocation(
-    const tal_t *ctx, struct LNchannel *lnchn)
+    const tal_t *ctx, struct LNchannel *lnchn, 
+    struct lnwatch_task* tasks)
 {
+    struct sha256 *preimage = tal(ctx, struct sha256);
 
+    outsourcing_task_init(tasks, &lnchn->rt.their_last_commit->txid);
+    tasks->tasktype = OUTSOURCING_UPDATE;
+
+    assert(lnchn->rt.their_last_commit);
+
+    if (!shachain_get_hash(&lnchn->their_preimages,
+        0xFFFFFFFFFFFFFFFFL - lnchn->rt.their_last_commit->commit_num,
+        preimage)) {
+
+        tal_free(preimage);
+
+        return;
+    }
+
+    tasks->preimage = preimage;
 }
 
 /* create a watch task from visible state (current commit)*/
@@ -429,6 +480,9 @@ static void create_tasks_from_commit(
         //add deliver task for each active htlc
         htlctaskscur->txdeliver = create_deliver_task(ctx, lnchn, wscript,
             commit_tx, h->in_commit_output[side], &tasks->commitid, h);
+
+        /* in general a fixed htlc should not have preimage (or it must be resolved) */
+        htlctaskscur->r = h->r;
 
         if (htlc_route_has_downstream(h) && tasks->tasktype == OUTSOURCING_AGGRESSIVE) {
             //in agressive mode, a remote htlc should take a twowatch
@@ -501,48 +555,74 @@ static void* outsourcing_invoke_helper(struct LNchannel *chn)
     return t;
 }
 
-void internal_watch_for_commit(struct LNchannel *chn)
-{
+static void outsourcing_impl(struct LNchannel *chn, bool commit_task[2] /*local, remote*/,
+    bool watch_task, bool revo_task) {
+
     const tal_t *tmpctx = tal_tmpctx(chn);
     /* we have at most 2*htlc + 2 tasks (all htlcs are local and have src, plus two main task) */
     struct lnwatch_task* tasks = tal_arr(tmpctx, struct lnwatch_task,
-        htlc_map_count(&chn->htlcs) * 2 + 2); 
+        htlc_map_count(&chn->htlcs) * 2 + 2);
     struct lnwatch_task* tasks_end = tasks;
+    struct commit_info* tmp = chn->rt.their_last_commit;
 
-    create_tasks_from_commit(tmpctx, chn, 
-        LOCAL, tasks);
+    if (commit_task[LOCAL]) {
+        create_tasks_from_commit(tmpctx, chn,
+            LOCAL, tasks_end);
+        tasks_end++;
+    }
 
-    create_tasks_from_commit(tmpctx, chn,
-        REMOTE, tasks + 1);
+    if (commit_task[REMOTE]) {
+        create_tasks_from_commit(tmpctx, chn,
+            REMOTE, tasks_end);
+        tasks_end++;
+    }
 
-    assert(tasks_end != tasks);
+    if (revo_task) {
+        create_tasks_from_revocation(tmpctx, chn, tasks_end);
+        assert(tasks_end->preimage);
+        tasks_end++;
+
+        //TODO: this is an ugly hacking
+        /* 
+            if we revoke a task, we do need watch for the last commit
+            the watching subtask for revoked task is not effect in fact
+            but we still wish to save communication cost
+        */
+        chn->rt.their_last_commit = NULL;
+    }
+
+    /* when commiting we deliver watching for 3 commit tx: local, remote and last remote*/
+    if (watch_task) {
+        tasks_end = create_tasks_for_src(tmpctx, chn, tasks_end);
+    }
+    
+    /* we eliminated the side-effect */
+    chn->rt.their_last_commit = tmp;
 
     tal_resize(&tasks, tasks_end - tasks);
 
     outsourcing_tasks(chn->dstate->outsourcing_svr, tasks, tal_count(tasks),
-        outsourcing_callback_helper, 
+        outsourcing_callback_helper,
         outsourcing_invoke_helper(chn));
+
+    tal_free(tmpctx);
 
 }
 
-void internal_watch_fullfilled_htlc(struct LNchannel *chn, struct htlc *h)
+void internal_outsourcing_for_committing(struct LNchannel *chn, enum side side)
 {
-    const tal_t *tmpctx;
-    struct txdeliver *task;
-    struct LNchannelQuery *q = lite_query_channel_from_htlc(chn->dstate->channels, &h->rhash, true);
+    bool commit_task[2] = { side == REMOTE, true };
 
-    if (!q || lite_query_isactive(q) == 0) {
-        log_debug_struct(chn->log, "fullfilleded htlc %s has no dead source", struct htlc, h);
-        return;
-    }
+    outsourcing_impl(chn, commit_task, true, false);
+}
 
-    tmpctx = tal_tmpctx(chn);
-    task = talz(tmpctx, struct txdeliver);
-    
-    assert(h->r);
-    task->r = h->r;
-    
-    tal_free(tmpctx);
+void internal_outsourcing_for_commit(struct LNchannel *chn, enum side side)
+{
+    bool commit_task[2] = { side == LOCAL, false };
+
+    //for commit-recv side, watch is not need to renew because the revoked task
+    //remove its watching automatically
+    outsourcing_impl(chn, commit_task, side == LOCAL, true);
 }
 
 static void reset_onchain_closing(struct LNchannel *lnchn, const struct bitcoin_tx *tx)

@@ -25,6 +25,7 @@ enum state {
 	 */
 	STATE_NORMAL,
 	STATE_NORMAL_COMMITTING,
+    STATE_NORMAL_COMMITTING_RECV,
 
 	/*
 	 * Closing (handled outside state machine).
@@ -53,6 +54,9 @@ enum state {
 	STATE_ERR_INFORMATION_LEAK,
 	/* We ended up in an unexpected state. */
 	STATE_ERR_INTERNAL,
+
+    /* This is NOT persistented state (no name strings)*/
+    STATE_ERR_TEMP,
 
 	STATE_MAX
 };

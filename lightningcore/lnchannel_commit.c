@@ -32,16 +32,6 @@
 #include <stdlib.h>
 #include <sys/types.h>
 
-static void add_their_commit(struct LNchannel *lnchn,
-			   const struct sha256_double *txid, u64 commit_num)
-{
-	struct their_commit *tc = tal(lnchn, struct their_commit);
-	tc->txid = *txid;
-	tc->commit_num = commit_num;
-
-	db_add_commit_map(lnchn, txid, commit_num);
-}
-
 /* Sign and local commit tx */
 static void sign_commit_tx(struct LNchannel *lnchn)
 {
@@ -534,9 +524,74 @@ static size_t clean_rejected_messages(struct msg_htlc_entry *msgs,
     return n;
 }
 
+static void add_their_commit(struct LNchannel *lnchn,
+    const struct sha256_double *txid, u64 commit_num)
+{
+    struct their_commit *tc = tal(lnchn, struct their_commit);
+    tc->txid = *txid;
+    tc->commit_num = commit_num;
+
+    db_add_commit_map(lnchn, txid, commit_num);
+}
+
 static void on_commit_outsourcing_finish(struct LNchannel *lnchn, enum outsourcing_result ret, u64 num)
 {
+    struct commit_info *ci;
+    bool to_us_only;
+    struct htlc **htlcs_update;
     //outsourcing is done and we can deliver commit message
+    if (ret != OUTSOURCING_OK) {
+        log_broken(lnchn->log, "outsourcing service fail for %d", ret);
+        internal_lnchn_temp_breakdown(lnchn, "outsourcing failure");
+        return;
+    }
+
+    ci = internal_new_commit_info(lnchn, lnchn->remote.commit->commit_num + 1);
+
+    db_start_transaction(lnchn);
+
+    /* Create new commit info for this commit tx. */
+    ci->revocation_hash = lnchn->remote.next_revocation_hash;
+    /* FIXME-OLD #2:
+    *
+    * ...a sending node MUST apply all remote acked and unacked
+    * changes except unacked fee changes to the remote commitment
+    * before generating `sig`. */
+    ci->cstate = copy_cstate(ci, lnchn->remote.staging_cstate);
+    ci->tx = create_commit_tx(ci, lnchn, &ci->revocation_hash,
+        ci->cstate, REMOTE, &to_us_only, &htlcs_update);
+    bitcoin_txid(ci->tx, &ci->txid);
+    update_htlc_in_channel(lnchn, LOCAL, htlcs_update);
+    tal_free(htlcs_update);
+
+    if (!to_us_only) {
+        log_debug(lnchn->log, "Signing tx %"PRIu64, ci->commit_num);
+        log_add_struct(lnchn->log, " for %s",
+            struct channel_state, ci->cstate);
+        log_add_struct(lnchn->log, " (txid %s)",
+            struct sha256_double, &ci->txid);
+
+        ci->sig = tal(ci, ecdsa_signature);
+        lnchn_sign_theircommit(lnchn, ci->tx, ci->sig);
+    }
+
+    /* Switch to the new commitment. */
+    tal_free(lnchn->remote.commit);
+    lnchn->remote.commit = ci;
+    //lnchn->remote.commit->order = lnchn->order_counter++;
+    db_new_commit_info(lnchn, REMOTE);
+
+    /* We don't need to remember their commit if we don't give sig. */
+    if (ci->sig)
+        add_their_commit(lnchn, &ci->txid, ci->commit_num);
+
+    internal_set_lnchn_state(lnchn, STATE_NORMAL_COMMITTING, __func__, true);
+    if (db_commit_transaction(lnchn) != NULL) {
+        log_broken(lnchn->log, "db fail at %s", __func__);
+        internal_lnchn_temp_breakdown(lnchn, "db fail");
+        return ;
+    }
+
 }
 
 bool lnchn_do_commit(struct LNchannel *lnchn)
@@ -545,7 +600,7 @@ bool lnchn_do_commit(struct LNchannel *lnchn)
     const char *errmsg;
     struct htlc_commit_tasks *add_t, *rem_t;
     static const enum htlc_state changed_states[] = 
-        { RCVD_REMOVE_COMMIT, SENT_ADD_COMMIT };
+        { RCVD_REMOVE_COMMIT, SENT_ADD_COMMIT };/*del, add*/
 
     const tal_t *tmpctx = tal_tmpctx(lnchn);
 
@@ -559,11 +614,6 @@ bool lnchn_do_commit(struct LNchannel *lnchn)
 
     ci = internal_new_commit_info(lnchn, lnchn->remote.commit->commit_num + 1);
 
-    assert(!lnchn->their_prev_revocation_hash);
-    lnchn->their_prev_revocation_hash
-        = tal_dup(lnchn, struct sha256,
-            &lnchn->remote.commit->revocation_hash);
-
     db_start_transaction(lnchn);
 
    //we apply remove tasks, finally adding
@@ -573,7 +623,7 @@ bool lnchn_do_commit(struct LNchannel *lnchn)
 
    //we apply remove tasks first, then feechange, finally adding
     applied_t = resolvehtlcs(lnchn, changed_states, add_t);
-    //all remove task should be handled
+    //add task may not handled ...
     if (applied_t != tal_count(add_t)) {
         size_t clean_msg;
         log_info(lnchn->log, "%d htlcs is not applied for the purposed %d htlcs", 
@@ -592,47 +642,9 @@ bool lnchn_do_commit(struct LNchannel *lnchn)
         return false;
     }
 
-    /* Create new commit info for this commit tx. */
-    ci->revocation_hash = lnchn->remote.next_revocation_hash;
-    /* FIXME-OLD #2:
-    *
-    * ...a sending node MUST apply all remote acked and unacked
-    * changes except unacked fee changes to the remote commitment
-    * before generating `sig`. */
-    ci->cstate = copy_cstate(ci, lnchn->remote.staging_cstate);
-    ci->tx = create_commit_tx(ci, lnchn, &ci->revocation_hash,
-        ci->cstate, REMOTE, &to_us_only);
-    bitcoin_txid(ci->tx, &ci->txid);
-
-    if (!to_us_only) {
-        log_debug(lnchn->log, "Signing tx %"PRIu64, ci->commit_num);
-        log_add_struct(lnchn->log, " for %s",
-            struct channel_state, ci->cstate);
-        log_add_struct(lnchn->log, " (txid %s)",
-            struct sha256_double, &ci->txid);
-
-        ci->sig = tal(ci, ecdsa_signature);
-        lnchn_sign_theircommit(lnchn, ci->tx, ci->sig);
-    }
-
-    /* Switch to the new commitment. */
-    tal_free(lnchn->remote.commit);
-    lnchn->remote.commit = ci;
-    lnchn->remote.commit->order = lnchn->order_counter++;
-    db_new_commit_info(lnchn, REMOTE, lnchn->their_prev_revocation_hash);
-
-    /* We don't need to remember their commit if we don't give sig. */
-    if (ci->sig)
-        add_their_commit(lnchn, &ci->txid, ci->commit_num);
-
-    internal_set_lnchn_state(lnchn, STATE_NORMAL_COMMITTING, __func__, true);
-    if (db_commit_transaction(lnchn) != NULL) {
-
-        return false;
-    }
-
     //set outsourcing
-    lnchn->outsourcing_f = on_commit_outsourcing_finish;
+    lnchn->rt.outsourcing_f = on_commit_outsourcing_finish;
+    internal_outsourcing_for_commit(lnchn, LOCAL);
 
     return true;
 

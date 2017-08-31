@@ -38,9 +38,6 @@ struct txdeliver {
     /* data to build witness */
     u8 *wscript;
 
-    /* preimage */
-    struct preimage *r;
-
     /* lock-time must be clear to apply this signature*/
     ecdsa_signature *sig_nolocked;
 
@@ -53,7 +50,12 @@ struct lnwatch_htlc_task {
 
     struct txdeliver *txdeliver;    
 
-    /* additional trigger */
+    /* preimage for htlc deliver*/
+    struct preimage *r;
+    /* 
+       additional trigger, notice in update phase 
+       tasks will be updated according to txowatch_num 
+    */
     struct txowatch *txowatchs; 
     u8 txowatch_num;
 };

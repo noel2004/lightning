@@ -28,6 +28,7 @@ enum htlc_state {
     /* When they remove an htlc, it directly comes into RCVD_REMOVE_ACK_COMMIT: */
     SENT_RESOLVE_HTLC,
     RCVD_REMOVE_ACK_COMMIT, /*dead*/
+    RCVD_DOWNSTREAM_DEAD,  /*mark for "bury" htlc (not need to load from DB)*/
 
     HTLC_STATE_INVALID
 };
@@ -35,6 +36,7 @@ enum htlc_state {
 enum side {
 	LOCAL,
 	REMOTE,
+    REMOTE_LAST,
 	NUM_SIDES
 };
 
@@ -235,6 +237,7 @@ static inline const char *side_to_str(enum side side)
 	switch (side) {
 	case LOCAL: return "LOCAL";
 	case REMOTE: return "REMOTE";
+    case REMOTE_LAST: return "REMOTE_LAST";
 	case NUM_SIDES: break;
 	}
 	abort();
@@ -242,9 +245,12 @@ static inline const char *side_to_str(enum side side)
 
 static inline enum side str_to_side(const char *str)
 {
-	if (streq(str, "LOCAL"))
-		return LOCAL;
-	assert(streq(str, "REMOTE"));
-	return REMOTE;
+    if (streq(str, "LOCAL"))
+        return LOCAL;
+    else if (streq(str, "REMOTE"))
+        return REMOTE;
+    else 
+	    assert(streq(str, "REMOTE_LAST"));
+	return REMOTE_LAST;
 }
 #endif /* LIGHTNING_CORE_HTLC_H */
