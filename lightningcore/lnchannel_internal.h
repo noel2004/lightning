@@ -219,10 +219,13 @@ struct commit_info *internal_new_commit_info(const tal_t *ctx, u64 commit_num);
 struct htlc *internal_new_htlc(struct LNchannel *chn,
 			   u64 msatoshi,
 			   const struct sha256 *rhash,
-			   u32 expiry, u32 src_expiry, /* 0 if no source*/
+			   u32 expiry, u32 routing, /* 0 if no source*/
 			   enum htlc_state state);
 
 void internal_htlc_update_deadline(struct LNchannel *lnchn, struct htlc *h, const struct htlc *srch);
+
+void internal_htlc_fullfill(struct LNchannel *chn, const struct preimage *r, struct htlc *h);
+
 
 void internal_lnchn_breakdown(struct LNchannel *lnchn);
 

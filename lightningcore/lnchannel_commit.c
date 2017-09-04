@@ -129,12 +129,6 @@ static bool adjust_cstates(struct LNchannel *lnchn, struct htlc *h,
             LOCAL);
 }
 
-struct htlc_commit_tasks
-{
-    struct htlc *ref_h;
-    struct msg_htlc_entry* gen_entry;
-};
-
 static void set_htlc_rval(struct LNchannel *lnchn,
     struct htlc *htlc, const struct preimage *rval)
 {
@@ -157,15 +151,15 @@ static void set_htlc_fail(struct LNchannel *lnchn,
     scan the tasks list again and persist data into htlcs
 */
 static void db_update_htlcs(struct LNchannel *lnchn, 
-    struct htlc_commit_tasks *tasks) {
+    struct htlc **htlcs) {
 
     struct htlc *h;
     size_t i, cnt;
-    cnt = tal_count(tasks);
+    cnt = tal_count(htlcs);
 
     for (i = 0; i < cnt; ++i) {
 
-        h = tasks[i].ref_h;
+        h = htlcs[i];
 
         if (tasks[i].gen_entry->action_type == 0) {
             if (h->r) {
@@ -187,20 +181,18 @@ static void db_update_htlcs(struct LNchannel *lnchn,
     add or remove changed htlcs, return handling task counts because
     adding maybe rejected
 */
-static size_t resolvehtlcs(struct LNchannel *lnchn, 
+static size_t applyhtlcchanges(struct LNchannel *lnchn, 
     enum htlc_state new_states[2], /*0: del, 1: add*/
     struct htlc_commit_tasks *tasks) {
 
     struct htlc *h;
     size_t i, j, cnt;
-    enum htlc_state new_state, old_state;
+    enum htlc_state new_state;
     cnt = tal_count(tasks);
 
     for (i = 0; i < cnt; ++i) {
 
         h = tasks[i].ref_h;
-
-        assert(htlc_is_fixed(h));
         new_state = new_states[tasks[i].gen_entry->action_type];
 
         if (!adjust_cstates(lnchn, h, h->state, new_state)) {
@@ -209,22 +201,7 @@ static size_t resolvehtlcs(struct LNchannel *lnchn,
             return i;
         }
 
-        old_state = h->state;
         htlc_changestate(h, h->state, new_state);
-
-        if (tasks[i].gen_entry->action_type == 0) {
-            if (tasks[i].gen_entry->action.del.r) {
-                set_htlc_rval(lnchn, h, tasks[i].gen_entry->action.del.r);
-            }                
-            else if(!h->fail){//only apply when htlc is not failed explictily
-                set_htlc_fail(lnchn, h, tasks[i].gen_entry->action.del.fail, 
-                    tal_count(tasks[i].gen_entry->action.del.fail));
-            }                
-        }
-        else {
-            //nothing to do for adding task
-            //db_new_htlc(lnchn, h);
-        }
     }
 
     return cnt;
@@ -292,11 +269,20 @@ static void clean_htlcs(const tal_t *ctx, struct LNchannel *lnchn) {
 /*
    scan and update channel's htlc status
 */
-static void update_htlcs(struct LNchannel *lnchn, bool *changed)
+static void update_htlcs(const tal_t *ctx, 
+    struct LNchannel *lnchn, bool *changed,
+    struct htlc **add,
+    struct htlc **rem)
 {
     struct htlc_map_iter it;
-    struct htlc *h;
+    struct htlc *h, **add_h, **rem_h;
     const struct htlc *yah;
+    if(add)
+        *add = tal_arr(ctx, struct htlc *, htlc_map_count(&lnchn->htlcs));
+    if(rem)
+        *rem = tal_arr(ctx, struct htlc *, htlc_map_count(&lnchn->htlcs));
+    add_h = add;
+    rem_h = rem;
 
     for (h = htlc_map_first(&lnchn->htlcs, &it);
         h;
@@ -311,7 +297,8 @@ static void update_htlcs(struct LNchannel *lnchn, bool *changed)
                 &h->rhash, true))) {
 
             internal_htlc_update_deadline(lnchn, h, yah);
-            *changed = true;            
+            *(add_h++) = h;
+            *changed = true;
         }        
         //for fixed task, check if it can be resolved
         else if (htlc_is_fixed(h) && !h->r && !h->fail &&
@@ -328,6 +315,7 @@ static void update_htlcs(struct LNchannel *lnchn, bool *changed)
                 set_htlc_fail(lnchn, h, yah->fail, tal_count(yah->fail));
             }
 
+            *(rem_h++) = h;
             *changed = true;
         }
         /*finally the dead REMOT htlc can be removed only if it have no source anymore*/
@@ -341,104 +329,59 @@ static void update_htlcs(struct LNchannel *lnchn, bool *changed)
         if(yah)lite_release_htlc(lnchn->dstate->channels, yah);
     }
 
+    if(add)tal_resize(add, add_h - add);
+    if(rem)tal_resize(rem, rem_h - rem);
+
 }
 
-static void filterhtlcs_and_genentries(const tal_t *ctx, 
-        struct LNchannel *lnchn, 
-        struct msg_htlc_entry *msg_arr, /*suppose the arr is long enough to held all possible entries*/
-        struct htlc_commit_tasks **add_table,
-        struct htlc_commit_tasks **remove_table
-    )
-{
+static void fill_htlc_entry(struct msg_htlc_entry *m, 
+    const struct htlc *h, bool isadd) {
+
+    m->rhash = &h->rhash;
+
+    if (isadd) {
+        m->action_type = 1;
+        m->action.add.expiry = abs_locktime_to_blocks(&h->expiry);
+        m->action.add.mstatoshi = h->msatoshi;
+    }
+    else {
+        m->action_type = 0;
+        if (h->r) {
+            m->action.del.r = h->r;
+        }
+        else {
+            assert(h->fail);
+            m->action.del.fail = h->fail;
+            m->action.del.failflag = htlc_route_is_end(h) ? 1 : 0;
+        }
+    }
+}
+
+static void scanhtlcs_and_genentries(const tal_t *ctx, 
+    struct LNchannel *lnchn, 
+    enum htlc_state filter_states[2], /*0: del, 1: add*/
+    struct msg_htlc_entry **msgs) {
+
     struct htlc_map_iter it;
     struct htlc *h;
-    const struct htlc *yah;
-    struct htlc_commit_tasks *add_h, *rem_h;
-    *add_table = tal_arr(ctx, struct htlc_commit_tasks, htlc_map_count(&lnchn->htlcs));
-    *remove_table = tal_arr(ctx, struct htlc_commit_tasks, htlc_map_count(&lnchn->htlcs));
-
-    add_h = *add_table;
-    rem_h = *remove_table;
+    struct msg_htlc_entry **msg_arr;
+    *msgs = tal_arr(ctx, struct msg_htlc_entry, htlc_map_count(&lnchn->htlcs));
+    msg_arr = msgs;
 
     for (h = htlc_map_first(&lnchn->htlcs, &it);
         h;
         h = htlc_map_next(&lnchn->htlcs, &it)) {
 
-        yah = NULL;
-        //for pending (purpose to added), check if it can be added now
-        if (htlc_has(h, HTLC_LOCAL_F_PENDING)) {
-            
-            /* 
-                is tip or its source has been fixed, case for a broken source 
-                is rared, but in case we save some works ...
-            */
-            if (htlc_route_is_tip(h) || (yah 
-                = lite_query_htlc_direct(lnchn->dstate->channels,
-                    &h->rhash, false)) && 
-                htlc_is_fixed(yah)) {
-
-                add_h->ref_h = h;
-                add_h->gen_entry = msg_arr++;
-                add_h->gen_entry->rhash = &h->rhash;
-                add_h->gen_entry->action_type = 1;
-                add_h->gen_entry->action.add.expiry = &h->expiry;
-                add_h->gen_entry->action.add.mstatoshi = h->msatoshi;
-                ++add_h;
-            }
+        if (h->state == filter_states[0]) {
+            fill_htlc_entry(*(msg_arr++), h, false);
+        }else if(h->state == filter_states[1]){
+            fill_htlc_entry(*(msg_arr++), h, true);
         }
-        //for fixed task, check if it can be resolved
-        else if(htlc_is_fixed(h)){
-
-            /* not harm even no action is taken*/
-            rem_h->ref_h = h;
-            rem_h->gen_entry = msg_arr;
-
-            /*
-                is end and has been resolved, or its downstream has been resolved
-            */
-            if ((htlc_route_is_end(h) && h->r)){
-                rem_h->gen_entry->action.del.r = h->r;
-            }
-            else if (yah = lite_query_htlc_direct(lnchn->dstate->channels,
-                    &h->rhash, true) && htlc_is_dead(yah)) {
-                //*(rem_h++) = h;
-                if (yah->r) {
-                    /*don't take pointer only*/
-                    rem_h->gen_entry->action.del.r = tal_dup(msg_arr, struct preimage, yah->r);
-                }
-                else {
-                    assert(yah->fail);
-                    rem_h->gen_entry->action.del.r = NULL;
-                    rem_h->gen_entry->action.del.fail = yah->fail;
-                    rem_h->gen_entry->action.del.failflag = 0;
-                }
-            }
-            //finally check any htlc which is resolved, fail explicitly or expired
-            else if (h->r) {
-                rem_h->gen_entry->action.del.r = h->r;
-            }
-            else if (h->fail) {
-                rem_h->gen_entry->action.del.fail = yah->fail;
-                rem_h->gen_entry->action.del.failflag = htlc_route_is_end(h) ? 1 : 0;
-            }
-
-            else goto noaction; //well, ugly goto ...
-
-            rem_h->gen_entry->action_type = 0;
-            /* the setrval is left for resolvehtlcs, htlcs is immuatable here*/
-
-            ++rem_h;
-            ++msg_arr;
-noaction:
-        }
-
-        lite_release_htlc(lnchn->dstate->channels, yah);
-
     }
 
-    tal_resize(add_table, add_h - *add_table);
-    tal_resize(remove_table, rem_h - *remove_table);
+    tal_resize(msgs, msg_arr - msgs);
 }
+
 
 static bool check_adding_htlc_compitable(const struct msg_htlc_add* incoming, const struct htlc *purposed)
 {
@@ -447,59 +390,77 @@ static bool check_adding_htlc_compitable(const struct msg_htlc_add* incoming, co
 }
 
 /* update ref_htlc in tasks, and verify each one (also add and apply to staged cstate)*/
-static bool verify_commit_tasks(struct LNchannel *lnchn, 
-    const tal_t *ctx,
+static bool verify_commit_tasks(const tal_t *ctx, 
+    struct LNchannel *lnchn, 
     struct msg_htlc_entry *msgs,
     size_t n,
-    struct htlc_commit_tasks **tasks) {
+    struct htlc **tasks) {
 
-    const tal_t *tmpctx = tal_tmpctx(ctx);
-    struct htlc *h;
+    struct htlc *h, **task_h;
     struct msg_htlc_entry *t_beg, *t_end;
-    struct htlc_commit_tasks *task_h;
-    t_end = msgs + tal_count(tasks);
+    t_end = msgs + n;
 
-    *tasks = tal_arr(ctx, struct htlc_commit_tasks, n);
+    *tasks = tal_arr(ctx, struct htlc *, n);
     task_h = *tasks;
 
     for (t_beg = msgs; t_beg != t_end; ++t_beg, ++task_h) {
 
         h = htlc_get_any(&lnchn->htlcs, t_beg->rhash);
-        if (!h) { //fail! no corresponding htlc!
-            log_broken(lnchn->log, "receive non-exist htlc notify for hash %s",
-                tal_hexstr(tmpctx, &h->rhash, sizeof(h->rhash)));
-            tal_free(tmpctx);
-            return false;
-        }
 
         if (t_beg->action_type == 1) {//add
-            if (h->state != RCVD_ADD_HTLC || !check_adding_htlc_compitable(
-                &t_beg->action.add, h)) {
-                log_broken_struct(lnchn->log, "Not a pending or compatible htlc for adding: %s",
+            //conflict!
+            if (h && h->state != RCVD_ADD_HTLC){
+                log_broken_struct(lnchn->log, "Encounter conflicted htlc for adding: %s",
                     struct htlc, h);
-                tal_free(tmpctx);
                 return false;
             }
+            else if (!h) {
+                //check source
+                struct htlc *yah;
+                yah = lite_query_htlc_direct(lnchn->dstate->channels, t_beg->rhash, false);
+                if (yah && !check_adding_htlc_compitable(
+                    &t_beg->action.add, yah)) {
+                    log_broken_struct(lnchn->log, "Encounter conflicted source htlc for adding: %s",
+                        struct htlc, yah);
+                    lite_release_htlc(lnchn->dstate->channels, yah);
+                    return false;
+                }
 
-            h->msatoshi = t_beg->action.add.mstatoshi;
-            h->expiry = *t_beg->action.add.expiry;
+                //create new htlc!
+                h = internal_new_htlc(lnchn, t_beg->action.add.mstatoshi,
+                    t_beg->rhash, t_beg->action.add.expiry, yah ? 5 : 1 , RCVD_ADD_HTLC);
+
+                htlc_map_add(&lnchn->htlcs, h); 
+                lite_release_htlc(lnchn->dstate->channels, yah);
+            }
         }
         else {//removed
-
-            if (!htlc_is_fixed(h)) {
+            
+            if (!h) { //fail! no corresponding htlc!
+                log_broken(lnchn->log, "receive non-exist htlc notify for hash %s",
+                    tal_hexstr(ctx, &h->rhash, sizeof(h->rhash)));
+                return false;
+            }else if (!htlc_is_fixed(h)) {
                 log_broken_struct(lnchn->log, "Not a fixed htlc for removing: %s",
                     struct htlc, h);
-                tal_free(tmpctx);
                 return false;
             }
-            //nothing to do ...
+
+            if (t_beg->action.del.r && !h->r) {
+                //MUST verify preimage 
+
+                set_htlc_rval(lnchn, h, t_beg->action.del.r);
+            }
+
+            if (!h->r || !h->fail) {
+
+            }
+            
         }
 
-        task_h->ref_h = h;
-        task_h->gen_entry = t_beg;
+        *task_h = h;
     }
 
-    tal_free(tmpctx);
     return true;
 }
 
@@ -731,12 +692,12 @@ bool lnchn_do_commit(struct LNchannel *lnchn)
     db_start_transaction(lnchn);
 
    //we apply remove tasks, finally adding
-    applied_t = resolvehtlcs(lnchn, changed_states, rem_t);
+    applied_t = applyhtlcchanges(lnchn, changed_states, rem_t);
     //all remove task should be handled
     assert(applied_t == tal_count(rem_t));
 
    //we apply remove tasks first, then feechange, finally adding
-    applied_t = resolvehtlcs(lnchn, changed_states, add_t);
+    applied_t = applyhtlcchanges(lnchn, changed_states, add_t);
     //add task may not handled ...
     if (applied_t != tal_count(add_t)) {
         size_t clean_msg;
@@ -762,6 +723,22 @@ bool lnchn_do_commit(struct LNchannel *lnchn)
 
     return true;
 
+}
+
+void internal_htlc_fullfill(struct LNchannel *chn, const struct preimage *r, struct htlc *h)
+{
+    struct sha256 sha;
+	sha256(&sha, r, sizeof(*r));
+
+    if (!structeq(&sha, &h->rhash)) {
+        log_broken(chn->log,
+            "We receive unexpected preimage [%s] which should not resolve the hash %s",
+            tal_hexstr(chn, r, sizeof(*r)),
+            tal_hexstr(chn, &h->rhash, sizeof(h->rhash)));
+        return;
+    }
+
+    set_htlc_rval(chn, h, r);
 }
 
 bool lnchn_add_htlc(struct LNchannel *chn, u64 msatoshi,

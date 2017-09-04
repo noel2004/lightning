@@ -6,7 +6,6 @@ struct LNchannel_config;
 struct sha256;
 struct sha256_double;
 struct pubkey;
-struct abs_locktime;
 struct preimage;
 struct htlc;
 
@@ -23,7 +22,7 @@ void    lite_msg_anchor(struct LNmessage *msg, const struct pubkey *target,
 
 struct msg_htlc_add
 {
-    const struct abs_locktime *expiry;
+    unsigned int       expiry;
     unsigned long long mstatoshi;
 };
 

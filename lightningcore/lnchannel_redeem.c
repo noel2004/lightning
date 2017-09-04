@@ -983,10 +983,9 @@ void lnchn_notify_txo_delivered(struct LNchannel *chn, const struct txowatch *tx
     const struct bitcoin_tx *tx, const struct sha256_double *taskid, 
     const struct sha256 *rhash)
 {
-    struct sha256 sha;
     struct preimage preimage;
     size_t i, input_num;
-    enum fail_error e;
+
     /* only active htlc should receive watching notify, or we just log and omit it*/
     struct htlc *h = htlc_map_get(&chn->htlcs, rhash);
 
@@ -1036,15 +1035,8 @@ void lnchn_notify_txo_delivered(struct LNchannel *chn, const struct txowatch *tx
     if (memeqzero(tx->input[input_num].witness[1], sizeof(preimage)))return;
 
 	memcpy(&preimage, tx->input[input_num].witness[1], sizeof(preimage));
-	sha256(&sha, &preimage, sizeof(preimage));
 
-    if (!structeq(&sha, &h->rhash)) {
-        log_broken(chn->log,
-            "We receive unexpected preimage [%s] which should not resolve the hash %s",
-            tal_hexstr(chn, preimage.r, sizeof(preimage)),
-            tal_hexstr(chn, rhash, sizeof(*rhash)));
-        return;
-    }
+    if(!h->r)internal_htlc_fullfill(chn, &preimage, h);
 
     /* If channel is not active we should just omit (tx will be delivered later)*/
     if (!state_is_normal(chn->state))return;

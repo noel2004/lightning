@@ -7,6 +7,8 @@ struct htlc;
 struct pubkey;
 struct sha256;
 
+/*return 1 for exist invoice or 0 for not*/
+int     lite_check_invoice(struct Payments *payment, const struct sha256* rhash);
 
 void    lite_resolve_invoice(struct Payments *payment, const struct LNchannel *lnchn, 
     const struct htlc* invoice_htlc);
