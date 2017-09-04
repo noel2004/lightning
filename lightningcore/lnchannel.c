@@ -1193,16 +1193,16 @@ void reopen_LNChannel(struct LNchannel *lnchn)
 
         /* rebuild deadline and src_expiry*/
         if (htlc_route_has_source(h)) {
-            srchtlc = lite_query_htlc_direct(lnchn->dstate->channels, &h->rhash, false);
+            
+            srchtlc = lite_query_htlc_direct(lnchn->dstate->channels, &h->rhash, true);
             if (!srchtlc){
-                //TODO: should mark it as something special?
+                if (!srchtlc) {
+                    log_broken(lnchn->log, "can't get source of fixed htlc [%s]",
+                        tal_hexstr(h, &h->rhash, sizeof(h->rhash)));
+                }
                 continue;
             }
-
-            h->src_expiry = tal(h, struct abs_locktime);
-            *h->src_expiry = srchtlc->expiry;
-	        h->deadline = abs_locktime_to_blocks(h->src_expiry)
-				    - lnchn->dstate->config.deadline_blocks;
+            internal_htlc_update_deadline(lnchn, h, srchtlc);
 
             lite_release_htlc(lnchn->dstate->channels, srchtlc);
         }
@@ -1217,22 +1217,14 @@ void reopen_LNChannel(struct LNchannel *lnchn)
 
 }
 
-void internal_htlc_update_deadline(struct LNchannel *lnchn, struct htlc *h)
+void internal_htlc_update_deadline(struct LNchannel *lnchn, struct htlc *h, 
+    const struct htlc *srch)
 {
-    struct htlc * srchtlc = lite_query_htlc_direct(lnchn->dstate->channels, 
-        &h->rhash, false);
-    if (!srchtlc) {
-        log_broken(lnchn->log, "can't get source of htlc [%s]",
-            tal_hexstr(h, &h->rhash, sizeof(h->rhash)));
-        return;
-    }
-
     h->src_expiry = tal(h, struct abs_locktime);
-    *h->src_expiry = srchtlc->expiry;
+    *h->src_expiry = srch->expiry;
     h->deadline = abs_locktime_to_blocks(h->src_expiry)
         - lnchn->dstate->config.deadline_blocks;
 
-    lite_release_htlc(lnchn->dstate->channels, srchtlc);
 }
 
 

@@ -723,8 +723,10 @@ static struct sha256 *get_rhash(struct LNchannel *lnchn, u64 commit_num,
     }
 
     /* Last tx, but we haven't got revoke for it yet? */
-    assert(commit_num == lnchn->remote.commit->commit_num - 1);
-    *rhash = *lnchn->their_prev_revocation_hash;
+    assert(lnchn->rt.their_last_commit && 
+        commit_num == lnchn->rt.their_last_commit->commit_num - 1);
+    if (lnchn->rt.their_last_commit)
+        *rhash = lnchn->rt.their_last_commit->revocation_hash;
     return NULL;
 }
 
@@ -821,6 +823,7 @@ static void handle_close_tx_delivered(struct LNchannel *lnchn, const struct bitc
     }
     else if (find_their_old_tx(lnchn, &lnchn->onchain.txid,
         &commit_num)) {
+        //TODO: need to rebuild htlcs with htlcs in history
         struct sha256 *preimage, rhash;
 
         preimage = get_rhash(lnchn, commit_num, &rhash);
@@ -911,6 +914,7 @@ static void handle_htlc_tx_finished(struct LNchannel *lnchn, const struct bitcoi
                 lite_release_comm(lnchn->dstate->channels, comm);
             }            
         }
+
         //(for their htlc, redeem is just redeem)
         //simply resolve one
         lnchn->onchain.resolved[tx->input[input_num].index] = tx;

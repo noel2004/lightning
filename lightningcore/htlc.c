@@ -49,7 +49,7 @@ enum htlc_state htlc_state_from_name(const char *name)
 
 /* This is the flags for each state. */
 static const int per_state_bits[] = {
-    [PLAN_ADD_HTLC] = HTLC_ADDING + HTLC_LOCAL_F_OWNER
+    [PLAN_ADD_HTLC] = HTLC_LOCAL_F_OWNER
     + HTLC_LOCAL_F_PENDING,
 
     [SENT_ADD_COMMIT] = HTLC_ADDING + HTLC_LOCAL_F_OWNER

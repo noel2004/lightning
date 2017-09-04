@@ -141,7 +141,7 @@ static void set_htlc_rval(struct LNchannel *lnchn,
     assert(!htlc->r);
     assert(!htlc->fail);
     htlc->r = tal_dup(htlc, struct preimage, rval);
-    db_htlc_fulfilled(lnchn, htlc);
+//    db_htlc_fulfilled(lnchn, htlc);
 }
 
 static void set_htlc_fail(struct LNchannel *lnchn,
@@ -150,7 +150,37 @@ static void set_htlc_fail(struct LNchannel *lnchn,
     assert(!htlc->r);
     assert(!htlc->fail);
     htlc->fail = tal_dup_arr(htlc, u8, fail, len, 0);
-    db_htlc_failed(lnchn, htlc);
+//    db_htlc_failed(lnchn, htlc);
+}
+
+/*
+    scan the tasks list again and persist data into htlcs
+*/
+static void db_update_htlcs(struct LNchannel *lnchn, 
+    struct htlc_commit_tasks *tasks) {
+
+    struct htlc *h;
+    size_t i, cnt;
+    cnt = tal_count(tasks);
+
+    for (i = 0; i < cnt; ++i) {
+
+        h = tasks[i].ref_h;
+
+        if (tasks[i].gen_entry->action_type == 0) {
+            if (h->r) {
+                db_htlc_fulfilled(lnchn, h);
+            }
+            else if (h->fail) {//only apply when htlc is not failed explictily
+                db_htlc_failed(lnchn, h);
+            }
+        }
+        else {
+            db_new_htlc(lnchn, h);
+        }
+
+        db_update_htlc_state(lnchn, h);
+    }
 }
 
 /* 
@@ -195,8 +225,6 @@ static size_t resolvehtlcs(struct LNchannel *lnchn,
             //nothing to do for adding task
             //db_new_htlc(lnchn, h);
         }
-
-		db_update_htlc_state(lnchn, h, old_state);
     }
 
     return cnt;
@@ -225,6 +253,92 @@ static void applyfeechange(struct LNchannel *lnchn, enum side side) {
 
         db_new_feechange(lnchn, &f);
         return true;
+    }
+
+}
+
+/*
+   final clean htlcs which can be removed (expired pending LOCAL or dead one)
+*/
+static void clean_htlcs(const tal_t *ctx, struct LNchannel *lnchn) {
+
+    struct htlc_map_iter it;
+    struct htlc *h;
+    struct htlc **hi, **remh, **rem;
+    remh = tal_arrz(ctx, struct htlc*, htlc_map_count(&lnchn->htlcs));
+    rem = remh;
+
+    for (h = htlc_map_first(&lnchn->htlcs, &it);
+        h;
+        h = htlc_map_next(&lnchn->htlcs, &it)) {
+
+        if (htlc_has(h, HTLC_LOCAL_F_PENDING) && !h->src_expiry) {
+            //TIP should not be cleaned
+            if (htlc_route_is_tip(h))continue;
+            //TODO: check expired
+        }
+        //REMOTE dead can not be removed
+        else if (h->state == RCVD_REMOVE_COMMIT ||
+            h->state == RCVD_DOWNSTREAM_DEAD) {
+            *(rem++) = h;
+        }
+    }
+
+    for (hi = remh; hi != rem; ++hi) {
+        htlc_map_del(&lnchn->htlcs, hi);
+    }
+}
+
+/*
+   scan and update channel's htlc status
+*/
+static void update_htlcs(struct LNchannel *lnchn, bool *changed)
+{
+    struct htlc_map_iter it;
+    struct htlc *h;
+    const struct htlc *yah;
+
+    for (h = htlc_map_first(&lnchn->htlcs, &it);
+        h;
+        h = htlc_map_next(&lnchn->htlcs, &it)) {
+
+        yah = NULL;
+        //scanning all fixed htlcs and try to resolve them ...
+        if (htlc_has(h, HTLC_LOCAL_F_PENDING) && 
+            !h->src_expiry &&
+            !htlc_route_is_tip(h) && 
+            (yah = lite_query_htlc_direct(lnchn->dstate->channels,
+                &h->rhash, true))) {
+
+            internal_htlc_update_deadline(lnchn, h, yah);
+            *changed = true;            
+        }        
+        //for fixed task, check if it can be resolved
+        else if (htlc_is_fixed(h) && !h->r && !h->fail &&
+            (yah = lite_query_htlc_direct(lnchn->dstate->channels,
+                &h->rhash, false)) &&
+            htlc_is_dead(yah)) {
+
+
+            if (yah->r) {
+                set_htlc_rval(lnchn, h, yah->r);
+            }
+            else {
+                assert(yah->fail);
+                set_htlc_fail(lnchn, h, yah->fail, tal_count(yah->fail));
+            }
+
+            *changed = true;
+        }
+        /*finally the dead REMOT htlc can be removed only if it have no source anymore*/
+        else if (h->state == RCVD_REMOVE_ACK_COMMIT &&
+            !(yah = lite_query_htlc_direct(lnchn->dstate->channels,
+                &h->rhash, false))) {
+            htlc_changestate(h, h->state, RCVD_DOWNSTREAM_DEAD);
+            *changed = true;
+        }
+
+        if(yah)lite_release_htlc(lnchn->dstate->channels, yah);
     }
 
 }

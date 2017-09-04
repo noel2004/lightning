@@ -31,8 +31,7 @@ void db_new_feechange(struct LNchannel *lnchn, const struct feechange *feechange
 void db_update_feechange(struct LNchannel *lnchn, const struct feechange *oldf, u64 feerate);
 void db_htlc_fulfilled(struct LNchannel *lnchn, const struct htlc *htlc);
 void db_htlc_failed(struct LNchannel *lnchn, const struct htlc *htlc);
-void db_update_htlc_state(struct LNchannel *lnchn, const struct htlc *htlc,
-				 enum htlc_state oldstate);
+void db_update_htlc_state(struct LNchannel *lnchn, const struct htlc *htlc);
 //void db_update_feechange_state(struct LNchannel *lnchn,
 //			       const struct feechange *f,
 //			       enum feechange_state oldstate);

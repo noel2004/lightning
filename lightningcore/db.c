@@ -1481,14 +1481,13 @@ void db_new_feechange(struct LNchannel *lnchn, const struct feechange *feechange
 	tal_free(ctx);
 }
 
-void db_update_htlc_state(struct LNchannel *lnchn, const struct htlc *htlc,
-			  enum htlc_state oldstate)
+void db_update_htlc_state(struct LNchannel *lnchn, const struct htlc *htlc)
 {
 	const char *ctx = tal_tmpctx(lnchn);
 	const char *lnchnid = pubkey_to_hexstr(ctx, lnchn->id);
 
-	log_debug(lnchn->log, "%s(%s): %s %s->%s", __func__, lnchnid,
-          tal_hexstr(ctx, &htlc->rhash, sizeof(htlc->rhash)), htlc_state_name(oldstate),
+	log_debug(lnchn->log, "%s(%s): %s state update to %s", __func__, lnchnid,
+          tal_hexstr(ctx, &htlc->rhash, sizeof(htlc->rhash)),
 		  htlc_state_name(htlc->state));
 	assert(lnchn->dstate->db->in_transaction);
 	db_exec(__func__, lnchn->dstate,
