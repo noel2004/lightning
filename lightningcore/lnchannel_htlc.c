@@ -42,6 +42,55 @@ bool lnchn_add_htlc(struct LNchannel *chn, u64 msatoshi,
     return false;
 }
 
+static void do_htlc_update(struct LNchannel *lnchn, 
+    struct htlc *h, struct htlc *yah) {
+
+    assert(htlc_route_is_chain(h));
+
+    if (htlc_is_fixed(h) && htlc_is_dead(yah)) {
+        if (yah->r) {
+            internal_htlc_fullfill(lnchn, yah->r, h);
+        }
+        else{
+            assert(yah->fail);
+            internal_htlc_fail(lnchn, yah->fail, tal_count(yah->fail), h);
+        }
+
+    }
+    //htlc which is not added
+    else if (!h->src_expiry) {
+        h->src_expiry = tal(h, struct abs_locktime);
+        *h->src_expiry = yah->expiry;
+        h->deadline = abs_locktime_to_blocks(h->src_expiry)
+            - lnchn->dstate->config.deadline_blocks;
+    }
+    else {
+        log_broken_struct(lnchn->log, "htlc [%s] is not need to update",
+            struct htlc, h);
+    }
+
+}
+
+void internal_htlc_update(struct LNchannel *lnchn, struct htlc *h) {
+
+    struct htlc *yah = lite_query_htlc_direct(lnchn->dstate->channels,
+        &h->rhash, htlc_route_has_source(h));
+
+    if (!yah) {
+        if (h->state == RCVD_REMOVE_ACK_COMMIT) {
+             htlc_changestate(h, h->state, RCVD_DOWNSTREAM_DEAD);
+        }
+        else {
+            log_broken_struct(lnchn->log, "htlc [%s] has no corresponding source",
+                struct htlc, h);
+        }
+        return;
+    }
+
+    do_htlc_update(lnchn, h, yah);
+
+}
+
 bool lnchn_update_htlc(struct LNchannel *lnchn, const struct sha256 *rhash) {
     struct htlc *h, *yah;
     const tal_t *tmpctx = tal_tmpctx(lnchn);
@@ -54,36 +103,14 @@ bool lnchn_update_htlc(struct LNchannel *lnchn, const struct sha256 *rhash) {
         tal_free(tmpctx);
         return false;
     }
-
-    yah = lite_query_htlc_direct(lnchn->dstate->channels,
-        &h->rhash, htlc_route_has_source(h));
-
-    if (htlc_is_fixed(h)) {
-        if (!yah) {
-            log_broken_struct(lnchn->log, "htlc [%s] has no corresponding source",
-                struct htlc, h);
-            tal_free(tmpctx);
-            return false;
-        }
-
-        if (yah->r) {
-            internal_htlc_fullfill(lnchn, yah->r, h);
-        }
-        else if (yah->fail) {
-            internal_htlc_fail(lnchn, yah->fail, tal_count(yah->fail), h);
-        }
-        else {
-            log_broken(lnchn->log, "try not update htlc with unexist hash %s",
-                tal_hexstr(tmpctx, rhash, sizeof(*rhash)));
-            tal_free(tmpctx);
-        }
-    }
-    //htlc which is not added
-    else if (htlc_route_has_downstream(h) && !h->src_expiry) {
-        internal_htlc_update_deadline(lnchn, h, yah);
+    else if (!htlc_route_is_chain(h)) {
+        log_broken_struct(lnchn->log, "htlc %s is not in chain",
+            struct htlc, h);
+        tal_free(tmpctx);
+        return false;
     }
 
-    lite_release_htlc(lnchn->dstate->channels, yah);
+    internal_htlc_update(lnchn, h);
     tal_free(tmpctx);
     return true;
 }

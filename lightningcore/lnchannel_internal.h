@@ -222,7 +222,7 @@ struct htlc *internal_new_htlc(struct LNchannel *chn,
 			   u32 expiry, u32 routing, /* 0 if no source*/
 			   enum htlc_state state);
 
-void internal_htlc_update_deadline(struct LNchannel *lnchn, struct htlc *h, const struct htlc *srch);
+void internal_htlc_update(struct LNchannel *lnchn, struct htlc *h);
 
 void internal_htlc_fullfill(struct LNchannel *chn, const struct preimage *r, struct htlc *h);
 

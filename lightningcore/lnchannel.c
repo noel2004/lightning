@@ -1185,47 +1185,18 @@ void reopen_LNChannel(struct LNchannel *lnchn)
         return;
     }
 
+    //update htlc's state
     for (h = htlc_map_first(&lnchn->htlcs, &it);
         h;
         h = htlc_map_next(&lnchn->htlcs, &it)) {
 
-        if (!htlc_is_fixed(h))continue;
+        if (!htlc_route_is_chain(h))continue;
 
-        /* rebuild deadline and src_expiry*/
-        if (htlc_route_has_source(h)) {
-            
-            srchtlc = lite_query_htlc_direct(lnchn->dstate->channels, &h->rhash, true);
-            if (!srchtlc){
-                if (!srchtlc) {
-                    log_broken(lnchn->log, "can't get source of fixed htlc [%s]",
-                        tal_hexstr(h, &h->rhash, sizeof(h->rhash)));
-                }
-                continue;
-            }
-            internal_htlc_update_deadline(lnchn, h, srchtlc);
-
-            lite_release_htlc(lnchn->dstate->channels, srchtlc);
-        }
-        else if (htlc_route_is_end(h)) {
-
-            if (!h->r) {
-                //TODO: notify invoice again
-            }            
-        }
+        internal_htlc_update(lnchn, h);
 
     }
-
 }
 
-void internal_htlc_update_deadline(struct LNchannel *lnchn, struct htlc *h, 
-    const struct htlc *srch)
-{
-    h->src_expiry = tal(h, struct abs_locktime);
-    *h->src_expiry = srch->expiry;
-    h->deadline = abs_locktime_to_blocks(h->src_expiry)
-        - lnchn->dstate->config.deadline_blocks;
-
-}
 
 
 //
