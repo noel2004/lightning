@@ -53,7 +53,10 @@ const struct htlc *lite_query_htlc(const struct LNchannelQuery *q, const struct 
 /*
     Actions
 */
+/* invoke a call of lnchn_do_commit on target channel */
 void lite_notify_chn_commit(struct LNchannelComm* c);
+/* invoke a call of lnchn_update_htlc on target channel */
+void lite_notify_chn_htlc_update(struct LNchannelComm* c, const struct sha256* hash);
 
 
 #endif

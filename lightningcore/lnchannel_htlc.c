@@ -5,7 +5,6 @@
 #include "permute_tx.h"
 #include "close_tx.h"
 #include "commit_tx.h"
-#include "find_p2sh_out.h"
 #include "output_to_htlc.h"
 #include "pseudorand.h"
 #include "remove_dust.h"
@@ -41,6 +40,52 @@ bool lnchn_add_htlc(struct LNchannel *chn, u64 msatoshi,
     enum fail_error *error_code)
 {
     return false;
+}
+
+bool lnchn_update_htlc(struct LNchannel *lnchn, const struct sha256 *rhash) {
+    struct htlc *h, *yah;
+    const tal_t *tmpctx = tal_tmpctx(lnchn);
+
+    h = htlc_map_get(&lnchn->htlcs, rhash);
+
+    if (!h) {
+        log_broken(lnchn->log, "try not update htlc with unexist hash %s",
+            tal_hexstr(tmpctx, rhash, sizeof(*rhash)));
+        tal_free(tmpctx);
+        return false;
+    }
+
+    yah = lite_query_htlc_direct(lnchn->dstate->channels,
+        &h->rhash, htlc_route_has_source(h));
+
+    if (htlc_is_fixed(h)) {
+        if (!yah) {
+            log_broken_struct(lnchn->log, "htlc [%s] has no corresponding source",
+                struct htlc, h);
+            tal_free(tmpctx);
+            return false;
+        }
+
+        if (yah->r) {
+            internal_htlc_fullfill(lnchn, yah->r, h);
+        }
+        else if (yah->fail) {
+            internal_htlc_fail(lnchn, yah->fail, tal_count(yah->fail), h);
+        }
+        else {
+            log_broken(lnchn->log, "try not update htlc with unexist hash %s",
+                tal_hexstr(tmpctx, rhash, sizeof(*rhash)));
+            tal_free(tmpctx);
+        }
+    }
+    //htlc which is not added
+    else if (htlc_route_has_downstream(h) && !h->src_expiry) {
+        internal_htlc_update_deadline(lnchn, h, yah);
+    }
+
+    lite_release_htlc(lnchn->dstate->channels, yah);
+    tal_free(tmpctx);
+    return true;
 }
 
 static void set_htlc_rval(struct LNchannel *lnchn,

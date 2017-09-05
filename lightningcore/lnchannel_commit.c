@@ -306,7 +306,6 @@ static void update_htlcs(const tal_t *ctx,
                 &h->rhash, false)) &&
             htlc_is_dead(yah)) {
 
-
             if (yah->r) {
                 set_htlc_rval(lnchn, h, yah->r);
             }
@@ -447,15 +446,15 @@ static bool verify_commit_tasks(const tal_t *ctx,
             }
 
             if (t_beg->action.del.r && !h->r) {
-                //MUST verify preimage 
-
-                set_htlc_rval(lnchn, h, t_beg->action.del.r);
+                internal_htlc_fullfill(lnchn, t_beg->action.del.r, h);
+            }
+            else {
+                //verify we can fail the htlc
             }
 
             if (!h->r || !h->fail) {
-
-            }
-            
+                return false;
+            }            
         }
 
         *task_h = h;
@@ -723,6 +722,11 @@ bool lnchn_do_commit(struct LNchannel *lnchn)
 
     return true;
 
+}
+
+void internal_htlc_fail(struct LNchannel *chn, u8 *fail, size_t len, struct htlc *h)
+{
+    set_htlc_fail(chn, h, fail, len);
 }
 
 void internal_htlc_fullfill(struct LNchannel *chn, const struct preimage *r, struct htlc *h)

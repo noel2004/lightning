@@ -1038,10 +1038,11 @@ void lnchn_notify_txo_delivered(struct LNchannel *chn, const struct txowatch *tx
 
     if(!h->r)internal_htlc_fullfill(chn, &preimage, h);
 
-    /* If channel is not active we should just omit (tx will be delivered later)*/
-    if (!state_is_normal(chn->state))return;
+}
 
-    /* OK, our htlc is resolved (fullfil)*/
-    lnchn_resolve_htlc(chn, &h->rhash, &preimage, &e);
 
+bool lnchn_check_closed(struct LNchannel *chn) {
+    //TODO: check all the onchain.resolved is filled
+    //TODO: check all involved htlc is in "can remove" status
+    //(downloadstream must dead first if it was in htlc chain)
 }

@@ -209,7 +209,7 @@ struct LNchannel {
 	/* High water mark for the staggered broadcast */
 	u64 broadcast_index;
 };
-
+address cryptography
 //many internal api and helpers ...
 
 /* Allocate a new commit_info struct. */
@@ -226,6 +226,7 @@ void internal_htlc_update_deadline(struct LNchannel *lnchn, struct htlc *h, cons
 
 void internal_htlc_fullfill(struct LNchannel *chn, const struct preimage *r, struct htlc *h);
 
+void internal_htlc_fail(struct LNchannel *chn, u8 *fail, size_t len, struct htlc *h);
 
 void internal_lnchn_breakdown(struct LNchannel *lnchn);
 

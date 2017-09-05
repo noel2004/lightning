@@ -40,10 +40,13 @@ bool lnchn_add_htlc(struct LNchannel *chn, u64 msatoshi,
     const u8 route,
     enum fail_error *error_code);
 
+bool lnchn_update_htlc(struct LNchannel *lnchn, const struct sha256 *rhash);
+
 bool lnchn_do_commit(struct LNchannel *chn);
 
 bool lnchn_resolve_htlc(struct LNchannel *lnchn, const struct sha256 *rhash, 
     const struct preimage *r, enum fail_error *error_code);
+
 
 
 //if state is less than first commit, this is safe to redeem anchord txid
