@@ -58,7 +58,7 @@ static void do_htlc_update(struct LNchannel *lnchn,
 
     }
     //htlc which is not added
-    else if (!h->src_expiry) {
+    else if (htlc_is_fixed(yah) && !h->src_expiry) {
         h->src_expiry = tal(h, struct abs_locktime);
         *h->src_expiry = yah->expiry;
         h->deadline = abs_locktime_to_blocks(h->src_expiry)
@@ -89,6 +89,19 @@ void internal_htlc_update(struct LNchannel *lnchn, struct htlc *h) {
 
     do_htlc_update(lnchn, h, yah);
 
+}
+
+void internal_htlc_update_chain(struct LNchannel *lnchn, struct htlc *h) {
+    struct LNchannelComm* chainedchn;
+    if (!htlc_route_is_chain(h))return;
+
+    chainedchn = lite_comm_channel_from_htlc(lnchn->dstate->channels,
+        &h->rhash, htlc_route_has_source(h));
+
+    if (chainedchn) {
+        lite_notify_chn_htlc_update(chainedchn, &h->rhash);
+        lite_release_comm(lnchn->dstate->channels, chainedchn);
+    }
 }
 
 bool lnchn_update_htlc(struct LNchannel *lnchn, const struct sha256 *rhash) {

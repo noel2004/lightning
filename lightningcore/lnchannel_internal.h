@@ -224,6 +224,8 @@ struct htlc *internal_new_htlc(struct LNchannel *chn,
 
 void internal_htlc_update(struct LNchannel *lnchn, struct htlc *h);
 
+void internal_htlc_update_chain(struct LNchannel *lnchn, struct htlc *h);
+
 void internal_htlc_fullfill(struct LNchannel *chn, const struct preimage *r, struct htlc *h);
 
 void internal_htlc_fail(struct LNchannel *chn, u8 *fail, size_t len, struct htlc *h);

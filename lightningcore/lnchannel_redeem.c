@@ -1036,7 +1036,10 @@ void lnchn_notify_txo_delivered(struct LNchannel *chn, const struct txowatch *tx
 
 	memcpy(&preimage, tx->input[input_num].witness[1], sizeof(preimage));
 
-    if(!h->r)internal_htlc_fullfill(chn, &preimage, h);
+    if (!h->r) {
+        internal_htlc_fullfill(chn, &preimage, h);
+        internal_htlc_update_chain(chn, h);
+    }
 
 }
 

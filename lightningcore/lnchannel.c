@@ -1178,7 +1178,8 @@ void reopen_LNChannel(struct LNchannel *lnchn)
         NULL,
         lnchn->anchor.witnessscript,
         &lnchn->remote.commitkey,
-        lnchn->remote.commit->sig)) {
+        lnchn->remote.commit->sig))
+    {
 
         log_broken(lnchn->log, "reopen check signature fail");
         lnchn_fail(lnchn, __func__);

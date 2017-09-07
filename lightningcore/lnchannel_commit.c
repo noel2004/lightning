@@ -157,11 +157,14 @@ static void db_update_htlcs(struct LNchannel *lnchn,
     size_t i, cnt;
     cnt = tal_count(htlcs);
 
+    //first we update channel state to manager as final state
+    //lite_update_channel(lnchn->dstate->channels, lnchn);
+
     for (i = 0; i < cnt; ++i) {
 
         h = htlcs[i];
 
-        if (tasks[i].gen_entry->action_type == 0) {
+        if (!htlc_has(h, HTLC_LOCAL_F_COMMITTED)) {
             if (h->r) {
                 db_htlc_fulfilled(lnchn, h);
             }
@@ -174,6 +177,9 @@ static void db_update_htlcs(struct LNchannel *lnchn,
         }
 
         db_update_htlc_state(lnchn, h);
+
+        //here we can notify htlc updating
+        internal_htlc_update_chain(lnchn, h);        
     }
 }
 
@@ -183,7 +189,7 @@ static void db_update_htlcs(struct LNchannel *lnchn,
 */
 static size_t applyhtlcchanges(struct LNchannel *lnchn, 
     enum htlc_state new_states[2], /*0: del, 1: add*/
-    struct htlc_commit_tasks *tasks) {
+    struct htlc **tasks) {
 
     struct htlc *h;
     size_t i, j, cnt;
@@ -192,8 +198,8 @@ static size_t applyhtlcchanges(struct LNchannel *lnchn,
 
     for (i = 0; i < cnt; ++i) {
 
-        h = tasks[i].ref_h;
-        new_state = new_states[tasks[i].gen_entry->action_type];
+        h = tasks[i];
+        new_state = new_states[htlc_is_fixed(h) ? 0 : 1];
 
         if (!adjust_cstates(lnchn, h, h->state, new_state)) {
             //simply return at broken tasks! so following tasks
@@ -334,26 +340,36 @@ static void update_htlcs(const tal_t *ctx,
 }
 
 static void fill_htlc_entry(struct msg_htlc_entry *m, 
-    const struct htlc *h, bool isadd) {
+    struct htlc **hbeg, size_t n, bool isadd) {
 
-    m->rhash = &h->rhash;
+    size_t i;
+    struct htlc *h;
 
-    if (isadd) {
-        m->action_type = 1;
-        m->action.add.expiry = abs_locktime_to_blocks(&h->expiry);
-        m->action.add.mstatoshi = h->msatoshi;
-    }
-    else {
-        m->action_type = 0;
-        if (h->r) {
-            m->action.del.r = h->r;
+    for (i = 0; i < n; ++m, ++hbeg) {
+
+        h = *hbeg;
+
+        m->rhash = &h->rhash;
+
+        if (isadd) {
+            m->action_type = 1;
+            m->action.add.expiry = abs_locktime_to_blocks(&h->expiry);
+            m->action.add.mstatoshi = h->msatoshi;
         }
         else {
-            assert(h->fail);
-            m->action.del.fail = h->fail;
-            m->action.del.failflag = htlc_route_is_end(h) ? 1 : 0;
+            m->action_type = 0;
+            if (h->r) {
+                m->action.del.r = h->r;
+            }
+            else {
+                assert(h->fail);
+                m->action.del.fail = h->fail;
+                m->action.del.failflag = htlc_route_is_end(h) ? 1 : 0;
+            }
         }
     }
+
+
 }
 
 static void scanhtlcs_and_genentries(const tal_t *ctx, 
@@ -372,9 +388,9 @@ static void scanhtlcs_and_genentries(const tal_t *ctx,
         h = htlc_map_next(&lnchn->htlcs, &it)) {
 
         if (h->state == filter_states[0]) {
-            fill_htlc_entry(*(msg_arr++), h, false);
+            fill_htlc_entry(*(msg_arr++), &h, 1, false);
         }else if(h->state == filter_states[1]){
-            fill_htlc_entry(*(msg_arr++), h, true);
+            fill_htlc_entry(*(msg_arr++), &h, 1, true);
         }
     }
 
@@ -417,15 +433,15 @@ static bool verify_commit_tasks(const tal_t *ctx,
                 //check source
                 struct htlc *yah;
                 yah = lite_query_htlc_direct(lnchn->dstate->channels, t_beg->rhash, false);
-                if (yah && !check_adding_htlc_compitable(
-                    &t_beg->action.add, yah)) {
+                if (yah && (!htlc_route_has_source(yah) ||
+                     !check_adding_htlc_compitable(&t_beg->action.add, yah))) {
                     log_broken_struct(lnchn->log, "Encounter conflicted source htlc for adding: %s",
                         struct htlc, yah);
                     lite_release_htlc(lnchn->dstate->channels, yah);
                     return false;
                 }
 
-                //create new htlc!
+                //create new htlc, decide routing according to !
                 h = internal_new_htlc(lnchn, t_beg->action.add.mstatoshi,
                     t_beg->rhash, t_beg->action.add.expiry, yah ? 5 : 1 , RCVD_ADD_HTLC);
 
@@ -448,10 +464,11 @@ static bool verify_commit_tasks(const tal_t *ctx,
             if (t_beg->action.del.r && !h->r) {
                 internal_htlc_fullfill(lnchn, t_beg->action.del.r, h);
             }
-            else {
+            else if(t_beg->action.del.fail){
                 //verify we can fail the htlc
             }
 
+            //do not accept remove ...
             if (!h->r || !h->fail) {
                 return false;
             }            
