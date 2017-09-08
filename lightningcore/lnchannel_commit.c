@@ -157,9 +157,6 @@ static void db_update_htlcs(struct LNchannel *lnchn,
     size_t i, cnt;
     cnt = tal_count(htlcs);
 
-    //first we update channel state to manager as final state
-    //lite_update_channel(lnchn->dstate->channels, lnchn);
-
     for (i = 0; i < cnt; ++i) {
 
         h = htlcs[i];
@@ -275,20 +272,20 @@ static void clean_htlcs(const tal_t *ctx, struct LNchannel *lnchn) {
 /*
    scan and update channel's htlc status
 */
-static void update_htlcs(const tal_t *ctx, 
-    struct LNchannel *lnchn, bool *changed,
+static void scanhtlcs_forchange(const tal_t *ctx, 
+    struct LNchannel *lnchn, struct htlc **other,
     struct htlc **add,
     struct htlc **rem)
 {
     struct htlc_map_iter it;
-    struct htlc *h, **add_h, **rem_h;
+    struct htlc *h, **add_h, **rem_h, **other_h;
     const struct htlc *yah;
-    if(add)
-        *add = tal_arr(ctx, struct htlc *, htlc_map_count(&lnchn->htlcs));
-    if(rem)
-        *rem = tal_arr(ctx, struct htlc *, htlc_map_count(&lnchn->htlcs));
+    *add = tal_arr(ctx, struct htlc *, htlc_map_count(&lnchn->htlcs));
+    *rem = tal_arr(ctx, struct htlc *, htlc_map_count(&lnchn->htlcs));
+    *other = tal_arr(ctx, struct htlc *, htlc_map_count(&lnchn->htlcs));
     add_h = add;
     rem_h = rem;
+    other_h = other;
 
     for (h = htlc_map_first(&lnchn->htlcs, &it);
         h;
@@ -304,7 +301,6 @@ static void update_htlcs(const tal_t *ctx,
 
             internal_htlc_update_deadline(lnchn, h, yah);
             *(add_h++) = h;
-            *changed = true;
         }        
         //for fixed task, check if it can be resolved
         else if (htlc_is_fixed(h) && !h->r && !h->fail &&
@@ -321,21 +317,21 @@ static void update_htlcs(const tal_t *ctx,
             }
 
             *(rem_h++) = h;
-            *changed = true;
         }
         /*finally the dead REMOT htlc can be removed only if it have no source anymore*/
         else if (h->state == RCVD_REMOVE_ACK_COMMIT &&
             !(yah = lite_query_htlc_direct(lnchn->dstate->channels,
                 &h->rhash, false))) {
             htlc_changestate(h, h->state, RCVD_DOWNSTREAM_DEAD);
-            *changed = true;
+            *(other_h) = other;
         }
 
         if(yah)lite_release_htlc(lnchn->dstate->channels, yah);
     }
 
-    if(add)tal_resize(add, add_h - add);
-    if(rem)tal_resize(rem, rem_h - rem);
+    tal_resize(add, add_h - add);
+    tal_resize(rem, rem_h - rem);
+    tal_resize(other, other_h - other);
 
 }
 
@@ -461,17 +457,30 @@ static bool verify_commit_tasks(const tal_t *ctx,
                 return false;
             }
 
-            if (t_beg->action.del.r && !h->r) {
+            if (t_beg->action.del.r ) {
                 internal_htlc_fullfill(lnchn, t_beg->action.del.r, h);
             }
-            else if(t_beg->action.del.fail){
+            else{
+                assert(t_beg->action.del.fail);
                 //verify we can fail the htlc
-            }
+                if (htlc_owner(h) == LOCAL || /*remote can always fail our htlc*/                
+                                              /*for remote, must check */
+                (get_block_height(lnchn->dstate->topology) > h->deadline)){
 
-            //do not accept remove ...
-            if (!h->r || !h->fail) {
-                return false;
-            }            
+                    internal_htlc_fail(lnchn, t_beg->action.del.fail,
+                        tal_count(t_beg->action.del.fail), h);
+
+                    lite_invoice_fail(lnchn->dstate->payment, &h->rhash,
+                        t_beg->action.del.failflag == 0 || htlc_owner(h) == REMOTE ? 
+                        INVOICE_CHAIN_FAIL :
+                        INVOICE_CHAIN_FAIL_TEMP);
+                }
+                else {
+                    log_broken_struct(lnchn->log, "htlc %s is required to closed but we cannot",
+                        struct htlc, h);
+                    return false;
+                }
+            }         
         }
 
         *task_h = h;
@@ -480,86 +489,18 @@ static bool verify_commit_tasks(const tal_t *ctx,
     return true;
 }
 
-static void check_both_committed(struct LNchannel *lnchn, struct htlc *h)
-{
-	if (!htlc_has(h, HTLC_ADDING) && !htlc_has(h, HTLC_REMOVING))
-		log_debug(lnchn->log,
-			  "Both committed to %s of %s HTLC %"PRIu64 "(%s)",
-			  h->state == SENT_ADD_ACK_REVOCATION
-			  || h->state == RCVD_ADD_ACK_REVOCATION ? "ADD"
-			  : h->r ? "FULFILL" : "FAIL",
-			  htlc_owner(h) == LOCAL ? "our" : "their",
-			  h->id, htlc_state_name(h->state));
-
-	switch (h->state) {
-	case RCVD_REMOVE_ACK_REVOCATION:
-		/* If it was fulfilled, we handled it immediately. */
-		if (h->fail)
-			our_htlc_failed(lnchn, h);
-		break;
-	case RCVD_ADD_ACK_REVOCATION:
-		//their_htlc_added(lnchn, h, NULL);
-		resolve_invoice(lnchn->dstate, invoice);
-		set_htlc_rval(lnchn, htlc, &invoice->r);
-		command_htlc_fulfill(lnchn, htlc);
-		break;
-	default:
-		break;
-	}
-}
-
-static bool lnchn_uncommitted_changes(const struct LNchannel *lnchn)
-{
-    struct htlc_map_iter it;
-    struct htlc *h;
-    enum feechange_state i;
-
-    for (h = htlc_map_first(&lnchn->htlcs, &it);
-        h;
-        h = htlc_map_next(&lnchn->htlcs, &it)) {
-        if (htlc_has(h, HTLC_REMOTE_F_PENDING))
-            return true;
-    }
-    /* Pending feechange we sent, or pending ack of theirs. */
-    for (i = 0; i < ARRAY_SIZE(lnchn->feechanges); i++) {
-        if (!lnchn->feechanges[i])
-            continue;
-        if (feechange_state_flags(i) & HTLC_REMOTE_F_PENDING)
-            return true;
-    }
-    return false;
-}
-
-
-
-static bool command_htlc_fulfill(struct LNchannel *lnchn, struct htlc *htlc)
-{
-	if (lnchn->state == STATE_CLOSE_ONCHAIN_THEIR_UNILATERAL
-	    || lnchn->state == STATE_CLOSE_ONCHAIN_OUR_UNILATERAL) {
-		return fulfill_onchain(lnchn, htlc);
-	}
-
-	if (!state_can_remove_htlc(lnchn->state))
-		return false;
-
-	/* FIXME-OLD #2:
-	 *
-	 * The sending node MUST add the HTLC fulfill/fail to the
-	 * unacked changeset for its remote commitment
-	 */
-	cstate_fulfill_htlc(lnchn->remote.staging_cstate, htlc);
-
-	htlc_changestate(htlc, RCVD_ADD_ACK_REVOCATION, SENT_REMOVE_HTLC, false);
-
-	remote_changes_pending(lnchn);
-
-	queue_pkt_htlc_fulfill(lnchn, htlc);
-	return true;
-}
 
 void internal_commitphase_retry_msg(struct LNchannel *lnchn)
 {
-    
+    if (!lnchn->rt.commit_msg_cache) {
+        static const enum htlc_state changed_states[] =
+        { SENT_REMOVE_HTLC, SENT_ADD_COMMIT };/*del, add*/
+        scanhtlcs_and_genentries(lnchn, lnchn, changed_states, &lnchn->rt.commit_msg_cache);
+    }
+
+    lite_msg_commit_purpose(lnchn->dstate->message_svr,
+        tal_count(lnchn->rt.commit_msg_cache),
+        lnchn->rt.commit_msg_cache);
 }
 
 static bool has_new_feechange_instate_side(const struct channel_state *stage_state,
@@ -574,45 +515,6 @@ static bool has_new_feechange_instate(struct LNchannel *lnchn, enum side side)
             lnchn->local.commit->cstate) : 
         has_new_feechange_instate_side(lnchn->remote.staging_cstate,
             lnchn->remote.commit->cstate);
-}
-
-static void swap_htlc_entries(struct msg_htlc_entry *a, struct msg_htlc_entry *b)
-{
-    struct msg_htlc_entry t;
-    t = *a;
-    *a = *b;
-    *b = t;
-}
-
-static size_t clean_rejected_messages(struct msg_htlc_entry *msgs, 
-    const struct htlc_commit_tasks *rej_t, size_t rej_n)
-{
-    size_t n, i, j, beg_j = 0;
-
-    n = tal_count(msgs);
-
-    for (i = 0; i < rej_n; i++) {
-
-        //find matched rejeced task (trick is we should found it from beg_j
-        for (j = beg_j; j < n; j++) {
-            if (msgs + j == rej_t[i].gen_entry)break;
-        }
-
-        if (j == n) {
-            for (j = 0; j < beg_j; j++) {
-                if (msgs + j == rej_t[i].gen_entry)break;
-            }
-        }
-
-        assert(j != beg_j);//we must find!
-        if (j == beg_j)continue;
-
-        beg_j = j + 1;
-        --n;
-        swap(msgs + j, msgs + n);
-    }
-
-    return n;
 }
 
 static void add_their_commit(struct LNchannel *lnchn,
@@ -677,59 +579,81 @@ static void on_commit_outsourcing_finish(struct LNchannel *lnchn, enum outsourci
         add_their_commit(lnchn, &ci->txid, ci->commit_num);
 
     internal_set_lnchn_state(lnchn, STATE_NORMAL_COMMITTING, __func__, true);
+
+    //first we update channel state to manager as final state
+    lite_update_channel(lnchn->dstate->channels, lnchn);
+
+    //db_update_htlcs(lnchn, );
+
     if (db_commit_transaction(lnchn) != NULL) {
         log_broken(lnchn->log, "db fail at %s", __func__);
         internal_lnchn_temp_breakdown(lnchn, "db fail");
         return ;
     }
 
+    internal_commitphase_retry_msg(lnchn);
 }
 
 bool lnchn_do_commit(struct LNchannel *lnchn)
 {
     struct commit_info *ci;
     const char *errmsg;
-    struct htlc_commit_tasks *add_t, *rem_t;
+    struct htlc *add_t, *rem_t, *other_t;
     static const enum htlc_state changed_states[] = 
         { RCVD_REMOVE_COMMIT, SENT_ADD_COMMIT };/*del, add*/
-
+    bool   feechanged = has_new_feechange_instate(lnchn, REMOTE)
+        || has_new_feechange_instate(lnchn, LOCAL);
+    size_t applied_t;
+    struct msg_htlc_entry *msgs = NULL;
     const tal_t *tmpctx = tal_tmpctx(lnchn);
 
-    struct msg_htlc_entry *msgs = tal_arr(tmpctx, struct msg_htlc_entry, 
-        htlc_map_count(&lnchn->htlcs));
-    bool to_us_only;
-    size_t applied_t;
+    /* init, clear caches ...*/
+    if (lnchn->rt.commit_msg_cache) {
+        tal_free(lnchn->rt.commit_msg_cache);
+        lnchn->rt.commit_msg_cache = NULL;
+    }
 
-    filterhtlcs_and_genentries(tmpctx, lnchn, msgs, &add_t, &rem_t);
-    tal_resize(&msgs, tal_count(add_t) + tal_count(rem_t));
+    //find htlcs for changed ...
+    scanhtlcs_forchange(tmpctx, lnchn, &other_t, &add_t, &rem_t);
 
-    ci = internal_new_commit_info(lnchn, lnchn->remote.commit->commit_num + 1);
-
-    db_start_transaction(lnchn);
-
-   //we apply remove tasks, finally adding
+    //we apply remove tasks, finally adding
     applied_t = applyhtlcchanges(lnchn, changed_states, rem_t);
     //all remove task should be handled
     assert(applied_t == tal_count(rem_t));
 
-   //we apply remove tasks first, then feechange, finally adding
+    //add_t may not applied commpletely
     applied_t = applyhtlcchanges(lnchn, changed_states, add_t);
-    //add task may not handled ...
     if (applied_t != tal_count(add_t)) {
-        size_t clean_msg;
-        log_info(lnchn->log, "%d htlcs is not applied for the purposed %d htlcs", 
-            applied_t , tal_count(add_t));
-
-        clean_msg = clean_rejected_messages(msgs, add_t + applied_t, 
-            tal_count(add_t) - applied_t);
-
         tal_resize(&add_t, applied_t);
-        tal_resize(&msgs, clean_msg);
     }
 
-    if (tal_count(msgs) == 0 && has_new_feechange_instate(lnchn, REMOTE)) {
-        //no change ...
-        log_broken(lnchn->log, "channel have no change");
+    applied_t += tal_count(rem_t);
+    //now we can generate required messages
+    if (applied_t > 0) {
+        /*caution: must use a non-temporary context*/
+        msgs = tal_arr(lnchn, struct msg_htlc_entry, applied_t);
+        lnchn->rt.commit_msg_cache = msgs;
+
+        fill_htlc_entry(msgs, rem_t, tal_count(rem_t), false);
+        msgs += tal_count(rem_t);
+        fill_htlc_entry(msgs, add_t, tal_count(add_t), true);
+        msgs += tal_count(add_t);
+    }
+    else if(!feechanged){
+        //so we have nothing to communitacte with REMOTE, just
+        //dump the new status and quit ...
+        if (tal_count(other_t)) {
+            db_start_transaction(lnchn);
+
+            db_update_htlcs(lnchn, other_t);
+
+            if (db_commit_transaction(lnchn) != NULL) {
+                log_broken(lnchn->log, "db fail at %s", __func__);
+                internal_lnchn_temp_breakdown(lnchn, "db fail");
+            }
+        }
+
+        tal_free(tmpctx);
         return false;
     }
 
@@ -737,43 +661,11 @@ bool lnchn_do_commit(struct LNchannel *lnchn)
     lnchn->rt.outsourcing_f = on_commit_outsourcing_finish;
     internal_outsourcing_for_commit(lnchn, LOCAL);
 
+    tal_free(tmpctx);
     return true;
 
 }
 
-void internal_htlc_fail(struct LNchannel *chn, u8 *fail, size_t len, struct htlc *h)
-{
-    set_htlc_fail(chn, h, fail, len);
-}
-
-void internal_htlc_fullfill(struct LNchannel *chn, const struct preimage *r, struct htlc *h)
-{
-    struct sha256 sha;
-	sha256(&sha, r, sizeof(*r));
-
-    if (!structeq(&sha, &h->rhash)) {
-        log_broken(chn->log,
-            "We receive unexpected preimage [%s] which should not resolve the hash %s",
-            tal_hexstr(chn, r, sizeof(*r)),
-            tal_hexstr(chn, &h->rhash, sizeof(h->rhash)));
-        return;
-    }
-
-    set_htlc_rval(chn, h, r);
-}
-
-bool lnchn_add_htlc(struct LNchannel *chn, u64 msatoshi,
-    unsigned int expiry,
-    const struct sha256 *rhash,
-    const u8 route,
-    enum fail_error *error_code) {
-
-    //h = internal_new_htlc(lnchn, t_beg->action.add.mstatoshi,
-    //    t_beg->rhash, t_beg->action.add.expiry, 0, RCVD_ADD_HTLC);
-
-
-    return false;
-}
 
 /* We can get update_commit in both normal and shutdown states. */
 static Pkt *handle_pkt_commit(struct LNchannel *lnchn, const Pkt *pkt)

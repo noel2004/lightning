@@ -7,6 +7,7 @@
 #include "btcnetwork/c/watch.h"
 #include "lightninglite/c/manager.h"
 #include "lightninglite/c/message.h"
+#include "lightninglite/c/payment.h"
 
 struct anchor_input {
 	struct sha256_double txid;
@@ -209,7 +210,7 @@ struct LNchannel {
 	/* High water mark for the staggered broadcast */
 	u64 broadcast_index;
 };
-address cryptography
+
 //many internal api and helpers ...
 
 /* Allocate a new commit_info struct. */

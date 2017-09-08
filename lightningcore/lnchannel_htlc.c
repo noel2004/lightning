@@ -39,8 +39,13 @@ bool lnchn_add_htlc(struct LNchannel *chn, u64 msatoshi,
     const u8 route,
     enum fail_error *error_code)
 {
+    //h = internal_new_htlc(lnchn, t_beg->action.add.mstatoshi,
+    //    t_beg->rhash, t_beg->action.add.expiry, 0, RCVD_ADD_HTLC);
+
+
     return false;
 }
+
 
 static void do_htlc_update(struct LNchannel *lnchn, 
     struct htlc *h, struct htlc *yah) {
@@ -69,6 +74,48 @@ static void do_htlc_update(struct LNchannel *lnchn,
             struct htlc, h);
     }
 
+}
+
+void internal_htlc_fail(struct LNchannel *chn, u8 *fail, size_t len, struct htlc *h)
+{
+    //for chained htlc, resolved is better
+    if (h->r && htlc_route_is_chain(h))return;
+
+    //clear previous fail or resolution
+    if (h->r) {
+        tal_free(h->r);
+        h->r = NULL;
+    }
+    else if (h->fail) {
+        tal_free(h->fail);
+        h->fail = NULL;
+    }
+
+    set_htlc_fail(chn, h, fail, len);
+}
+
+void internal_htlc_fullfill(struct LNchannel *chn, const struct preimage *r, struct htlc *h)
+{
+    struct sha256 sha;
+
+    if (h->r)return; //no need to resolve twice                     
+    else if (h->fail && htlc_route_is_chain(h)) {
+        //for chained htlc, resolved is better
+        tal_free(h->fail);
+        h->fail = NULL;
+    }
+
+    sha256(&sha, r, sizeof(*r));
+
+    if (!structeq(&sha, &h->rhash)) {
+        log_broken(chn->log,
+            "We receive unexpected preimage [%s] which should not resolve the hash %s",
+            tal_hexstr(chn, r, sizeof(*r)),
+            tal_hexstr(chn, &h->rhash, sizeof(h->rhash)));
+        return;
+    }
+
+    set_htlc_rval(chn, h, r);
 }
 
 void internal_htlc_update(struct LNchannel *lnchn, struct htlc *h) {
