@@ -1109,7 +1109,7 @@ struct LNchannel *new_LNChannel(struct lightningd_state *dstate,
     lnchn->rt.outsourcing_counter = 0;
     lnchn->rt.outsourcing_lock = false;
     lnchn->rt.outsourcing_f = NULL;
-    lnchn->rt.commit_msg_cache = NULL;
+    lnchn->rt.changed_htlc_cache = NULL;
     lnchn->rt.their_last_commit = NULL;
     lnchn->rt.temp_errormsg = NULL;
 

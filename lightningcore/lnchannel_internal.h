@@ -79,7 +79,7 @@ struct LNChannel_rt
 
     bool outsourcing_lock;
 
-    struct msg_htlc_entry *commit_msg_cache;
+    struct htlc **changed_htlc_cache;
 
     u8* temp_errormsg;
 };

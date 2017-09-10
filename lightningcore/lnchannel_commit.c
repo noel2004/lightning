@@ -272,20 +272,20 @@ static void clean_htlcs(const tal_t *ctx, struct LNchannel *lnchn) {
 /*
    scan and update channel's htlc status
 */
-static void scanhtlcs_forchange(const tal_t *ctx, 
-    struct LNchannel *lnchn, struct htlc **other,
-    struct htlc **add,
-    struct htlc **rem)
+static size_t scanhtlcs_forchange(const tal_t *ctx, 
+    struct LNchannel *lnchn, 
+    struct htlc **base,
+    struct htlc ***add,
+    struct htlc ***rem)
 {
     struct htlc_map_iter it;
     struct htlc *h, **add_h, **rem_h, **other_h;
     const struct htlc *yah;
     *add = tal_arr(ctx, struct htlc *, htlc_map_count(&lnchn->htlcs));
     *rem = tal_arr(ctx, struct htlc *, htlc_map_count(&lnchn->htlcs));
-    *other = tal_arr(ctx, struct htlc *, htlc_map_count(&lnchn->htlcs));
-    add_h = add;
-    rem_h = rem;
-    other_h = other;
+    add_h = *add;
+    rem_h = *rem;
+    other_h = base;
 
     for (h = htlc_map_first(&lnchn->htlcs, &it);
         h;
@@ -323,7 +323,7 @@ static void scanhtlcs_forchange(const tal_t *ctx,
             !(yah = lite_query_htlc_direct(lnchn->dstate->channels,
                 &h->rhash, false))) {
             htlc_changestate(h, h->state, RCVD_DOWNSTREAM_DEAD);
-            *(other_h) = other;
+            *(other_h++) = h;
         }
 
         if(yah)lite_release_htlc(lnchn->dstate->channels, yah);
@@ -331,7 +331,7 @@ static void scanhtlcs_forchange(const tal_t *ctx,
 
     tal_resize(add, add_h - add);
     tal_resize(rem, rem_h - rem);
-    tal_resize(other, other_h - other);
+    return other_h - base;
 
 }
 
@@ -367,32 +367,6 @@ static void fill_htlc_entry(struct msg_htlc_entry *m,
 
 
 }
-
-static void scanhtlcs_and_genentries(const tal_t *ctx, 
-    struct LNchannel *lnchn, 
-    enum htlc_state filter_states[2], /*0: del, 1: add*/
-    struct msg_htlc_entry **msgs) {
-
-    struct htlc_map_iter it;
-    struct htlc *h;
-    struct msg_htlc_entry **msg_arr;
-    *msgs = tal_arr(ctx, struct msg_htlc_entry, htlc_map_count(&lnchn->htlcs));
-    msg_arr = msgs;
-
-    for (h = htlc_map_first(&lnchn->htlcs, &it);
-        h;
-        h = htlc_map_next(&lnchn->htlcs, &it)) {
-
-        if (h->state == filter_states[0]) {
-            fill_htlc_entry(*(msg_arr++), &h, 1, false);
-        }else if(h->state == filter_states[1]){
-            fill_htlc_entry(*(msg_arr++), &h, 1, true);
-        }
-    }
-
-    tal_resize(msgs, msg_arr - msgs);
-}
-
 
 static bool check_adding_htlc_compitable(const struct msg_htlc_add* incoming, const struct htlc *purposed)
 {
@@ -492,15 +466,45 @@ static bool verify_commit_tasks(const tal_t *ctx,
 
 void internal_commitphase_retry_msg(struct LNchannel *lnchn)
 {
-    if (!lnchn->rt.commit_msg_cache) {
-        static const enum htlc_state changed_states[] =
-        { SENT_REMOVE_HTLC, SENT_ADD_COMMIT };/*del, add*/
-        scanhtlcs_and_genentries(lnchn, lnchn, changed_states, &lnchn->rt.commit_msg_cache);
+    //reconstruct changed htlcs and messages
+    struct msg_htlc_entry* msgs, *msg_h;
+    const tal_t *tmpctx = tal_tmpctx(lnchn);
+    size_t i, n;
+
+    if (!lnchn->rt.changed_htlc_cache) {
+
+        struct htlc_map_iter it;
+        struct htlc *h;
+        struct htlc **changed_arr;
+        changed_arr = tal_arr(lnchn, struct htlc *, htlc_map_count(&lnchn->htlcs));
+        lnchn->rt.changed_htlc_cache = changed_arr;
+
+        for (h = htlc_map_first(&lnchn->htlcs, &it);
+            h;
+            h = htlc_map_next(&lnchn->htlcs, &it)) {
+
+            if (h->state == SENT_REMOVE_HTLC || 
+                h->state == SENT_ADD_COMMIT )
+                *(changed_arr++) = h;
+        }
+
+        tal_resize(&lnchn->rt.changed_htlc_cache, changed_arr - lnchn->rt.changed_htlc_cache);
     }
 
-    lite_msg_commit_purpose(lnchn->dstate->message_svr,
-        tal_count(lnchn->rt.commit_msg_cache),
-        lnchn->rt.commit_msg_cache);
+    n = tal_count(lnchn->rt.changed_htlc_cache);
+    msgs = tal_arr(tmpctx, struct msg_htlc_entry, n);
+    msg_h = msgs;
+
+    for (i = 0; i < n; ++i) {
+        struct htlc* h = lnchn->rt.changed_htlc_cache[i];
+        if (htlc_has(h, HTLC_ADDING))
+            fill_htlc_entry(msg_h++, &h, 1, true);
+        else if(htlc_has(h, HTLC_REMOVING))
+            fill_htlc_entry(msg_h++, &h, 1, false);
+    }
+
+    tal_resize(&msgs, msg_h - msgs);
+    lite_msg_commit_purpose(lnchn->dstate->message_svr, tal_count(msgs), msgs);
 }
 
 static bool has_new_feechange_instate_side(const struct channel_state *stage_state,
@@ -598,23 +602,25 @@ bool lnchn_do_commit(struct LNchannel *lnchn)
 {
     struct commit_info *ci;
     const char *errmsg;
-    struct htlc *add_t, *rem_t, *other_t;
+    struct htlc **add_t, **rem_t, **other_t;
     static const enum htlc_state changed_states[] = 
         { RCVD_REMOVE_COMMIT, SENT_ADD_COMMIT };/*del, add*/
     bool   feechanged = has_new_feechange_instate(lnchn, REMOTE)
         || has_new_feechange_instate(lnchn, LOCAL);
     size_t applied_t;
-    struct msg_htlc_entry *msgs = NULL;
     const tal_t *tmpctx = tal_tmpctx(lnchn);
 
     /* init, clear caches ...*/
-    if (lnchn->rt.commit_msg_cache) {
-        tal_free(lnchn->rt.commit_msg_cache);
-        lnchn->rt.commit_msg_cache = NULL;
+    if (lnchn->rt.changed_htlc_cache) {
+        tal_free(lnchn->rt.changed_htlc_cache);
+        lnchn->rt.changed_htlc_cache = NULL;
     }
 
+    other_t = tal_arr(lnchn, struct htlc*, htlc_map_count(&lnchn->htlcs));
+
     //find htlcs for changed ...
-    scanhtlcs_forchange(tmpctx, lnchn, &other_t, &add_t, &rem_t);
+    applied_t = scanhtlcs_forchange(tmpctx, lnchn, other_t, &add_t, &rem_t);
+    tal_resize(&other_t, applied_t);
 
     //we apply remove tasks, finally adding
     applied_t = applyhtlcchanges(lnchn, changed_states, rem_t);
@@ -630,14 +636,13 @@ bool lnchn_do_commit(struct LNchannel *lnchn)
     applied_t += tal_count(rem_t);
     //now we can generate required messages
     if (applied_t > 0) {
+        /*merge add and rem tables into others and bind it into run-time*/
         /*caution: must use a non-temporary context*/
-        msgs = tal_arr(lnchn, struct msg_htlc_entry, applied_t);
-        lnchn->rt.commit_msg_cache = msgs;
+        tal_expand(&other_t, rem_t, tal_count(rem_t));
+        tal_expand(&other_t, add_t, tal_count(add_t));
+        lnchn->rt.changed_htlc_cache = other_t;
 
-        fill_htlc_entry(msgs, rem_t, tal_count(rem_t), false);
-        msgs += tal_count(rem_t);
-        fill_htlc_entry(msgs, add_t, tal_count(add_t), true);
-        msgs += tal_count(add_t);
+//        fill_htlc_entry(msgs, rem_t, tal_count(rem_t), false);
     }
     else if(!feechanged){
         //so we have nothing to communitacte with REMOTE, just
