@@ -70,7 +70,7 @@ static u64 lnchn_commitsigs_received(struct LNchannel *lnchn)
 static u64 lnchn_revocations_received(struct LNchannel *lnchn)
 {
 	/* How many preimages we've received. */
-	return -lnchn->their_preimages.min_index;
+	return lnchn->their_preimages.min_index;
 }
 
 
@@ -356,7 +356,7 @@ static bool verify_commit_tasks(const tal_t *ctx,
     struct LNchannel *lnchn, 
     struct msg_htlc_entry *msgs,
     size_t n,
-    struct htlc **tasks) {
+    struct htlc ***tasks) {
 
     struct htlc *h, **task_h;
     struct msg_htlc_entry *t_beg, *t_end;
@@ -418,24 +418,14 @@ static bool verify_commit_tasks(const tal_t *ctx,
             }
             else{
                 assert(t_beg->action.del.fail);
-                //verify we can fail the htlc
-                if (htlc_owner(h) == LOCAL || /*remote can always fail our htlc*/                
-                                              /*for remote, must check */
-                (get_block_height(lnchn->dstate->topology) > h->deadline)){
 
-                    internal_htlc_fail(lnchn, t_beg->action.del.fail,
-                        tal_count(t_beg->action.del.fail), h);
+                internal_htlc_fail(lnchn, t_beg->action.del.fail,
+                    tal_count(t_beg->action.del.fail), h);
 
-                    lite_invoice_fail(lnchn->dstate->payment, &h->rhash,
-                        t_beg->action.del.failflag == 0 || htlc_owner(h) == REMOTE ? 
-                        INVOICE_CHAIN_FAIL :
-                        INVOICE_CHAIN_FAIL_TEMP);
-                }
-                else {
-                    log_broken_struct(lnchn->log, "htlc %s is required to closed but we cannot",
-                        struct htlc, h);
-                    return false;
-                }
+                lite_invoice_fail(lnchn->dstate->payment, &h->rhash,
+                    t_beg->action.del.failflag == 0 ? 
+                    INVOICE_CHAIN_FAIL :
+                    INVOICE_CHAIN_FAIL_TEMP);
             }         
         }
 
@@ -485,7 +475,10 @@ static send_commit_msg(const tal_t *ctx, struct LNchannel *lnchn) {
     }
 
     tal_resize(&msgs, msg_h - msgs);
-    lite_msg_commit_purpose(lnchn->dstate->message_svr, tal_count(msgs), msgs);
+    lite_msg_commit_purpose(lnchn->dstate->message_svr, 
+        lnchn->remote.commit->commit_num,
+        lnchn->remote.commit->sig,
+        tal_count(msgs), msgs);
 
 }
 
@@ -690,145 +683,66 @@ bool lnchn_do_commit(struct LNchannel *lnchn)
 
 }
 
-
-/* We can get update_commit in both normal and shutdown states. */
-static Pkt *handle_pkt_commit(struct LNchannel *lnchn, const Pkt *pkt)
-{
-    Pkt *err;
-    const char *errmsg;
-    struct sha256 preimage;
+bool lnchn_notify_commit(struct LNchannel *lnchn,
+    u64 commit_num,
+    ecdsa_signature *sig,
+    u32 num_htlc_entry,
+    const struct msg_htlc_entry *htlc_entry
+) {
+    struct htlc **htlcs_update;
     struct commit_info *ci;
-    bool to_them_only;
-    /* FIXME: We can actually merge these two... */
-    static const struct htlcs_table commit_changes[] = {
-        { RCVD_ADD_REVOCATION, RCVD_ADD_ACK_COMMIT },
-        { RCVD_REMOVE_HTLC, RCVD_REMOVE_COMMIT },
-        { RCVD_ADD_HTLC, RCVD_ADD_COMMIT },
-        { RCVD_REMOVE_REVOCATION, RCVD_REMOVE_ACK_COMMIT }
-    };
-    static const struct feechanges_table commit_feechanges[] = {
-        { RCVD_FEECHANGE_REVOCATION, RCVD_FEECHANGE_ACK_COMMIT },
-        { RCVD_FEECHANGE, RCVD_FEECHANGE_COMMIT }
-    };
-    static const struct htlcs_table revocation_changes[] = {
-        { RCVD_ADD_ACK_COMMIT, SENT_ADD_ACK_REVOCATION },
-        { RCVD_REMOVE_COMMIT, SENT_REMOVE_REVOCATION },
-        { RCVD_ADD_COMMIT, SENT_ADD_REVOCATION },
-        { RCVD_REMOVE_ACK_COMMIT, SENT_REMOVE_ACK_REVOCATION }
-    };
-    static const struct feechanges_table revocation_feechanges[] = {
-        { RCVD_FEECHANGE_ACK_COMMIT, SENT_FEECHANGE_ACK_REVOCATION },
-        { RCVD_FEECHANGE_COMMIT, SENT_FEECHANGE_REVOCATION }
-    };
+    struct sha256 preimage;
+    const tal_t *tmpctx = tal_tmpctx(lnchn);
+    static const enum htlc_state changed_states[] = 
+        { RCVD_REMOVE_COMMIT, RCVD_ADD_COMMIT };/*del, add*/
+    size_t applied_t;
 
-    ci = new_commit_info(lnchn, lnchn->local.commit->commit_num + 1);
+    if (lnchn->remote.commit && commit_num !=
+        lnchn->remote.commit->commit_num + 1) {
 
-    db_start_transaction(lnchn);
-
-    /* FIXME-OLD #2:
-    *
-    * A node MUST NOT send an `update_commit` message which does
-    * not include any updates.
-    */
-    errmsg = changestates(lnchn,
-        commit_changes, ARRAY_SIZE(commit_changes),
-        commit_feechanges, ARRAY_SIZE(commit_feechanges),
-        true);
-    if (errmsg) {
-        db_abort_transaction(lnchn);
-        return pkt_err(lnchn, "%s", errmsg);
+        log_broken(lnchn->log, "Wrong commit number recv: %"PRIu64, commit_num);
+        tal_free(tmpctx);
+        return false;
     }
 
-    /* Create new commit info for this commit tx. */
-    ci->revocation_hash = lnchn->local.next_revocation_hash;
+    /* the most important step ... */
+    if (!verify_commit_tasks(tmpctx, lnchn, htlc_entry, num_htlc_entry, &htlcs_update)) {
+        return false;
+    }
 
-    /* FIXME-OLD #2:
-    *
-    * A receiving node MUST apply all local acked and unacked
-    * changes except unacked fee changes to the local commitment
-    */
-    /* (We already applied them to staging_cstate as we went) */
-    ci->cstate = copy_cstate(ci, lnchn->local.staging_cstate);
-    ci->tx = create_commit_tx(ci, lnchn, &ci->revocation_hash,
-        ci->cstate, LOCAL, &to_them_only);
-    bitcoin_txid(ci->tx, &ci->txid);
+    applied_t = applyhtlcchanges(lnchn, changed_states, htlcs_update);
+    if (applied_t < tal_count(htlcs_update)) {
+        log_broken(lnchn->log, "Not all htlc entry can be applied, we fail at %"PRIu64,
+            commit_num);
+        tal_free(tmpctx);
+        return false;
+    }
 
-    log_debug(lnchn->log, "Check tx %"PRIu64" sig", ci->commit_num);
-    log_add_struct(lnchn->log, " for %s", struct channel_state, ci->cstate);
-    log_add_struct(lnchn->log, " (txid %s)", struct sha256_double, &ci->txid);
+    internal_update_commit(lnchn, REMOTE);
+    ci = lnchn->remote.commit;
 
-    /* FIXME-OLD #2:
-    *
-    * If the commitment transaction has only a single output which pays
-    * to the other node, `sig` MUST be unset.  Otherwise, a sending node
-    * MUST apply all remote acked and unacked changes except unacked fee
-    * changes to the remote commitment before generating `sig`.
-    */
-    if (!to_them_only)
-        ci->sig = tal(ci, ecdsa_signature);
-
-    err = accept_pkt_commit(lnchn, pkt, ci->sig);
-    if (err)
-        return err;
-
-    /* FIXME-OLD #2:
-    *
-    * A receiving node MUST apply all local acked and unacked changes
-    * except unacked fee changes to the local commitment, then it MUST
-    * check `sig` is valid for that transaction.
-    */
     if (ci->sig && !check_tx_sig(ci->tx, 0,
         NULL,
         lnchn->anchor.witnessscript,
         &lnchn->remote.commitkey,
         ci->sig)) {
-        db_abort_transaction(lnchn);
-        return pkt_err(lnchn, "Bad signature");
+        log_broken(lnchn->log, "Get wrong signature from remote for %"PRIu64,
+            commit_num);
+        tal_free(tmpctx);
+        return false;
     }
 
-    /* Switch to the new commitment. */
-    tal_free(lnchn->local.commit);
-    lnchn->local.commit = ci;
-    lnchn->local.commit->order = lnchn->order_counter++;
-
-    db_new_commit_info(lnchn, LOCAL, NULL);
-    lnchn_get_revocation_hash(lnchn, ci->commit_num + 1,
-        &lnchn->local.next_revocation_hash);
-    lnchn->their_commitsigs++;
-
-    /* Now, send the revocation. */
-
-    /* We have their signature on the current one, right? */
-    assert(to_them_only || lnchn->local.commit->sig);
-    assert(lnchn->local.commit->commit_num > 0);
-
-    errmsg = changestates(lnchn,
-        revocation_changes, ARRAY_SIZE(revocation_changes),
-        revocation_feechanges,
-        ARRAY_SIZE(revocation_feechanges),
-        true);
-    if (errmsg) {
-        log_broken(lnchn->log, "queue_pkt_revocation: %s", errmsg);
-        db_abort_transaction(lnchn);
-        return pkt_err(lnchn, "Database error");
-    }
-
+    internal_update_commit(lnchn, LOCAL);
     lnchn_get_revocation_preimage(lnchn, lnchn->local.commit->commit_num - 1,
         &preimage);
 
-    /* Fire off timer if this ack caused new changes */
-    if (lnchn_uncommitted_changes(lnchn))
-        remote_changes_pending(lnchn);
+    //set outsourcing
+    lnchn->rt.outsourcing_f = on_commit_outsourcing_finish;
+    internal_outsourcing_for_commit(lnchn, REMOTE);
 
-    queue_pkt_revocation(lnchn, &preimage, &lnchn->local.next_revocation_hash);
+    tal_free(tmpctx);
 
-    /* If we're shutting down and no more HTLCs, begin closing */
-    if (lnchn->closing.their_script && !committed_to_htlcs(lnchn))
-        start_closing_in_transaction(lnchn);
-
-    if (db_commit_transaction(lnchn) != NULL)
-        return pkt_err(lnchn, "Database error");
-
-    return NULL;
+    return true;
 }
+
 

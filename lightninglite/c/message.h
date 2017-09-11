@@ -8,6 +8,7 @@ struct sha256_double;
 struct pubkey;
 struct preimage;
 struct htlc;
+struct ecdsa_signature_;
 
 /*take target id from channel id*/
 void    lite_msg_open(struct LNmessage *msg, const struct pubkey *target, 
@@ -44,6 +45,8 @@ struct msg_htlc_entry
 };
 
 void    lite_msg_commit_purpose(struct LNmessage *msg,
+    unsigned long long commit_num,
+    struct ecdsa_signature_ *sig,
     unsigned int num_htlc_entry,
     const struct msg_htlc_entry *htlc_entry
 );

@@ -23,6 +23,7 @@ struct LNchannel;
 struct bitcoin_tx;
 struct txowatch;
 struct sha256_double;
+struct msg_htlc_entry;
 
 struct LNchannel *new_LNChannel(struct lightningd_state *dstate,
 		      struct log *log);
@@ -108,6 +109,13 @@ bool lnchn_notify_anchor(struct LNchannel *lnchn, const struct pubkey *chnid,
     const struct sha256_double *txid,
     unsigned int index,
     unsigned long long amount
+);
+
+bool lnchn_notify_commit(struct LNchannel *lnchn, 
+    u64 commit_num,
+    ecdsa_signature *sig,
+    u32 num_htlc_entry,
+    const struct msg_htlc_entry *htlc_entry
 );
 
 /* Peer has an issue, breakdown and fail. */
