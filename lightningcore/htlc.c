@@ -14,8 +14,6 @@ struct {
     { PLAN_ADD_HTLC, "PLAN_ADD_HTLC" },
     { SENT_ADD_COMMIT, "SENT_ADD_COMMIT" },
     { RCVD_ADD_ACK_COMMIT, "RCVD_ADD_ACK_COMMIT" },
-//    { PLAN_REMOVE_HTLC, "PLAN_REMOVE_HTLC" },
-    { SENT_REMOVE_HTLC, "SENT_REMOVE_HTLC" },
     { RCVD_REMOVE_COMMIT, "RCVD_REMOVE_COMMIT" },
     { RCVD_ADD_HTLC, "RCVD_ADD_HTLC" },
     { RCVD_ADD_COMMIT, "RCVD_ADD_COMMIT" },
@@ -83,10 +81,6 @@ static const int per_state_bits[] = {
     + HTLC_LOCAL_F_WAS_COMMITTED
     + HTLC_REMOTE_F_WAS_COMMITTED,
 */
-    [SENT_REMOVE_HTLC] = HTLC_REMOVING + HTLC_LOCAL_F_OWNER
-    + HTLC_REMOTE_F_COMMITTED
-    + HTLC_LOCAL_F_WAS_COMMITTED
-    + HTLC_REMOTE_F_WAS_COMMITTED,
 
     [RCVD_REMOVE_COMMIT] = HTLC_LOCAL_F_OWNER
     + HTLC_LOCAL_F_WAS_COMMITTED
@@ -213,7 +207,7 @@ void htlc_undostate(struct htlc *h,
 	assert(newstate == h->state - 1);
 
 	/* And must only be proposal, not commit. */
-	assert(h->state == SENT_ADD_COMMIT || h->state == SENT_REMOVE_HTLC);
+	assert(h->state == SENT_ADD_COMMIT || h->state == SENT_RESOLVE_HTLC);
 
 	/* You can't change sides. */
 	assert((htlc_state_flags(h->state)&(HTLC_LOCAL_F_OWNER|HTLC_REMOTE_F_OWNER))

@@ -173,10 +173,7 @@ static void db_update_htlcs(struct LNchannel *lnchn,
             db_new_htlc(lnchn, h);
         }
 
-        db_update_htlc_state(lnchn, h);
-
-        //here we can notify htlc updating
-        internal_htlc_update_chain(lnchn, h);        
+        db_update_htlc_state(lnchn, h);       
     }
 }
 
@@ -227,7 +224,7 @@ static void applyfeechange(struct LNchannel *lnchn, enum side side) {
             state->staging_cstate->fee_rate
         );
 
-        f.commit_num = state->commit->commit_num + 1;//apply to next commit
+        f.commit_num = state->commit->commit_num;
         f.fee_rate = state->staging_cstate->fee_rate;
         f.side = side;
 
@@ -280,7 +277,6 @@ static size_t scanhtlcs_forchange(const tal_t *ctx,
 {
     struct htlc_map_iter it;
     struct htlc *h, **add_h, **rem_h, **other_h;
-    const struct htlc *yah;
     *add = tal_arr(ctx, struct htlc *, htlc_map_count(&lnchn->htlcs));
     *rem = tal_arr(ctx, struct htlc *, htlc_map_count(&lnchn->htlcs));
     add_h = *add;
@@ -291,42 +287,23 @@ static size_t scanhtlcs_forchange(const tal_t *ctx,
         h;
         h = htlc_map_next(&lnchn->htlcs, &it)) {
 
-        yah = NULL;
         //scanning all fixed htlcs and try to resolve them ...
         if (htlc_has(h, HTLC_LOCAL_F_PENDING) && 
-            !h->src_expiry &&
-            !htlc_route_is_tip(h) && 
-            (yah = lite_query_htlc_direct(lnchn->dstate->channels,
-                &h->rhash, true))) {
+            (h->src_expiry ||
+            htlc_route_is_tip(h))) {
 
-            internal_htlc_update_deadline(lnchn, h, yah);
             *(add_h++) = h;
         }        
-        //for fixed task, check if it can be resolved
-        else if (htlc_is_fixed(h) && !h->r && !h->fail &&
-            (yah = lite_query_htlc_direct(lnchn->dstate->channels,
-                &h->rhash, false)) &&
-            htlc_is_dead(yah)) {
-
-            if (yah->r) {
-                set_htlc_rval(lnchn, h, yah->r);
-            }
-            else {
-                assert(yah->fail);
-                set_htlc_fail(lnchn, h, yah->fail, tal_count(yah->fail));
-            }
-
+        //for fixed, remote task, check if it can be resolved
+        else if (htlc_owner(h) == REMOTE && 
+            htlc_is_fixed(h) &&
+            (h->r || h->fail)) {
             *(rem_h++) = h;
         }
         /*finally the dead REMOT htlc can be removed only if it have no source anymore*/
-        else if (h->state == RCVD_REMOVE_ACK_COMMIT &&
-            !(yah = lite_query_htlc_direct(lnchn->dstate->channels,
-                &h->rhash, false))) {
-            htlc_changestate(h, h->state, RCVD_DOWNSTREAM_DEAD);
+        else if (h->state == RCVD_DOWNSTREAM_DEAD) {            
             *(other_h++) = h;
         }
-
-        if(yah)lite_release_htlc(lnchn->dstate->channels, yah);
     }
 
     tal_resize(add, add_h - add);
@@ -430,6 +407,11 @@ static bool verify_commit_tasks(const tal_t *ctx,
                     struct htlc, h);
                 return false;
             }
+            else if (htlc_owner(h) != LOCAL) {
+                log_broken_struct(lnchn->log, "Not a local htlc for removing: %s",
+                    struct htlc, h);
+                return false;
+            }
 
             if (t_beg->action.del.r ) {
                 internal_htlc_fullfill(lnchn, t_beg->action.del.r, h);
@@ -464,11 +446,10 @@ static bool verify_commit_tasks(const tal_t *ctx,
 }
 
 
-void internal_commitphase_retry_msg(struct LNchannel *lnchn)
-{
+static send_commit_msg(const tal_t *ctx, struct LNchannel *lnchn) {
+
     //reconstruct changed htlcs and messages
     struct msg_htlc_entry* msgs, *msg_h;
-    const tal_t *tmpctx = tal_tmpctx(lnchn);
     size_t i, n;
 
     if (!lnchn->rt.changed_htlc_cache) {
@@ -483,8 +464,8 @@ void internal_commitphase_retry_msg(struct LNchannel *lnchn)
             h;
             h = htlc_map_next(&lnchn->htlcs, &it)) {
 
-            if (h->state == SENT_REMOVE_HTLC || 
-                h->state == SENT_ADD_COMMIT )
+            if (h->state == SENT_RESOLVE_HTLC ||
+                h->state == SENT_ADD_COMMIT)
                 *(changed_arr++) = h;
         }
 
@@ -492,19 +473,34 @@ void internal_commitphase_retry_msg(struct LNchannel *lnchn)
     }
 
     n = tal_count(lnchn->rt.changed_htlc_cache);
-    msgs = tal_arr(tmpctx, struct msg_htlc_entry, n);
+    msgs = tal_arr(ctx, struct msg_htlc_entry, n);
     msg_h = msgs;
 
     for (i = 0; i < n; ++i) {
         struct htlc* h = lnchn->rt.changed_htlc_cache[i];
         if (htlc_has(h, HTLC_ADDING))
             fill_htlc_entry(msg_h++, &h, 1, true);
-        else if(htlc_has(h, HTLC_REMOVING))
+        else if (htlc_has(h, HTLC_REMOVING))
             fill_htlc_entry(msg_h++, &h, 1, false);
     }
 
     tal_resize(&msgs, msg_h - msgs);
     lite_msg_commit_purpose(lnchn->dstate->message_svr, tal_count(msgs), msgs);
+
+}
+
+void internal_commitphase_retry_msg(struct LNchannel *lnchn)
+{
+    const tal_t *tmpctx = tal_tmpctx(lnchn);
+
+    switch (lnchn->state) {
+    case STATE_NORMAL_COMMITTING:
+        send_commit_msg(tmpctx, lnchn); break;
+    case STATE_NORMAL_COMMITTING_RECV:
+        break;
+    }
+
+    tal_free(tmpctx);
 }
 
 static bool has_new_feechange_instate_side(const struct channel_state *stage_state,
@@ -531,11 +527,18 @@ static void add_their_commit(struct LNchannel *lnchn,
     db_add_commit_map(lnchn, txid, commit_num);
 }
 
+inline static void update_htlc_chain(struct LNchannel *lnchn, struct htlc **changes) {
+    struct htlc *h;
+    size_t i, n;
+    n = tal_count(changes);
+
+    for (i = 0; i < n; ++i) internal_htlc_update_chain(lnchn, h);
+}
+
 static void on_commit_outsourcing_finish(struct LNchannel *lnchn, enum outsourcing_result ret, u64 num)
 {
-    struct commit_info *ci;
-    bool to_us_only;
-    struct htlc **htlcs_update;
+    struct commit_info *ci = lnchn->remote.commit;
+
     //outsourcing is done and we can deliver commit message
     if (ret != OUTSOURCING_OK) {
         log_broken(lnchn->log, "outsourcing service fail for %d", ret);
@@ -543,22 +546,56 @@ static void on_commit_outsourcing_finish(struct LNchannel *lnchn, enum outsourci
         return;
     }
 
-    ci = internal_new_commit_info(lnchn, lnchn->remote.commit->commit_num + 1);
+    //first we update channel state to manager as final state
+    lite_update_channel(lnchn->dstate->channels, lnchn);
 
     db_start_transaction(lnchn);
 
+    db_new_commit_info(lnchn, REMOTE);
+    applyfeechange(lnchn, REMOTE);
+
+    /* We don't need to remember their commit if we don't give sig. */
+    if (ci->sig)
+        add_their_commit(lnchn, &ci->txid, ci->commit_num);
+
+    internal_set_lnchn_state(lnchn, STATE_NORMAL_COMMITTING, __func__, true);
+
+
+    //we should have cached a changed list for htlc
+    assert(lnchn->rt.changed_htlc_cache);
+    db_update_htlcs(lnchn, lnchn->rt.changed_htlc_cache);
+
+    if (db_commit_transaction(lnchn) != NULL) {
+        log_broken(lnchn->log, "db fail at %s", __func__);
+        internal_lnchn_temp_breakdown(lnchn, "db fail");
+        return ;
+    }
+
+    //here we can notify htlc updating
+    update_htlc_chain(lnchn, lnchn->rt.changed_htlc_cache);
+
+    internal_commitphase_retry_msg(lnchn);
+}
+
+void internal_update_commit(struct LNchannel *lnchn, enum side side)
+{
+    struct commit_info *ci;
+    bool to_us_only;
+    struct htlc **htlcs_update;
+    struct LNChannel_visible_state *vside = side == REMOTE ?
+        &lnchn->remote : &lnchn->local;
+
+    //now generate commit ...
+    ci = internal_new_commit_info(lnchn, vside->commit->commit_num + 1);
+
     /* Create new commit info for this commit tx. */
     ci->revocation_hash = lnchn->remote.next_revocation_hash;
-    /* FIXME-OLD #2:
-    *
-    * ...a sending node MUST apply all remote acked and unacked
-    * changes except unacked fee changes to the remote commitment
-    * before generating `sig`. */
-    ci->cstate = copy_cstate(ci, lnchn->remote.staging_cstate);
+    ci->cstate = copy_cstate(ci, vside->staging_cstate);
     ci->tx = create_commit_tx(ci, lnchn, &ci->revocation_hash,
-        ci->cstate, REMOTE, &to_us_only, &htlcs_update);
+        ci->cstate, side, &to_us_only, &htlcs_update);
     bitcoin_txid(ci->tx, &ci->txid);
-    update_htlc_in_channel(lnchn, LOCAL, htlcs_update);
+
+    update_htlc_in_channel(lnchn, side, htlcs_update);
     tal_free(htlcs_update);
 
     if (!to_us_only) {
@@ -573,38 +610,19 @@ static void on_commit_outsourcing_finish(struct LNchannel *lnchn, enum outsourci
     }
 
     /* Switch to the new commitment. */
-    tal_free(lnchn->remote.commit);
-    lnchn->remote.commit = ci;
-    //lnchn->remote.commit->order = lnchn->order_counter++;
-    db_new_commit_info(lnchn, REMOTE);
+    tal_free(vside->commit);
+    vside->commit = ci;
 
-    /* We don't need to remember their commit if we don't give sig. */
-    if (ci->sig)
-        add_their_commit(lnchn, &ci->txid, ci->commit_num);
-
-    internal_set_lnchn_state(lnchn, STATE_NORMAL_COMMITTING, __func__, true);
-
-    //first we update channel state to manager as final state
-    lite_update_channel(lnchn->dstate->channels, lnchn);
-
-    //db_update_htlcs(lnchn, );
-
-    if (db_commit_transaction(lnchn) != NULL) {
-        log_broken(lnchn->log, "db fail at %s", __func__);
-        internal_lnchn_temp_breakdown(lnchn, "db fail");
-        return ;
-    }
-
-    internal_commitphase_retry_msg(lnchn);
 }
 
 bool lnchn_do_commit(struct LNchannel *lnchn)
 {
     struct commit_info *ci;
+    bool to_us_only;
     const char *errmsg;
-    struct htlc **add_t, **rem_t, **other_t;
+    struct htlc **add_t, **rem_t, **other_t, **htlcs_update;
     static const enum htlc_state changed_states[] = 
-        { RCVD_REMOVE_COMMIT, SENT_ADD_COMMIT };/*del, add*/
+        { SENT_RESOLVE_HTLC, SENT_ADD_COMMIT };/*del, add*/
     bool   feechanged = has_new_feechange_instate(lnchn, REMOTE)
         || has_new_feechange_instate(lnchn, LOCAL);
     size_t applied_t;
@@ -662,6 +680,7 @@ bool lnchn_do_commit(struct LNchannel *lnchn)
         return false;
     }
 
+    internal_update_commit(lnchn, REMOTE);
     //set outsourcing
     lnchn->rt.outsourcing_f = on_commit_outsourcing_finish;
     internal_outsourcing_for_commit(lnchn, LOCAL);

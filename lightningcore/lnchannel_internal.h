@@ -216,6 +216,8 @@ struct LNchannel {
 /* Allocate a new commit_info struct. */
 struct commit_info *internal_new_commit_info(const tal_t *ctx, u64 commit_num);
 
+void internal_update_commit(struct LNchannel *lnchn, enum side side);
+
 /* MUST call after the chn is completly initialized! Freeing removes from map, too */
 struct htlc *internal_new_htlc(struct LNchannel *chn,
 			   u64 msatoshi,

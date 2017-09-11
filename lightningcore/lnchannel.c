@@ -121,6 +121,8 @@ void internal_lnchn_temp_breakdown(struct LNchannel *lnchn, const char* reason)
 
     lnchn->rt.temp_errormsg = tal_arrz(lnchn, u8, len + 1);
     memcpy(lnchn->rt.temp_errormsg, reason, len);
+
+    internal_set_lnchn_state(lnchn, STATE_ERR_TEMP, __func__, false);
 }
 
 void internal_lnchn_breakdown(struct LNchannel *lnchn)

@@ -16,16 +16,15 @@ enum htlc_state {
     SENT_ADD_COMMIT,
     RCVD_ADD_ACK_COMMIT, /*fixed*/
 
-    /* When they remove an htlc, it directly comes into RCVD_REMOVE_COMMIT: */
-    //PLAN_REMOVE_HTLC, 
-    SENT_REMOVE_HTLC,
+    /* "our" htlc MUST NOT be removed by ours, it just dead
+       after receiving request from remote
+    */
     RCVD_REMOVE_COMMIT, /*dead*/
 
     /* When they add a new htlc, it goes in this order. */
     RCVD_ADD_HTLC,
     RCVD_ADD_COMMIT, /* fixed */
 
-    /* When they remove an htlc, it directly comes into RCVD_REMOVE_ACK_COMMIT: */
     SENT_RESOLVE_HTLC,
     RCVD_REMOVE_ACK_COMMIT, /*dead*/
     RCVD_DOWNSTREAM_DEAD,  /*mark for "bury" htlc (not need to load from DB)*/
