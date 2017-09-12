@@ -30,7 +30,7 @@ struct msg_htlc_add
 struct msg_htlc_del
 {
     const struct preimage *r; /* NULL if being revoked*/
-    unsigned char* fail;
+    const unsigned char* fail;
     unsigned int failflag; /* 1: indicate htlc fail from end so retry is not needed*/    
 };
 

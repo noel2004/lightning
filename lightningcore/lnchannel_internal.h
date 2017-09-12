@@ -231,7 +231,7 @@ void internal_htlc_update_chain(struct LNchannel *lnchn, struct htlc *h);
 
 void internal_htlc_fullfill(struct LNchannel *chn, const struct preimage *r, struct htlc *h);
 
-void internal_htlc_fail(struct LNchannel *chn, u8 *fail, size_t len, struct htlc *h);
+void internal_htlc_fail(struct LNchannel *chn, const u8 *fail, size_t len, struct htlc *h);
 
 void internal_lnchn_breakdown(struct LNchannel *lnchn);
 
@@ -241,11 +241,6 @@ void internal_lnchn_fail_on_notify(struct LNchannel *lnchn, const char* msg, ...
 
 void internal_set_lnchn_state(struct LNchannel *lnchn, enum state newstate,
     const char *caller, bool db_commit);
-
-void internal_update_htlc_watch(struct LNchannel *chn, 
-                 const struct sha256 *rhash, struct txowatch* txo);
-
-void internal_fail_own_htlc(struct LNchannel *lnchn, struct htlc *htlc);
 
 void internal_openphase_retry_msg(struct LNchannel *lnchn);
 

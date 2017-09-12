@@ -20,6 +20,7 @@ enum htlc_state {
        after receiving request from remote
     */
     RCVD_REMOVE_COMMIT, /*dead*/
+    RCVD_DOWNSTREAM_DEAD,  /*mark for "bury" htlc (not need to load from DB)*/
 
     /* When they add a new htlc, it goes in this order. */
     RCVD_ADD_HTLC,
@@ -27,7 +28,6 @@ enum htlc_state {
 
     SENT_RESOLVE_HTLC,
     RCVD_REMOVE_ACK_COMMIT, /*dead*/
-    RCVD_DOWNSTREAM_DEAD,  /*mark for "bury" htlc (not need to load from DB)*/
 
     HTLC_STATE_INVALID
 };
@@ -181,7 +181,7 @@ static inline size_t htlc_hash(const struct sha256* hash)
 
 HTABLE_DEFINE_TYPE(struct htlc, htlc_key, htlc_hash, htlc_cmp, htlc_map);
 
-static inline struct htlc *htlc_get_any(struct htlc_map *htlcs, struct sha256* hash)
+static inline struct htlc *htlc_get_any(struct htlc_map *htlcs, const struct sha256* hash)
 {
     struct htlc *h;
     struct htlc_map_iter it;
@@ -195,7 +195,7 @@ static inline struct htlc *htlc_get_any(struct htlc_map *htlcs, struct sha256* h
     return NULL;
 }
 
-static inline struct htlc *htlc_get(struct htlc_map *htlcs, struct sha256* hash, enum side owner)
+static inline struct htlc *htlc_get(struct htlc_map *htlcs, const struct sha256* hash, enum side owner)
 {
 	struct htlc *h;
 	struct htlc_map_iter it;

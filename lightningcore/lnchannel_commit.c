@@ -182,11 +182,11 @@ static void db_update_htlcs(struct LNchannel *lnchn,
     adding maybe rejected
 */
 static size_t applyhtlcchanges(struct LNchannel *lnchn, 
-    enum htlc_state new_states[2], /*0: del, 1: add*/
+    const enum htlc_state new_states[2], /*0: del, 1: add*/
     struct htlc **tasks) {
 
     struct htlc *h;
-    size_t i, j, cnt;
+    size_t i, cnt;
     enum htlc_state new_state;
     cnt = tal_count(tasks);
 
@@ -229,7 +229,6 @@ static void applyfeechange(struct LNchannel *lnchn, enum side side) {
         f.side = side;
 
         db_new_feechange(lnchn, &f);
-        return true;
     }
 
 }
@@ -262,7 +261,7 @@ static void clean_htlcs(const tal_t *ctx, struct LNchannel *lnchn) {
     }
 
     for (hi = remh; hi != rem; ++hi) {
-        htlc_map_del(&lnchn->htlcs, hi);
+        htlc_map_del(&lnchn->htlcs, *hi);
     }
 }
 
@@ -306,8 +305,8 @@ static size_t scanhtlcs_forchange(const tal_t *ctx,
         }
     }
 
-    tal_resize(add, add_h - add);
-    tal_resize(rem, rem_h - rem);
+    tal_resize(add, add_h - *add);
+    tal_resize(rem, rem_h - *rem);
     return other_h - base;
 
 }
@@ -354,12 +353,12 @@ static bool check_adding_htlc_compitable(const struct msg_htlc_add* incoming, co
 /* update ref_htlc in tasks, and verify each one (also add and apply to staged cstate)*/
 static bool verify_commit_tasks(const tal_t *ctx, 
     struct LNchannel *lnchn, 
-    struct msg_htlc_entry *msgs,
+    const struct msg_htlc_entry *msgs,
     size_t n,
     struct htlc ***tasks) {
 
     struct htlc *h, **task_h;
-    struct msg_htlc_entry *t_beg, *t_end;
+    const struct msg_htlc_entry *t_beg, *t_end;
     t_end = msgs + n;
 
     *tasks = tal_arr(ctx, struct htlc *, n);
@@ -378,7 +377,7 @@ static bool verify_commit_tasks(const tal_t *ctx,
             }
             else if (!h) {
                 //check source
-                struct htlc *yah;
+                const struct htlc *yah;
                 yah = lite_query_htlc_direct(lnchn->dstate->channels, t_beg->rhash, false);
                 if (yah && (!htlc_route_has_source(yah) ||
                      !check_adding_htlc_compitable(&t_beg->action.add, yah))) {
@@ -521,11 +520,12 @@ static void add_their_commit(struct LNchannel *lnchn,
 }
 
 inline static void update_htlc_chain(struct LNchannel *lnchn, struct htlc **changes) {
-    struct htlc *h;
+
     size_t i, n;
     n = tal_count(changes);
 
-    for (i = 0; i < n; ++i) internal_htlc_update_chain(lnchn, h);
+    for (i = 0; i < n; ++i) 
+        internal_htlc_update_chain(lnchn, changes[i]);
 }
 
 static void on_commit_outsourcing_finish(struct LNchannel *lnchn, enum outsourcing_result ret, u64 num)
@@ -570,10 +570,30 @@ static void on_commit_outsourcing_finish(struct LNchannel *lnchn, enum outsourci
     internal_commitphase_retry_msg(lnchn);
 }
 
+
+/* add witness part of local tx*/
+static void complete_local_tx(struct LNchannel *lnchn) {
+
+    ecdsa_signature sig;
+
+    assert(lnchn->local.commit);
+
+    lnchn_sign_ourcommit(lnchn, lnchn->local.commit->tx, &sig);
+
+    lnchn->local.commit->tx->input[0].witness
+        = bitcoin_witness_2of2(
+            lnchn->local.commit->tx->input,
+            lnchn->local.commit->sig,
+            &sig,
+            &lnchn->remote.commitkey,
+            &lnchn->local.commitkey
+        );
+}
+
 void internal_update_commit(struct LNchannel *lnchn, enum side side)
 {
     struct commit_info *ci;
-    bool to_us_only;
+    bool only_other_side;
     struct htlc **htlcs_update;
     struct LNChannel_visible_state *vside = side == REMOTE ?
         &lnchn->remote : &lnchn->local;
@@ -585,21 +605,14 @@ void internal_update_commit(struct LNchannel *lnchn, enum side side)
     ci->revocation_hash = lnchn->remote.next_revocation_hash;
     ci->cstate = copy_cstate(ci, vside->staging_cstate);
     ci->tx = create_commit_tx(ci, lnchn, &ci->revocation_hash,
-        ci->cstate, side, &to_us_only, &htlcs_update);
+        ci->cstate, side, &only_other_side, &htlcs_update);
     bitcoin_txid(ci->tx, &ci->txid);
 
     update_htlc_in_channel(lnchn, side, htlcs_update);
     tal_free(htlcs_update);
 
-    if (!to_us_only) {
-        log_debug(lnchn->log, "Signing tx %"PRIu64, ci->commit_num);
-        log_add_struct(lnchn->log, " for %s",
-            struct channel_state, ci->cstate);
-        log_add_struct(lnchn->log, " (txid %s)",
-            struct sha256_double, &ci->txid);
-
+    if (!only_other_side) {
         ci->sig = tal(ci, ecdsa_signature);
-        lnchn_sign_theircommit(lnchn, ci->tx, ci->sig);
     }
 
     /* Switch to the new commitment. */
@@ -608,11 +621,10 @@ void internal_update_commit(struct LNchannel *lnchn, enum side side)
 
 }
 
+
 bool lnchn_do_commit(struct LNchannel *lnchn)
 {
-    struct commit_info *ci;
-    bool to_us_only;
-    const char *errmsg;
+
     struct htlc **add_t, **rem_t, **other_t, **htlcs_update;
     static const enum htlc_state changed_states[] = 
         { SENT_RESOLVE_HTLC, SENT_ADD_COMMIT };/*del, add*/
@@ -674,6 +686,18 @@ bool lnchn_do_commit(struct LNchannel *lnchn)
     }
 
     internal_update_commit(lnchn, REMOTE);
+
+    if (lnchn->remote.commit->sig) {
+        struct commit_info *ci = lnchn->remote.commit;
+        log_debug(lnchn->log, "Signing tx %"PRIu64, ci->commit_num);
+        log_add_struct(lnchn->log, " for %s",
+            struct channel_state, ci->cstate);
+        log_add_struct(lnchn->log, " (txid %s)",
+            struct sha256_double, &ci->txid);
+
+        lnchn_sign_theircommit(lnchn, ci->tx, ci->sig);
+    }
+
     //set outsourcing
     lnchn->rt.outsourcing_f = on_commit_outsourcing_finish;
     internal_outsourcing_for_commit(lnchn, LOCAL);
@@ -692,18 +716,30 @@ bool lnchn_notify_commit(struct LNchannel *lnchn,
     struct htlc **htlcs_update;
     struct commit_info *ci;
     struct sha256 preimage;
-    const tal_t *tmpctx = tal_tmpctx(lnchn);
+    const tal_t *tmpctx;
     static const enum htlc_state changed_states[] = 
         { RCVD_REMOVE_COMMIT, RCVD_ADD_COMMIT };/*del, add*/
     size_t applied_t;
 
-    if (lnchn->remote.commit && commit_num !=
-        lnchn->remote.commit->commit_num + 1) {
+    if (lnchn->remote.commit) {
 
-        log_broken(lnchn->log, "Wrong commit number recv: %"PRIu64, commit_num);
-        tal_free(tmpctx);
+        if (commit_num >
+            lnchn->remote.commit->commit_num + 1) {
+            log_broken(lnchn->log, "Wrong commit number recv: %"PRIu64, commit_num);
+            return false;
+        }
+        else if (lnchn->remote.commit->commit_num == commit_num) {
+            //duplicate committing, just omit ...
+            //TODO: should check the imcoming sig is identify to the persistented one?
+            return true;
+        }
+    }
+    else if (commit_num != 0) {
+        log_broken(lnchn->log, "Wrong commit number for first commit: %"PRIu64, commit_num);
         return false;
     }
+
+    tmpctx = tal_tmpctx(lnchn);
 
     /* the most important step ... */
     if (!verify_commit_tasks(tmpctx, lnchn, htlc_entry, num_htlc_entry, &htlcs_update)) {
@@ -718,8 +754,16 @@ bool lnchn_notify_commit(struct LNchannel *lnchn,
         return false;
     }
 
-    internal_update_commit(lnchn, REMOTE);
-    ci = lnchn->remote.commit;
+    internal_update_commit(lnchn, LOCAL);
+    ci = lnchn->local.commit;
+
+    if (ci->sig) {
+        if (!sig) {
+            log_broken(lnchn->log, "LOCAL Tx require signature but message not include one");
+            return false;
+        }
+        *ci->sig = *sig;
+    }
 
     if (ci->sig && !check_tx_sig(ci->tx, 0,
         NULL,
@@ -732,7 +776,9 @@ bool lnchn_notify_commit(struct LNchannel *lnchn,
         return false;
     }
 
-    internal_update_commit(lnchn, LOCAL);
+    complete_local_tx(lnchn);
+
+    internal_update_commit(lnchn, REMOTE);
     lnchn_get_revocation_preimage(lnchn, lnchn->local.commit->commit_num - 1,
         &preimage);
 
