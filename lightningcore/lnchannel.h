@@ -113,7 +113,8 @@ bool lnchn_notify_anchor(struct LNchannel *lnchn, const struct pubkey *chnid,
 
 bool lnchn_notify_commit(struct LNchannel *lnchn, 
     u64 commit_num,
-    ecdsa_signature *sig,
+    const ecdsa_signature *sig,
+    const struct sha256 *next_revocation,
     u32 num_htlc_entry,
     const struct msg_htlc_entry *htlc_entry
 );

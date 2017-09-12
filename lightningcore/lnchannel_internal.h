@@ -81,6 +81,8 @@ struct LNChannel_rt
 
     struct htlc **changed_htlc_cache;
 
+    struct feechange *feechanges[2];/*LOCAL, REMOTE*/
+
     u8* temp_errormsg;
 };
 
@@ -177,8 +179,6 @@ struct LNchannel {
 
 	/* All HTLCs. */
 	struct htlc_map htlcs;
-
-	//struct feechange *feechanges[2];
 
 	/* What happened. */
 	struct log *log;

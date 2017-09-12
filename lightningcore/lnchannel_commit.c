@@ -207,15 +207,20 @@ static size_t applyhtlcchanges(struct LNchannel *lnchn,
     return cnt;
 }
 
-/* the only thing should do is just dump feechange data to db*/
 static void applyfeechange(struct LNchannel *lnchn, enum side side) {
 
-    struct feechange f;
+    struct feechange **fside = lnchn->rt.feechanges + side;
+    struct feechange *f;
     struct LNChannel_visible_state *state = side == LOCAL ? &lnchn->local : &lnchn->remote;
-    
+
+    if (*fside)tal_free(*fside);
+    *fside = NULL;
+
     if (!state->commit) {
         return;//nothing to do
     }
+    *fside = tal(lnchn, struct feechange);
+    f = *fside;
 
     if (state->commit->cstate->fee_rate != state->staging_cstate->fee_rate) {
         log_debug(lnchn->log,
@@ -224,11 +229,9 @@ static void applyfeechange(struct LNchannel *lnchn, enum side side) {
             state->staging_cstate->fee_rate
         );
 
-        f.commit_num = state->commit->commit_num;
-        f.fee_rate = state->staging_cstate->fee_rate;
-        f.side = side;
-
-        db_new_feechange(lnchn, &f);
+        f->commit_num = state->commit->commit_num;
+        f->fee_rate = state->staging_cstate->fee_rate;
+        f->side = side;        
     }
 
 }
@@ -477,6 +480,7 @@ static send_commit_msg(const tal_t *ctx, struct LNchannel *lnchn) {
     lite_msg_commit_purpose(lnchn->dstate->message_svr, 
         lnchn->remote.commit->commit_num,
         lnchn->remote.commit->sig,
+        &lnchn->remote.next_revocation_hash,
         tal_count(msgs), msgs);
 
 }
@@ -493,20 +497,6 @@ void internal_commitphase_retry_msg(struct LNchannel *lnchn)
     }
 
     tal_free(tmpctx);
-}
-
-static bool has_new_feechange_instate_side(const struct channel_state *stage_state,
-    const struct channel_state *commit_state)
-{
-    return stage_state->fee_rate != commit_state->fee_rate;
-}
-
-static bool has_new_feechange_instate(struct LNchannel *lnchn, enum side side)
-{
-    return side == LOCAL ? has_new_feechange_instate_side(lnchn->local.staging_cstate,
-            lnchn->local.commit->cstate) : 
-        has_new_feechange_instate_side(lnchn->remote.staging_cstate,
-            lnchn->remote.commit->cstate);
 }
 
 static void add_their_commit(struct LNchannel *lnchn,
@@ -531,6 +521,8 @@ inline static void update_htlc_chain(struct LNchannel *lnchn, struct htlc **chan
 static void on_commit_outsourcing_finish(struct LNchannel *lnchn, enum outsourcing_result ret, u64 num)
 {
     struct commit_info *ci = lnchn->remote.commit;
+    bool   remote_only = !lnchn->local.commit ||
+        lnchn->remote.commit->commit_num > lnchn->local.commit->commit_num;
 
     //outsourcing is done and we can deliver commit message
     if (ret != OUTSOURCING_OK) {
@@ -539,24 +531,28 @@ static void on_commit_outsourcing_finish(struct LNchannel *lnchn, enum outsourci
         return;
     }
 
-    //first we update channel state to manager as final state
-    lite_update_channel(lnchn->dstate->channels, lnchn);
-
     db_start_transaction(lnchn);
 
     db_new_commit_info(lnchn, REMOTE);
-    applyfeechange(lnchn, REMOTE);
+    if(lnchn->rt.feechanges[REMOTE])
+        db_new_feechange(lnchn, lnchn->rt.feechanges[REMOTE]);    
+
+    if (!remote_only) {
+        db_new_commit_info(lnchn, LOCAL);
+        if(lnchn->rt.feechanges[LOCAL])
+            db_new_feechange(lnchn, lnchn->rt.feechanges[LOCAL]);
+    }
 
     /* We don't need to remember their commit if we don't give sig. */
     if (ci->sig)
         add_their_commit(lnchn, &ci->txid, ci->commit_num);
 
-    internal_set_lnchn_state(lnchn, STATE_NORMAL_COMMITTING, __func__, true);
+    internal_set_lnchn_state(lnchn, remote_only ?
+        STATE_NORMAL_COMMITTING : STATE_NORMAL_COMMITTING_RECV, __func__, true);
 
-
-    //we should have cached a changed list for htlc
-    assert(lnchn->rt.changed_htlc_cache);
-    db_update_htlcs(lnchn, lnchn->rt.changed_htlc_cache);
+    /* "feechange only" commit will have no changed htlc */
+    if(lnchn->rt.changed_htlc_cache)
+        db_update_htlcs(lnchn, lnchn->rt.changed_htlc_cache);
 
     if (db_commit_transaction(lnchn) != NULL) {
         log_broken(lnchn->log, "db fail at %s", __func__);
@@ -624,12 +620,9 @@ void internal_update_commit(struct LNchannel *lnchn, enum side side)
 
 bool lnchn_do_commit(struct LNchannel *lnchn)
 {
-
     struct htlc **add_t, **rem_t, **other_t, **htlcs_update;
     static const enum htlc_state changed_states[] = 
         { SENT_RESOLVE_HTLC, SENT_ADD_COMMIT };/*del, add*/
-    bool   feechanged = has_new_feechange_instate(lnchn, REMOTE)
-        || has_new_feechange_instate(lnchn, LOCAL);
     size_t applied_t;
     const tal_t *tmpctx = tal_tmpctx(lnchn);
 
@@ -638,6 +631,9 @@ bool lnchn_do_commit(struct LNchannel *lnchn)
         tal_free(lnchn->rt.changed_htlc_cache);
         lnchn->rt.changed_htlc_cache = NULL;
     }
+
+    /* handle feechange */
+    applyfeechange(lnchn, REMOTE);
 
     other_t = tal_arr(lnchn, struct htlc*, htlc_map_count(&lnchn->htlcs));
 
@@ -667,7 +663,7 @@ bool lnchn_do_commit(struct LNchannel *lnchn)
 
 //        fill_htlc_entry(msgs, rem_t, tal_count(rem_t), false);
     }
-    else if(!feechanged){
+    else if(!lnchn->rt.feechanges[REMOTE]){
         //so we have nothing to communitacte with REMOTE, just
         //dump the new status and quit ...
         if (tal_count(other_t)) {
@@ -698,6 +694,8 @@ bool lnchn_do_commit(struct LNchannel *lnchn)
         lnchn_sign_theircommit(lnchn, ci->tx, ci->sig);
     }
 
+    //channel must be updated before outsourcing!
+    lite_update_channel(lnchn->dstate->channels, lnchn);
     //set outsourcing
     lnchn->rt.outsourcing_f = on_commit_outsourcing_finish;
     internal_outsourcing_for_commit(lnchn, LOCAL);
@@ -709,7 +707,8 @@ bool lnchn_do_commit(struct LNchannel *lnchn)
 
 bool lnchn_notify_commit(struct LNchannel *lnchn,
     u64 commit_num,
-    ecdsa_signature *sig,
+    const ecdsa_signature *sig,
+    const struct sha256 *next_revocation,
     u32 num_htlc_entry,
     const struct msg_htlc_entry *htlc_entry
 ) {
@@ -741,14 +740,34 @@ bool lnchn_notify_commit(struct LNchannel *lnchn,
 
     tmpctx = tal_tmpctx(lnchn);
 
-    /* the most important step ... */
-    if (!verify_commit_tasks(tmpctx, lnchn, htlc_entry, num_htlc_entry, &htlcs_update)) {
-        return false;
+    /* init, clear caches ...*/
+    if (lnchn->rt.changed_htlc_cache) {
+        tal_free(lnchn->rt.changed_htlc_cache);
+        lnchn->rt.changed_htlc_cache = NULL;
     }
 
-    applied_t = applyhtlcchanges(lnchn, changed_states, htlcs_update);
-    if (applied_t < tal_count(htlcs_update)) {
-        log_broken(lnchn->log, "Not all htlc entry can be applied, we fail at %"PRIu64,
+    /* also, resolve feechanges first: both side */
+    applyfeechange(lnchn, REMOTE);
+    applyfeechange(lnchn, LOCAL);
+
+    /* the most important step ... */
+    if (num_htlc_entry > 0) {
+        if (!verify_commit_tasks(tmpctx, lnchn, htlc_entry, num_htlc_entry, &htlcs_update)) {
+            return false;
+        }
+
+        applied_t = applyhtlcchanges(lnchn, changed_states, htlcs_update);
+        if (applied_t < tal_count(htlcs_update)) {
+            log_broken(lnchn->log, "Not all htlc entry can be applied, we fail at %"PRIu64,
+                commit_num);
+            tal_free(tmpctx);
+            return false;
+        }
+    }
+    else if (!lnchn->rt.feechanges[LOCAL] &&
+        !lnchn->rt.feechanges[REMOTE]) {
+
+        log_broken(lnchn->log, "There is no any changes for commit %"PRIu64,
             commit_num);
         tal_free(tmpctx);
         return false;
@@ -782,6 +801,7 @@ bool lnchn_notify_commit(struct LNchannel *lnchn,
     lnchn_get_revocation_preimage(lnchn, lnchn->local.commit->commit_num - 1,
         &preimage);
 
+    lite_update_channel(lnchn->dstate->channels, lnchn);
     //set outsourcing
     lnchn->rt.outsourcing_f = on_commit_outsourcing_finish;
     internal_outsourcing_for_commit(lnchn, REMOTE);

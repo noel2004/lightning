@@ -1114,6 +1114,7 @@ struct LNchannel *new_LNChannel(struct lightningd_state *dstate,
     lnchn->rt.changed_htlc_cache = NULL;
     lnchn->rt.their_last_commit = NULL;
     lnchn->rt.temp_errormsg = NULL;
+    memset(lnchn->rt.feechanges, 0, sizeof(lnchn->rt.feechanges));
 
 	tal_add_destructor(lnchn, destroy_lnchn);
 	return lnchn;

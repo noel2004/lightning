@@ -46,9 +46,20 @@ struct msg_htlc_entry
 
 void    lite_msg_commit_purpose(struct LNmessage *msg,
     unsigned long long commit_num,
-    struct ecdsa_signature_ *sig,
+    const struct ecdsa_signature_ *sig,
+    const struct sha256 *next_revocation,
     unsigned int num_htlc_entry,
     const struct msg_htlc_entry *htlc_entry
+);
+
+void    lite_msg_commit_resp(struct LNmessage *msg,
+    const struct ecdsa_signature_ *sig,
+    const struct sha256 *next_revocation,
+    const struct preimage *revocation_image
+);
+
+void    lite_msg_commit_resp_ack(struct LNmessage *msg,
+    const struct preimage *revocation_image
 );
 
 #endif
