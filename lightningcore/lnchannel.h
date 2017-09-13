@@ -123,15 +123,15 @@ bool lnchn_notify_commit(struct LNchannel *lnchn,
 bool lnchn_notify_remote_commit(struct LNchannel *lnchn,
     u64 commit_num,
     const ecdsa_signature *sig,
-    const struct preimage *revocation_image
+    const struct sha256 *revocation_image
 );
 
 bool lnchn_notify_revo_commit(struct LNchannel *lnchn,
     u64 commit_num,
-    const struct preimage *revocation_image
+    const struct sha256 *revocation_image
 );
 
-bool lnchn_notify_commit_done(struct LNchannel *lnchn, u64 commit_num);
+bool lnchn_notify_commit_done(struct LNchannel *lnchn);
 
 /* Peer has an issue, breakdown and fail. */
 void lnchn_fail(struct LNchannel *chn, const char *caller);

@@ -32,24 +32,6 @@
 #include <stdlib.h>
 #include <sys/types.h>
 
-/* Sign and local commit tx */
-static void sign_commit_tx(struct LNchannel *lnchn)
-{
-	ecdsa_signature sig;
-
-	/* Can't be signed already, and can't have scriptsig! */
-	assert(!lnchn->local.commit->tx->input[0].script);
-	assert(!lnchn->local.commit->tx->input[0].witness);
-
-	lnchn_sign_ourcommit(lnchn, lnchn->local.commit->tx, &sig);
-
-	lnchn->local.commit->tx->input[0].witness
-		= bitcoin_witness_2of2(lnchn->local.commit->tx->input,
-				       lnchn->local.commit->sig,
-				       &sig,
-				       &lnchn->remote.commitkey,
-				       &lnchn->local.commitkey);
-}
 
 static u64 commit_tx_fee(const struct bitcoin_tx *commit, u64 anchor_satoshis)
 {
@@ -62,16 +44,6 @@ static u64 commit_tx_fee(const struct bitcoin_tx *commit, u64 anchor_satoshis)
 	return anchor_satoshis - total;
 }
 
-static u64 lnchn_commitsigs_received(struct LNchannel *lnchn)
-{
-	return lnchn->their_commitsigs;
-}
-
-static u64 lnchn_revocations_received(struct LNchannel *lnchn)
-{
-	/* How many preimages we've received. */
-	return lnchn->their_preimages.min_index;
-}
 
 
 /* cleanning dead htlcs, mark expiry htlcs and some other cleannings ...*/
@@ -354,8 +326,7 @@ static bool check_adding_htlc_compitable(const struct msg_htlc_add* incoming, co
 }
 
 /* update ref_htlc in tasks, and verify each one (also add and apply to staged cstate)*/
-static bool verify_commit_tasks(const tal_t *ctx, 
-    struct LNchannel *lnchn, 
+static bool verify_commit_tasks(struct LNchannel *lnchn, 
     const struct msg_htlc_entry *msgs,
     size_t n,
     struct htlc ***tasks) {
@@ -364,7 +335,7 @@ static bool verify_commit_tasks(const tal_t *ctx,
     const struct msg_htlc_entry *t_beg, *t_end;
     t_end = msgs + n;
 
-    *tasks = tal_arr(ctx, struct htlc *, n);
+    *tasks = tal_arr(lnchn, struct htlc *, n);
     task_h = *tasks;
 
     for (t_beg = msgs; t_beg != t_end; ++t_beg, ++task_h) {
@@ -401,8 +372,10 @@ static bool verify_commit_tasks(const tal_t *ctx,
         else {//removed
             
             if (!h) { //fail! no corresponding htlc!
+                const tal_t *tmpctx = tal_tmpctx(lnchn);
                 log_broken(lnchn->log, "receive non-exist htlc notify for hash %s",
-                    tal_hexstr(ctx, &h->rhash, sizeof(h->rhash)));
+                    tal_hexstr(tmpctx, &h->rhash, sizeof(h->rhash)));
+                tal_free(tmpctx);
                 return false;
             }else if (!htlc_is_fixed(h)) {
                 log_broken_struct(lnchn->log, "Not a fixed htlc for removing: %s",
@@ -438,7 +411,7 @@ static bool verify_commit_tasks(const tal_t *ctx,
 }
 
 
-static send_commit_msg(const tal_t *ctx, struct LNchannel *lnchn) {
+static void send_commit_msg(struct LNchannel *lnchn) {
 
     //reconstruct changed htlcs and messages
     struct msg_htlc_entry* msgs, *msg_h;
@@ -465,7 +438,7 @@ static send_commit_msg(const tal_t *ctx, struct LNchannel *lnchn) {
     }
 
     n = tal_count(lnchn->rt.changed_htlc_cache);
-    msgs = tal_arr(ctx, struct msg_htlc_entry, n);
+    msgs = tal_arr(lnchn, struct msg_htlc_entry, n);
     msg_h = msgs;
 
     for (i = 0; i < n; ++i) {
@@ -483,30 +456,50 @@ static send_commit_msg(const tal_t *ctx, struct LNchannel *lnchn) {
         &lnchn->remote.next_revocation_hash,
         tal_count(msgs), msgs);
 
+    tal_free(msgs);
 }
 
-static send_commit_recv_msg(const tal_t *ctx, struct LNchannel *lnchn) {
+static void send_commit_recv_msg(struct LNchannel *lnchn) {
 
-    struct preimage preimage;
+    struct sha256 preimage;
 
     lnchn_get_revocation_preimage(lnchn, lnchn->local.commit->commit_num - 1,
         &preimage);
 
+    lite_msg_commit_resp(lnchn->dstate->message_svr,
+        lnchn->remote.commit->commit_num,
+        lnchn->remote.commit->sig,
+        &preimage);
+
+}
+
+static void send_commit_resp_ack_msg(struct LNchannel *lnchn) {
+
+    struct sha256 preimage;
+
+    lnchn_get_revocation_preimage(lnchn, lnchn->local.commit->commit_num - 1,
+        &preimage);
+
+    lite_msg_commit_resp_ack(lnchn->dstate->message_svr,
+        lnchn->remote.commit->commit_num,
+        &preimage);
 }
 
 void internal_commitphase_retry_msg(struct LNchannel *lnchn)
 {
-    const tal_t *tmpctx = tal_tmpctx(lnchn);
-
     switch (lnchn->state) {
     case STATE_NORMAL_COMMITTING:
-        send_commit_msg(tmpctx, lnchn); break;
+        if (!lnchn->local.commit ||
+            lnchn->local.commit->commit_num !=
+            lnchn->remote.commit->commit_num)
+            send_commit_msg(lnchn);
+        else
+            send_commit_resp_ack_msg(lnchn);
+        break;
     case STATE_NORMAL_COMMITTING_RECV:
-        send_commit_recv_msg(tmpctx, lnchn); break;
+        send_commit_recv_msg(lnchn); break;
         break;
     }
-
-    tal_free(tmpctx);
 }
 
 static void add_their_commit(struct LNchannel *lnchn,
@@ -574,7 +567,10 @@ static void on_commit_outsourcing_finish(struct LNchannel *lnchn, enum outsourci
     //here we can notify htlc updating
     update_htlc_chain(lnchn, lnchn->rt.changed_htlc_cache);
 
-    internal_commitphase_retry_msg(lnchn);
+    if (lnchn->state == STATE_NORMAL_COMMITTING)
+        send_commit_msg(lnchn);
+    else
+        send_commit_recv_msg(lnchn);
 }
 
 /* 
@@ -583,7 +579,7 @@ static void on_commit_outsourcing_finish(struct LNchannel *lnchn, enum outsourci
 */
 static bool update_commit(struct LNchannel *lnchn, 
     enum side side, const struct sha256 *next_revocation,
-    ecdsa_signature *remote_sig)
+    const ecdsa_signature *remote_sig)
 {
     struct commit_info *ci;
     bool only_other_side;
@@ -668,7 +664,7 @@ static bool update_commit(struct LNchannel *lnchn,
 bool lnchn_do_commit(struct LNchannel *lnchn, 
     const struct sha256 *next_revocation)
 {
-    struct htlc **add_t, **rem_t, **other_t, **htlcs_update;
+    struct htlc **add_t, **rem_t, **other_t;
     static const enum htlc_state changed_states[] = 
         { SENT_RESOLVE_HTLC, SENT_ADD_COMMIT };/*del, add*/
     size_t applied_t;
@@ -750,7 +746,6 @@ bool lnchn_notify_commit(struct LNchannel *lnchn,
 ) {
     struct htlc **htlcs_update;
     struct sha256 next_hash;
-    const tal_t *tmpctx;
     static const enum htlc_state changed_states[] = 
         { RCVD_REMOVE_COMMIT, RCVD_ADD_COMMIT };/*del, add*/
     size_t applied_t;
@@ -760,7 +755,7 @@ bool lnchn_notify_commit(struct LNchannel *lnchn,
         if (lnchn->remote.commit->commit_num == commit_num) {
             //duplicate committing, just omit ...
             //TODO: should check the imcoming sig is identify to the persistented one?
-            internal_commitphase_retry_msg(lnchn);
+            send_commit_recv_msg(lnchn);
             return true;
         }else if (commit_num !=
             lnchn->remote.commit->commit_num + 1) {
@@ -787,11 +782,9 @@ bool lnchn_notify_commit(struct LNchannel *lnchn,
     applyfeechange(lnchn, LOCAL);
 
     /* the most important step ... */
-    tmpctx = tal_tmpctx(lnchn);
     if (num_htlc_entry > 0) {
-        if (!verify_commit_tasks(tmpctx, lnchn, htlc_entry, num_htlc_entry, &htlcs_update)) {
+        if (!verify_commit_tasks(lnchn, htlc_entry, num_htlc_entry, &htlcs_update)) {
             internal_lnchn_fail_on_notify(lnchn, "Invalid htlc entries");
-            tal_free(tmpctx);
             return false;
         }
 
@@ -799,26 +792,24 @@ bool lnchn_notify_commit(struct LNchannel *lnchn,
         if (applied_t < tal_count(htlcs_update)) {
             internal_lnchn_fail_on_notify(lnchn, 
                 "Invalid htlc entries: Not all htlc entries can be applied");
-            tal_free(tmpctx);
             return false;
         }
+
+        lnchn->rt.changed_htlc_cache = htlcs_update;
     }
     else if (!lnchn->rt.feechanges[LOCAL] &&
         !lnchn->rt.feechanges[REMOTE]) {
 
         internal_lnchn_fail_on_notify(lnchn, "There is no any changes for commit %"PRIu64,
             commit_num);
-        tal_free(tmpctx);
         return false;
     }
 
-    tal_free(tmpctx);
-
     lnchn_get_revocation_hash(lnchn, lnchn->local.commit->commit_num + 1,
         &next_hash);
-    if (!internal_update_commit(lnchn, LOCAL, &next_hash, sig))return false;
+    if (!update_commit(lnchn, LOCAL, &next_hash, sig))return false;
 
-    if (!internal_update_commit(lnchn, REMOTE, next_revocation, NULL))return false;
+    if (!update_commit(lnchn, REMOTE, next_revocation, NULL))return false;
 
     lite_update_channel(lnchn->dstate->channels, lnchn);
     //set outsourcing
@@ -827,10 +818,35 @@ bool lnchn_notify_commit(struct LNchannel *lnchn,
     return true;
 }
 
+static void on_commit_revoke_outsourcing_finish(struct LNchannel *lnchn, 
+    enum outsourcing_result ret, u64 num) {
+
+    //outsourcing is done and we can deliver commit message
+    if (ret != OUTSOURCING_OK) {
+        log_broken(lnchn->log, "outsourcing service fail for %d", ret);
+        internal_lnchn_temp_breakdown(lnchn, "outsourcing failure");
+        return;
+    }
+
+    db_start_transaction(lnchn);
+
+    db_new_commit_info(lnchn, LOCAL);
+    if (lnchn->rt.feechanges[LOCAL])
+        db_new_feechange(lnchn, lnchn->rt.feechanges[LOCAL]);
+
+    db_save_shachain(lnchn);
+
+    if (db_commit_transaction(lnchn) != NULL) {
+        internal_lnchn_temp_breakdown(lnchn, "db fail");
+    }
+
+    send_commit_resp_ack_msg(lnchn);
+}
+
 bool lnchn_notify_remote_commit(struct LNchannel *lnchn,
     u64 commit_num,
     const ecdsa_signature *sig,
-    const struct preimage *revocation_image
+    const struct sha256 *revocation_image
 ) {
     struct sha256 next_hash;
 
@@ -842,12 +858,13 @@ bool lnchn_notify_remote_commit(struct LNchannel *lnchn,
         internal_lnchn_fail_on_notify(lnchn, "Invalid commit num %"PRIu64", current is %"PRIu64,
             commit_num,
             lnchn->remote.commit->commit_num);
+        return false;
 
     }
     else if (lnchn->remote.commit->commit_num ==
         lnchn->local.commit->commit_num) {
         //duplicated message
-        internal_commitphase_retry_msg(lnchn);
+        send_commit_resp_ack_msg(lnchn);
         return true;
     }
 
@@ -867,46 +884,115 @@ bool lnchn_notify_remote_commit(struct LNchannel *lnchn,
 
     lnchn_get_revocation_hash(lnchn, lnchn->local.commit->commit_num + 1,
         &next_hash);
-    if (!internal_update_commit(lnchn, LOCAL, &next_hash, sig))return false;
+    if (!update_commit(lnchn, LOCAL, &next_hash, sig))return false;
+
+    lite_update_channel(lnchn->dstate->channels, lnchn);
+    internal_outsourcing_for_committing(lnchn, LOCAL, on_commit_revoke_outsourcing_finish);
+    return true;
+}
+
+static void on_commit_final_outsourcing_finish(struct LNchannel *lnchn, 
+    enum outsourcing_result ret, u64 num) {
+
+    //outsourcing is done and we can deliver commit message
+    if (ret != OUTSOURCING_OK) {
+        log_broken(lnchn->log, "outsourcing service fail for %d", ret);
+        internal_lnchn_temp_breakdown(lnchn, "outsourcing failure");
+        return;
+    }
+
+    log_debug(lnchn->log, "recv commit %"PRIu64" finish", lnchn->local.commit->commit_num);
+    log_add_struct(lnchn->log, " current channel is %s", struct LNchannel, lnchn);
+
+    lite_msg_commit_final(lnchn->dstate->message_svr);
+}
+
+bool lnchn_notify_revo_commit(struct LNchannel *lnchn,
+    u64 commit_num,
+    const struct sha256 *revocation_image
+) {
+
+    if(lnchn->remote.commit->commit_num != commit_num){
+        internal_lnchn_fail_on_notify(lnchn, "Invalid recv commit num %"PRIu64", current is %"PRIu64,
+            commit_num,
+        lnchn->remote.commit->commit_num);
+        return false;
+    }
+    else if (lnchn->state == STATE_NORMAL) {
+        //duplicated message
+        lite_msg_commit_final(lnchn->dstate->message_svr);
+        return true;
+    }else if (lnchn->state != STATE_NORMAL_COMMITTING_RECV) {
+        internal_lnchn_fail_on_notify(lnchn, "channel is not in committing recv state");
+        return false;
+    }
+
+    //for commit 0, image is NULL
+    if (commit_num != 0) {
+        assert(revocation_image);
+
+        if (!shachain_add_hash(&lnchn->their_preimages,
+            0xFFFFFFFFFFFFFFFFL
+            - (lnchn->remote.commit->commit_num - 1),
+            revocation_image)) {
+            internal_lnchn_fail_on_notify(lnchn, "Wrong image");
+            return false;
+        }
+    }
 
     //here we persist channel before outsourcing because:
     //1. the outsourcing task for this step is small and is not so harm to 
     //   be duplicated for several times
     //2. this make work process more smoothly
-
     db_start_transaction(lnchn);
 
-    db_new_commit_info(lnchn, LOCAL);
-    if (lnchn->rt.feechanges[LOCAL])
-        db_new_feechange(lnchn, lnchn->rt.feechanges[LOCAL]);
-
     db_save_shachain(lnchn);
+
+    internal_set_lnchn_state(lnchn, STATE_NORMAL, __func__, true);
 
     if (db_commit_transaction(lnchn) != NULL) {
         internal_lnchn_temp_breakdown(lnchn, "db fail");
         //** we still consider notify is succeed (so
         //** we do not repsonse remote a error message)
         //** and just try do recovering locally
+        return true;
     }
 
     lite_update_channel(lnchn->dstate->channels, lnchn);
-    internal_outsourcing_for_committing(lnchn, LOCAL, on_commit_outsourcing_finish);
+    internal_outsourcing_for_committing(lnchn, REMOTE, on_commit_final_outsourcing_finish);
+
     return true;
 }
 
-bool lnchn_notify_revo_commit(struct LNchannel *lnchn,
-    u64 commit_num,
-    const struct preimage *revocation_image
-) {
+bool lnchn_notify_commit_done(struct LNchannel *lnchn) {
 
-    if (lnchn->state != STATE_NORMAL_COMMITTING_RECV) {
+    if(!lnchn->local.commit ||
+        lnchn->local.commit->commit_num != 
+        lnchn->remote.commit->commit_num){
+        internal_lnchn_fail_on_notify(lnchn, "Local commit is not finished yet");
+        return false;
+    }
+    else if (lnchn->state == STATE_NORMAL) {
+        //duplicated message
+        return true;
+    }else if (lnchn->state != STATE_NORMAL_COMMITTING) {
+        internal_lnchn_fail_on_notify(lnchn, "channel is not in committing state");
         return false;
     }
 
-    return false;
-}
+    //finally done
+    db_start_transaction(lnchn);
+    internal_set_lnchn_state(lnchn, STATE_NORMAL, __func__, true);
 
-bool lnchn_notify_commit_done(struct LNchannel *lnchn, u64 commit_num) {
-    return false;
+    if (db_commit_transaction(lnchn) != NULL) {
+        internal_lnchn_temp_breakdown(lnchn, "db fail");
+        return true;
+    }
+
+    lite_update_channel(lnchn->dstate->channels, lnchn);
+
+    log_debug(lnchn->log, "commit %"PRIu64" finish", lnchn->local.commit->commit_num);
+    log_add_struct(lnchn->log, " current channel is %s", struct LNchannel, lnchn);
+    return true;
 }
 
