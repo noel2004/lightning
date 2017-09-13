@@ -536,8 +536,8 @@ static void outsourcing_callback_helper(enum outsourcing_result ret, void *cbdat
 static void* outsourcing_invoke_helper(struct LNchannel *chn)
 {
     struct watch_task *t = tal(chn, struct watch_task);
-    assert(chn->rt.outsourcing_f);
-    if (chn->rt.outsourcing_f == NULL) {
+    assert(chn->rt.prev_call);
+    if (chn->rt.prev_call == NULL) {
         log_broken(chn->log, 
             "outsourcing is called without corresponding callback");
         tal_free(t);
@@ -546,11 +546,9 @@ static void* outsourcing_invoke_helper(struct LNchannel *chn)
 
     chn->rt.outsourcing_counter++;
     chn->rt.outsourcing_lock = true;
-    t->callback = chn->rt.outsourcing_f;
+    t->callback = chn->rt.prev_call;
     t->chn = chn;
     t->counter = chn->rt.outsourcing_counter;
-    /* callback is clear once invoked*/
-    chn->rt.outsourcing_f = NULL;
 
     return t;
 }
@@ -565,7 +563,8 @@ static void outsourcing_impl(struct LNchannel *chn, bool commit_task[2] /*local,
     struct lnwatch_task* tasks_end = tasks;
     struct commit_info* tmp = chn->rt.their_last_commit;
 
-    if (commit_task[LOCAL]) {
+    /* if we not care about local commit, we can skip it*/
+    if (commit_task[LOCAL] && chn->local.commit->sig) {
         create_tasks_from_commit(tmpctx, chn,
             LOCAL, tasks_end);
         tasks_end++;
@@ -609,16 +608,18 @@ static void outsourcing_impl(struct LNchannel *chn, bool commit_task[2] /*local,
 
 }
 
-void internal_outsourcing_for_committing(struct LNchannel *chn, enum side side)
+void internal_outsourcing_for_committing(struct LNchannel *chn, enum side side, outsourcing_f f)
 {
     bool commit_task[2] = { side == REMOTE, true };
+    chn->rt.prev_call = f;
 
     outsourcing_impl(chn, commit_task, true, false);
 }
 
-void internal_outsourcing_for_commit(struct LNchannel *chn, enum side side)
+void internal_outsourcing_for_commit(struct LNchannel *chn, enum side side, outsourcing_f f)
 {
     bool commit_task[2] = { side == LOCAL, false };
+    chn->rt.prev_call = f;
 
     //for commit-recv side, watch is not need to renew because the revoked task
     //remove its watching automatically

@@ -43,7 +43,8 @@ bool lnchn_add_htlc(struct LNchannel *chn, u64 msatoshi,
 
 bool lnchn_update_htlc(struct LNchannel *lnchn, const struct sha256 *rhash);
 
-bool lnchn_do_commit(struct LNchannel *chn);
+bool lnchn_do_commit(struct LNchannel *chn, 
+    const struct sha256 *next_revocation);
 
 bool lnchn_resolve_htlc(struct LNchannel *lnchn, const struct sha256 *rhash, 
     const struct preimage *r, enum fail_error *error_code);
@@ -118,6 +119,19 @@ bool lnchn_notify_commit(struct LNchannel *lnchn,
     u32 num_htlc_entry,
     const struct msg_htlc_entry *htlc_entry
 );
+
+bool lnchn_notify_remote_commit(struct LNchannel *lnchn,
+    u64 commit_num,
+    const ecdsa_signature *sig,
+    const struct preimage *revocation_image
+);
+
+bool lnchn_notify_revo_commit(struct LNchannel *lnchn,
+    u64 commit_num,
+    const struct preimage *revocation_image
+);
+
+bool lnchn_notify_commit_done(struct LNchannel *lnchn, u64 commit_num);
 
 /* Peer has an issue, breakdown and fail. */
 void lnchn_fail(struct LNchannel *chn, const char *caller);

@@ -145,5 +145,8 @@
     <ClInclude Include="..\..\lightninglite\c\payment.h">
       <Filter>lite_c</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\lightningcore\state_types.h">
+      <Filter>头文件\LNChannel</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

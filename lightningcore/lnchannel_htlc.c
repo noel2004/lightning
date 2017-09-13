@@ -143,7 +143,7 @@ void internal_htlc_update(struct LNchannel *lnchn, struct htlc *h) {
         &h->rhash, htlc_route_has_source(h));
 
     if (!yah) {
-        if (h->state == RCVD_REMOVE_ACK_COMMIT) {
+        if (h->state == RCVD_REMOVE_COMMIT) {
              htlc_changestate(h, h->state, RCVD_DOWNSTREAM_DEAD);
         }
         else {

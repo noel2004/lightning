@@ -112,6 +112,7 @@ void internal_lnchn_fail_on_notify(struct LNchannel *lnchn, const char* msg, ...
     lnchn->notify_fail_reason = tal_vfmt(lnchn, msg, ap);
     va_end(ap);
 
+    log_debug(lnchn->log, "Channel fail on a message: %s", lnchn->notify_fail_reason);
 }
 
 void internal_lnchn_temp_breakdown(struct LNchannel *lnchn, const char* reason)
@@ -1086,7 +1087,6 @@ struct LNchannel *new_LNChannel(struct lightningd_state *dstate,
 	lnchn->onchain.resolved = NULL;
 	lnchn->onchain.htlcs = NULL;
 	lnchn->commit_timer = NULL;
-	lnchn->their_prev_revocation_hash = NULL;
 	lnchn->fake_close = false;
 	lnchn->output_enabled = true;
     lnchn->local.offer_anchor = false;
@@ -1110,7 +1110,7 @@ struct LNchannel *new_LNChannel(struct lightningd_state *dstate,
     /* init runtime */
     lnchn->rt.outsourcing_counter = 0;
     lnchn->rt.outsourcing_lock = false;
-    lnchn->rt.outsourcing_f = NULL;
+    lnchn->rt.prev_call = NULL;
     lnchn->rt.changed_htlc_cache = NULL;
     lnchn->rt.their_last_commit = NULL;
     lnchn->rt.temp_errormsg = NULL;

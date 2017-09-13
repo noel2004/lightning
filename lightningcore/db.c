@@ -632,7 +632,7 @@ static void load_lnchn_htlcs(struct LNchannel *lnchn)
 
         /* Only add "not dead" htlc to channel, so we save many cost and memory while running */
         if (htlc->state == RCVD_DOWNSTREAM_DEAD 
-            || htlc->state == RCVD_REMOVE_COMMIT) {
+            || htlc->state == RCVD_REMOVE_ACK_COMMIT) {
             tal_free(htlc);            
         }
         else {

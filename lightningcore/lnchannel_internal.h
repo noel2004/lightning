@@ -66,6 +66,8 @@ struct LNChannel_visible_state {
 	struct channel_state *staging_cstate;
 };
 
+typedef void(*outsourcing_f)(struct LNchannel *, enum outsourcing_result, u64);
+
 struct LNChannel_rt
 {
     /* last commit which is not revoked yet */
@@ -75,7 +77,7 @@ struct LNChannel_rt
     u64 outsourcing_counter;
 
     /* internal_watch_xxx use this to generate callback */
-    void(*outsourcing_f)(struct LNchannel *, enum outsourcing_result, u64);
+    outsourcing_f prev_call;
 
     bool outsourcing_lock;
 
@@ -216,7 +218,8 @@ struct LNchannel {
 /* Allocate a new commit_info struct. */
 struct commit_info *internal_new_commit_info(const tal_t *ctx, u64 commit_num);
 
-void internal_update_commit(struct LNchannel *lnchn, enum side side);
+//void internal_update_commit(struct LNchannel *lnchn, enum side side, 
+//    const struct sha256 *next_revocation);
 
 /* MUST call after the chn is completly initialized! Freeing removes from map, too */
 struct htlc *internal_new_htlc(struct LNchannel *chn,
@@ -246,9 +249,9 @@ void internal_openphase_retry_msg(struct LNchannel *lnchn);
 
 void internal_commitphase_retry_msg(struct LNchannel *lnchn);
 
-void internal_outsourcing_for_committing(struct LNchannel *chn, enum side side);
+void internal_outsourcing_for_committing(struct LNchannel *chn, enum side side, outsourcing_f f);
 
-void internal_outsourcing_for_commit(struct LNchannel *chn, enum side side);
+void internal_outsourcing_for_commit(struct LNchannel *chn, enum side side, outsourcing_f f);
 
 static bool outputscript_eq(const struct bitcoin_tx_output *out,
     size_t i, const u8 *script)
