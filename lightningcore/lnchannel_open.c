@@ -249,7 +249,8 @@ bool lnchn_notify_open_remote(struct LNchannel *lnchn,
 {
 	struct commit_info *ci;
 
-    if (lnchn->state > STATE_OPEN_WAIT_FOR_OPENPKT) {
+    if (lnchn->state != STATE_INIT ||
+        lnchn->state != STATE_OPEN_WAIT_FOR_OPENPKT) {
         //consider message is duplicated and omit it
         return true;
     }
@@ -330,6 +331,16 @@ bool lnchn_open_local(struct LNchannel *lnchn, const struct pubkey *chnid) {
     send_open_message(lnchn);
     return true;
 
+}
+
+bool lnchn_notify_first_commit(struct LNmessage *msg,
+    const struct sha256 *revocation_hash,
+    const struct ecdsa_signature_ *sig
+) {
+
+
+
+    return false;
 }
 
 bool lnchn_open_anchor(struct LNchannel *lnchn, const struct bitcoin_tx *anchor_tx) {

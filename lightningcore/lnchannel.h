@@ -97,13 +97,17 @@ void lnchn_negotiate_from_remote(struct LNchannel *lnchn);
                                                 the processing one
     COMMITING          COMMITING                both side simply re-send their commit
 */
-void lnchn_restore_commit_state(struct LNchannel *lnchn);
 
 bool lnchn_notify_open_remote(struct LNchannel *lnchn, 
     const struct pubkey *chnid,                /*if replay from remote, this is NULL*/
     const struct LNchannel_config *nego_config,
     const struct sha256 *revocation_hash,      /*first hash*/
     const struct pubkey *remote_key[2] /*commit key and final key*/
+);
+
+bool lnchn_notify_first_commit(struct LNmessage *msg,
+    const struct sha256 *revocation_hash,
+    const struct ecdsa_signature_ *sig
 );
 
 bool lnchn_notify_anchor(struct LNchannel *lnchn, const struct pubkey *chnid,

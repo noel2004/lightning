@@ -588,7 +588,8 @@ static bool update_commit(struct LNchannel *lnchn,
         &lnchn->remote : &lnchn->local;
 
     //now generate commit ...
-    ci = internal_new_commit_info(lnchn, vside->commit->commit_num + 1);
+    ci = internal_new_commit_info(lnchn, vside->commit ?
+        vside->commit->commit_num + 1 : 0);
 
     /* Create new commit info for this commit tx. */
     ci->revocation_hash = lnchn->remote.next_revocation_hash;
@@ -604,7 +605,6 @@ static bool update_commit(struct LNchannel *lnchn,
     /* do signature work and switch commit state ...*/
     if (side == REMOTE) {
         if (ci->sig) {
-            struct commit_info *ci = lnchn->remote.commit;
             log_debug(lnchn->log, "Signing tx %"PRIu64, ci->commit_num);
             log_add_struct(lnchn->log, " for %s",
                 struct channel_state, ci->cstate);
@@ -660,6 +660,12 @@ static bool update_commit(struct LNchannel *lnchn,
     return true;
 }
 
+void internal_lnchn_update_commit(struct LNchannel *lnchn,
+    enum side side, const struct sha256 *next_revocation,
+    const ecdsa_signature *sig) {
+
+    update_commit(lnchn, side, next_revocation, sig);
+}
 
 bool lnchn_do_commit(struct LNchannel *lnchn, 
     const struct sha256 *next_revocation)

@@ -236,6 +236,10 @@ void internal_htlc_fullfill(struct LNchannel *chn, const struct preimage *r, str
 
 void internal_htlc_fail(struct LNchannel *chn, const u8 *fail, size_t len, struct htlc *h);
 
+void internal_lnchn_update_commit(struct LNchannel *lnchn,
+    enum side side, const struct sha256 *next_revocation,
+    const ecdsa_signature *);
+
 void internal_lnchn_breakdown(struct LNchannel *lnchn);
 
 void internal_lnchn_temp_breakdown(struct LNchannel *lnchn, const char* reason);
