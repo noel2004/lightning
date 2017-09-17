@@ -222,19 +222,42 @@ static void send_open_message(struct LNchannel *lnchn)
 
 static void send_anchor_message(struct LNchannel *lnchn)
 {
+    struct sha256 next_hash;
+    ecdsa_signature *sig = NULL;
+    /*yes, we calculate this rev-hash two times: trival overhead*/
+    lnchn_get_revocation_hash(lnchn, 1, &next_hash);
+
     lite_msg_anchor(lnchn->dstate->message_svr, lnchn->id,
-        &lnchn->anchor.txid, lnchn->anchor.index, lnchn->anchor.satoshis);
+        &lnchn->anchor.txid, lnchn->anchor.index, 
+        lnchn->anchor.satoshis, &next_hash);
 }
+
+static void send_first_commit_message(struct LNchannel *lnchn)
+{
+    struct sha256 next_hash;
+    ecdsa_signature *sig = NULL;
+    /*yes, we calculate this rev-hash two times: trival overhead*/
+    lnchn_get_revocation_hash(lnchn, 1, &next_hash);
+    
+    assert(lnchn->remote.commit);
+
+    lite_msg_first_commit(lnchn->dstate->message_svr, lnchn->id,
+       &next_hash, lnchn->remote.commit->sig);
+}
+
+
 
 void internal_openphase_retry_msg(struct LNchannel *lnchn)
 {
     switch (lnchn->state) {
     case STATE_OPEN_WAIT_FOR_OPENPKT:
-    case STATE_OPEN_WAIT_FOR_ANCHORPKT:
         send_open_message(lnchn); break;
+    case STATE_OPEN_WAIT_FOR_CREATEANCHOR:/* local notify, not message*/
+        lite_anchor_pay_notify(lnchn->dstate->payment, lnchn); break;
     case STATE_OPEN_WAIT_FOR_COMMIT_SIGPKT:
         send_anchor_message(lnchn); break;
-
+    case STATE_OPEN_WAIT_FOR_ANCHORPKT:
+        break;
     default://any else states no need a retry msg
         break;
     }
@@ -265,7 +288,7 @@ bool lnchn_notify_open_remote(struct LNchannel *lnchn,
 
     if (lnchn->state == STATE_INIT) {
         assert(chnid != NULL && nego_config != NULL);
-
+        /*accept side*/
         if (!lnchn_first_open(lnchn, chnid, false)) {
             internal_lnchn_fail_on_notify(lnchn, "open failure");
             return false;
@@ -275,6 +298,7 @@ bool lnchn_notify_open_remote(struct LNchannel *lnchn,
         db_create_lnchn(lnchn);
     }
     else {
+        /*invoke side*/
         assert(lnchn->state == STATE_OPEN_WAIT_FOR_OPENPKT 
             && !lnchn->remote.offer_anchor);
         db_start_transaction(lnchn);
@@ -300,7 +324,6 @@ bool lnchn_notify_open_remote(struct LNchannel *lnchn,
 				      &lnchn->local.commitkey,
 				      &lnchn->remote.commitkey);
 
-
     internal_set_lnchn_state(lnchn,  lnchn->state == STATE_INIT ? 
         STATE_OPEN_WAIT_FOR_ANCHORPKT : STATE_OPEN_WAIT_FOR_CREATEANCHOR, 
         __func__, true);
@@ -310,7 +333,8 @@ bool lnchn_notify_open_remote(struct LNchannel *lnchn,
         return false;
     }
         
-    if (lnchn->state == STATE_INIT)send_open_message(lnchn);
+    if (lnchn->state == STATE_OPEN_WAIT_FOR_CREATEANCHOR)
+        lite_anchor_pay_notify(lnchn->dstate->payment, lnchn);
     return true;
 }
 
@@ -333,21 +357,11 @@ bool lnchn_open_local(struct LNchannel *lnchn, const struct pubkey *chnid) {
 
 }
 
-bool lnchn_notify_first_commit(struct LNmessage *msg,
-    const struct sha256 *revocation_hash,
-    const struct ecdsa_signature_ *sig
-) {
-
-
-
-    return false;
-}
-
 bool lnchn_open_anchor(struct LNchannel *lnchn, const struct bitcoin_tx *anchor_tx) {
 
     if (lnchn->state != STATE_OPEN_WAIT_FOR_ANCHORPKT) {
         return false;
-     }
+    }
 
 	//if (lnchn->local.offer_anchor) {
 	//	if (!bitcoin_create_anchor(lnchn)) {
@@ -389,13 +403,9 @@ bool lnchn_open_anchor(struct LNchannel *lnchn, const struct bitcoin_tx *anchor_
     return true;
 }
 
-static void on_first_commit_task(const struct LNchannel* lnchn, enum outsourcing_result ret, void *cbdata)
-{
-
-}
-
 bool lnchn_notify_anchor(struct LNchannel *lnchn, const struct pubkey *chnid,
-    const struct sha256_double *txid, unsigned int index, unsigned long long amount
+    const struct sha256_double *txid, unsigned int index, 
+    unsigned long long amount, const struct sha256 *revocation_hash
 ) {
 
     if (anchor_too_large(amount)) {
@@ -415,6 +425,22 @@ bool lnchn_notify_anchor(struct LNchannel *lnchn, const struct pubkey *chnid,
     }
 
     return true;
+}
+
+bool lnchn_notify_first_commit(struct LNmessage *msg,
+    const struct sha256 *revocation_hash,
+    const struct ecdsa_signature_ *sig
+) {
+
+
+
+    return false;
+}
+
+
+static void on_first_commit_task(const struct LNchannel* lnchn, enum outsourcing_result ret, void *cbdata)
+{
+
 }
 
 static bool open_ouranchor_pkt_in(struct LNchannel *lnchn, const Pkt *pkt)

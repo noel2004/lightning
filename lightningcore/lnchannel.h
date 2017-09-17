@@ -105,16 +105,19 @@ bool lnchn_notify_open_remote(struct LNchannel *lnchn,
     const struct pubkey *remote_key[2] /*commit key and final key*/
 );
 
+bool lnchn_notify_anchor(struct LNchannel *lnchn, const struct pubkey *chnid,
+    const struct sha256_double *txid,
+    unsigned int index,
+    unsigned long long amount,
+    const struct sha256 *revocation_hash
+);
+
 bool lnchn_notify_first_commit(struct LNmessage *msg,
     const struct sha256 *revocation_hash,
     const struct ecdsa_signature_ *sig
 );
 
-bool lnchn_notify_anchor(struct LNchannel *lnchn, const struct pubkey *chnid,
-    const struct sha256_double *txid,
-    unsigned int index,
-    unsigned long long amount
-);
+
 
 bool lnchn_notify_commit(struct LNchannel *lnchn, 
     u64 commit_num,

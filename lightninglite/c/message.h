@@ -16,15 +16,17 @@ void    lite_msg_open(struct LNmessage *msg, const struct pubkey *target,
     const struct sha256 *revocation_hash,
     const struct pubkey *channel_key[2]);
 
-void    lite_msg_first_commit(struct LNmessage *msg,
-    const struct sha256 *revocation_hash,
-    const struct ecdsa_signature_ *sig
-);
-
 void    lite_msg_anchor(struct LNmessage *msg, const struct pubkey *target, 
     const struct sha256_double *txid, 
     unsigned int index, 
-    unsigned long long amount);
+    unsigned long long amount,
+    const struct sha256 *revocation_hash);
+
+void    lite_msg_first_commit(struct LNmessage *msg, 
+    const struct pubkey *target, 
+    const struct sha256 *revocation_hash,
+    const struct ecdsa_signature_ *sig
+);
 
 struct msg_htlc_add
 {

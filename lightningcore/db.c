@@ -1038,13 +1038,24 @@ static void db_load_lnchns(struct lightningd_state *dstate)
 		load_lnchn_closing(lnchn);
 		lnchn->anchor.min_depth = 0;
         if (!state_is_error(lnchn->state)) {
+            /*
+                for accept side, first state persisted is STATE_OPEN_WAIT_FOR_ANCHORPKT,
+                anchor is not persisted on this state yet
+            */
+            if (lnchn->state >= STATE_OPEN_WAIT_FOR_CREATEANCHOR) {
+                load_lnchn_visible_state(lnchn);                
+            }
+            /*
+                for invoke side, state is WAIT_FOR_OPENPKT -> 
+                STATE_OPEN_WAIT_FOR_CREATEANCHOR (manual call lnchn_open_anchor)
+                -> WAIT_FOR_COMMIT_SIGPKT,
+                and first state persisted is STATE_OPEN_WAIT_FOR_CREATEANCHOR
+            */
             if (lnchn->state >= STATE_OPEN_WAIT_FOR_COMMIT_SIGPKT) {
 			    load_lnchn_anchor(lnchn);
             }
-            if (lnchn->state >= STATE_OPEN_WAIT_FOR_ANCHORPKT) {
-                load_lnchn_visible_state(lnchn);                
-            }
-            if (lnchn->state >= STATE_OPEN_WAIT_ANCHORDEPTH_AND_THEIRCOMPLETE) {
+
+            if (lnchn->state >= STATE_OPEN_WAIT_FOR_CREATEANCHOR) {
 			    load_lnchn_shachain(lnchn);
 			    load_lnchn_commit_info(lnchn);
 			    load_lnchn_htlcs(lnchn);
