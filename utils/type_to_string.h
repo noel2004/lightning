@@ -25,7 +25,7 @@ union printable_types {
 	const char *charp_;
 };
 
-#if _MSC_VER <= 1900
+#if _MSC_VER <= 2000
 
 static inline union printable_types to_printable_types_(const void* p) {
     union printable_types ret;

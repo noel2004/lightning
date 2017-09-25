@@ -40,11 +40,18 @@
  *	AUTODATA(names, "Arabella");
  *	AUTODATA(names, "Alex");
  */
+#if (defined _WIN32 || defined __WIN32__) && ! defined __CYGWIN__
+
+#define AUTODATA(name, ptr) \
+    __pragma(section(#name))  \
+	static const __declspec(allocate(#name)) autodata_##name##_ *NEEDED \
+	AUTODATA_VAR_(name, __LINE__) = (ptr);
+#else
 #define AUTODATA(name, ptr) \
 	static const autodata_##name##_ *NEEDED		\
 	__attribute__((section("xautodata_" #name)))	\
 	AUTODATA_VAR_(name, __LINE__) = (ptr);
-
+#endif
 /**
  * autodata_get - get an autodata set
  * @name: the name of the set of autodata

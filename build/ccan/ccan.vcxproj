@@ -1,5 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
       <Configuration>Debug</Configuration>
@@ -22,32 +22,32 @@
     <ProjectGuid>{3FB34916-D1EF-4C70-915A-BC8FB052B403}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>ccan</RootNamespace>
-    <WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0.15063.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v140</PlatformToolset>
+    <PlatformToolset>v141</PlatformToolset>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v140</PlatformToolset>
+    <PlatformToolset>v141</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v140</PlatformToolset>
+    <PlatformToolset>v141</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v140</PlatformToolset>
+    <PlatformToolset>v141</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
@@ -155,6 +155,7 @@
     <Text Include="ReadMe.txt" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\ccan\ccan\autodata\autodata.c" />
     <ClCompile Include="..\..\ccan\ccan\crypto\ripemd160\ripemd160.c" />
     <ClCompile Include="..\..\ccan\ccan\crypto\sha256\sha256.c" />
     <ClCompile Include="..\..\ccan\ccan\crypto\shachain\shachain.c" />
@@ -162,6 +163,8 @@
     <ClCompile Include="..\..\ccan\ccan\err\err.c" />
     <ClCompile Include="..\..\ccan\ccan\htable\htable.c" />
     <ClCompile Include="..\..\ccan\ccan\ilog\ilog.c" />
+    <ClCompile Include="..\..\ccan\ccan\isaac\isaac.c" />
+    <ClCompile Include="..\..\ccan\ccan\isaac\isaac64.c" />
     <ClCompile Include="..\..\ccan\ccan\likely\likely.c" />
     <ClCompile Include="..\..\ccan\ccan\list\list.c" />
     <ClCompile Include="..\..\ccan\ccan\mem\mem.c" />
@@ -170,8 +173,10 @@
     <ClCompile Include="..\..\ccan\ccan\opt\opt.c" />
     <ClCompile Include="..\..\ccan\ccan\opt\parse.c" />
     <ClCompile Include="..\..\ccan\ccan\opt\usage.c" />
+    <ClCompile Include="..\..\ccan\ccan\read_write_all\read_write_all.c" />
     <ClCompile Include="..\..\ccan\ccan\strmap\strmap.c" />
     <ClCompile Include="..\..\ccan\ccan\str\debug.c" />
+    <ClCompile Include="..\..\ccan\ccan\str\hex\hex.c" />
     <ClCompile Include="..\..\ccan\ccan\str\str.c" />
     <ClCompile Include="..\..\ccan\ccan\take\take.c" />
     <ClCompile Include="..\..\ccan\ccan\tal\grab_file\grab_file.c">

@@ -197,17 +197,17 @@ static void lnchn_calculate_close_fee(struct LNchannel *lnchn)
 	assert(!(lnchn->closing.our_fee & 1));
 }
 
-static void start_closing_in_transaction(struct LNchannel *lnchn)
-{
-	assert(!committed_to_htlcs(lnchn));
-
-	set_lnchn_state(lnchn, STATE_MUTUAL_CLOSING, __func__, true);
-
-	lnchn_calculate_close_fee(lnchn);
-	lnchn->closing.closing_order = lnchn->order_counter++;
-	db_update_our_closing(lnchn);
-	queue_pkt_close_signature(lnchn);
-}
+//static void start_closing_in_transaction(struct LNchannel *lnchn)
+//{
+//	assert(!committed_to_htlcs(lnchn));
+//
+//	set_lnchn_state(lnchn, STATE_MUTUAL_CLOSING, __func__, true);
+//
+//	lnchn_calculate_close_fee(lnchn);
+//	lnchn->closing.closing_order = lnchn->order_counter++;
+//	db_update_our_closing(lnchn);
+//	queue_pkt_close_signature(lnchn);
+//}
 
 void lnchn_fail(struct LNchannel *lnchn, const char *caller)
 {
@@ -220,373 +220,134 @@ void lnchn_fail(struct LNchannel *lnchn, const char *caller)
 	internal_lnchn_breakdown(lnchn);
 }
 
-static void lnchn_database_err(struct LNchannel *lnchn)
-{
-	lnchn_fail(lnchn, __func__);
-
-}
 
 
-/* This is the io loop while we're negotiating closing tx. */
-static bool closing_pkt_in(struct LNchannel *lnchn, const Pkt *pkt)
-{
-	const CloseSignature *c = pkt->close_signature;
-	struct bitcoin_tx *close_tx;
-	ecdsa_signature theirsig;
+//
+///* This is the io loop while we're negotiating closing tx. */
+//static bool closing_pkt_in(struct LNchannel *lnchn, const Pkt *pkt)
+//{
+//	const CloseSignature *c = pkt->close_signature;
+//	struct bitcoin_tx *close_tx;
+//	ecdsa_signature theirsig;
+//
+//	assert(lnchn->state == STATE_MUTUAL_CLOSING);
+//
+//	if (pkt->pkt_case != PKT__PKT_CLOSE_SIGNATURE)
+//		return lnchn_received_unexpected_pkt(lnchn, pkt, __func__);
+//
+//	log_info(lnchn->log, "closing_pkt_in: they offered close fee %"PRIu64,
+//		 c->close_fee);
+//
+//	/* FIXME-OLD #2:
+//	 *
+//	 * The sender MUST set `close_fee` lower than or equal to the fee of the
+//	 * final commitment transaction, and MUST set `close_fee` to an even
+//	 * number of satoshis.
+//	 */
+//	if ((c->close_fee & 1)
+//	    || c->close_fee > commit_tx_fee(lnchn->remote.commit->tx,
+//					    lnchn->anchor.satoshis)) {
+//		return lnchn_comms_err(lnchn, pkt_err(lnchn, "Invalid close fee"));
+//	}
+//
+//	/* FIXME: Don't accept tiny fee at all? */
+//
+//	/* FIXME-OLD #2:
+//	   ... otherwise it SHOULD propose a
+//	   value strictly between the received `close_fee` and its
+//	   previously-sent `close_fee`.
+//	*/
+//	if (lnchn->closing.their_sig) {
+//		/* We want more, they should give more. */
+//		if (lnchn->closing.our_fee > lnchn->closing.their_fee) {
+//			if (c->close_fee <= lnchn->closing.their_fee)
+//				return lnchn_comms_err(lnchn,
+//						      pkt_err(lnchn, "Didn't increase close fee"));
+//		} else {
+//			if (c->close_fee >= lnchn->closing.their_fee)
+//				return lnchn_comms_err(lnchn,
+//						      pkt_err(lnchn, "Didn't decrease close fee"));
+//		}
+//	}
+//
+//	/* FIXME-OLD #2:
+//	 *
+//	 * The receiver MUST check `sig` is valid for the close
+//	 * transaction with the given `close_fee`, and MUST fail the
+//	 * connection if it is not. */
+//	if (!proto_to_signature(c->sig, &theirsig))
+//		return lnchn_comms_err(lnchn,
+//				      pkt_err(lnchn, "Invalid signature format"));
+//
+//	close_tx = lnchn_create_close_tx(c, lnchn, c->close_fee);
+//	if (!check_tx_sig(close_tx, 0,
+//			  NULL,
+//			  lnchn->anchor.witnessscript,
+//			  &lnchn->remote.commitkey, &theirsig))
+//		return lnchn_comms_err(lnchn,
+//				      pkt_err(lnchn, "Invalid signature"));
+//
+//	tal_free(lnchn->closing.their_sig);
+//	lnchn->closing.their_sig = tal_dup(lnchn,
+//					  ecdsa_signature, &theirsig);
+//	lnchn->closing.their_fee = c->close_fee;
+//	lnchn->closing.sigs_in++;
+//
+//	if (!db_update_their_closing(lnchn))
+//		return lnchn_database_err(lnchn);
+//
+//	if (lnchn->closing.our_fee != lnchn->closing.their_fee) {
+//		/* FIXME-OLD #2:
+//		 *
+//		 * If the receiver agrees with the fee, it SHOULD reply with a
+//		 * `close_signature` with the same `close_fee` value,
+//		 * otherwise it SHOULD propose a value strictly between the
+//		 * received `close_fee` and its previously-sent `close_fee`.
+//		 */
+//
+//		/* Adjust our fee to close on their fee. */
+//		u64 sum;
+//
+//		/* Beware overflow! */
+//		sum = (u64)lnchn->closing.our_fee + lnchn->closing.their_fee;
+//
+//		lnchn->closing.our_fee = sum / 2;
+//		if (lnchn->closing.our_fee & 1)
+//			lnchn->closing.our_fee++;
+//
+//		log_info(lnchn->log, "accept_pkt_close_sig: we change to %"PRIu64,
+//			 lnchn->closing.our_fee);
+//
+//		lnchn->closing.closing_order = lnchn->order_counter++;
+//
+//		db_start_transaction(lnchn);
+//		db_update_our_closing(lnchn);
+//		if (db_commit_transaction(lnchn) != NULL)
+//			return lnchn_database_err(lnchn);
+//
+//		queue_pkt_close_signature(lnchn);
+//	}
+//
+//	/* Note corner case: we may *now* agree with them! */
+//	if (lnchn->closing.our_fee == lnchn->closing.their_fee) {
+//		const struct bitcoin_tx *close;
+//		log_info(lnchn->log, "accept_pkt_close_sig: we agree");
+//		/* FIXME-OLD #2:
+//		 *
+//		 * Once a node has sent or received a `close_signature` with
+//		 * matching `close_fee` it SHOULD close the connection and
+//		 * SHOULD sign and broadcast the final closing transaction.
+//		 */
+//		close = mk_bitcoin_close(lnchn, lnchn);
+//		broadcast_tx(lnchn->dstate->topology, lnchn, close, NULL);
+//		tal_free(close);
+//		return false;
+//	}
+//
+//	return true;
+//}
 
-	assert(lnchn->state == STATE_MUTUAL_CLOSING);
 
-	if (pkt->pkt_case != PKT__PKT_CLOSE_SIGNATURE)
-		return lnchn_received_unexpected_pkt(lnchn, pkt, __func__);
-
-	log_info(lnchn->log, "closing_pkt_in: they offered close fee %"PRIu64,
-		 c->close_fee);
-
-	/* FIXME-OLD #2:
-	 *
-	 * The sender MUST set `close_fee` lower than or equal to the fee of the
-	 * final commitment transaction, and MUST set `close_fee` to an even
-	 * number of satoshis.
-	 */
-	if ((c->close_fee & 1)
-	    || c->close_fee > commit_tx_fee(lnchn->remote.commit->tx,
-					    lnchn->anchor.satoshis)) {
-		return lnchn_comms_err(lnchn, pkt_err(lnchn, "Invalid close fee"));
-	}
-
-	/* FIXME: Don't accept tiny fee at all? */
-
-	/* FIXME-OLD #2:
-	   ... otherwise it SHOULD propose a
-	   value strictly between the received `close_fee` and its
-	   previously-sent `close_fee`.
-	*/
-	if (lnchn->closing.their_sig) {
-		/* We want more, they should give more. */
-		if (lnchn->closing.our_fee > lnchn->closing.their_fee) {
-			if (c->close_fee <= lnchn->closing.their_fee)
-				return lnchn_comms_err(lnchn,
-						      pkt_err(lnchn, "Didn't increase close fee"));
-		} else {
-			if (c->close_fee >= lnchn->closing.their_fee)
-				return lnchn_comms_err(lnchn,
-						      pkt_err(lnchn, "Didn't decrease close fee"));
-		}
-	}
-
-	/* FIXME-OLD #2:
-	 *
-	 * The receiver MUST check `sig` is valid for the close
-	 * transaction with the given `close_fee`, and MUST fail the
-	 * connection if it is not. */
-	if (!proto_to_signature(c->sig, &theirsig))
-		return lnchn_comms_err(lnchn,
-				      pkt_err(lnchn, "Invalid signature format"));
-
-	close_tx = lnchn_create_close_tx(c, lnchn, c->close_fee);
-	if (!check_tx_sig(close_tx, 0,
-			  NULL,
-			  lnchn->anchor.witnessscript,
-			  &lnchn->remote.commitkey, &theirsig))
-		return lnchn_comms_err(lnchn,
-				      pkt_err(lnchn, "Invalid signature"));
-
-	tal_free(lnchn->closing.their_sig);
-	lnchn->closing.their_sig = tal_dup(lnchn,
-					  ecdsa_signature, &theirsig);
-	lnchn->closing.their_fee = c->close_fee;
-	lnchn->closing.sigs_in++;
-
-	if (!db_update_their_closing(lnchn))
-		return lnchn_database_err(lnchn);
-
-	if (lnchn->closing.our_fee != lnchn->closing.their_fee) {
-		/* FIXME-OLD #2:
-		 *
-		 * If the receiver agrees with the fee, it SHOULD reply with a
-		 * `close_signature` with the same `close_fee` value,
-		 * otherwise it SHOULD propose a value strictly between the
-		 * received `close_fee` and its previously-sent `close_fee`.
-		 */
-
-		/* Adjust our fee to close on their fee. */
-		u64 sum;
-
-		/* Beware overflow! */
-		sum = (u64)lnchn->closing.our_fee + lnchn->closing.their_fee;
-
-		lnchn->closing.our_fee = sum / 2;
-		if (lnchn->closing.our_fee & 1)
-			lnchn->closing.our_fee++;
-
-		log_info(lnchn->log, "accept_pkt_close_sig: we change to %"PRIu64,
-			 lnchn->closing.our_fee);
-
-		lnchn->closing.closing_order = lnchn->order_counter++;
-
-		db_start_transaction(lnchn);
-		db_update_our_closing(lnchn);
-		if (db_commit_transaction(lnchn) != NULL)
-			return lnchn_database_err(lnchn);
-
-		queue_pkt_close_signature(lnchn);
-	}
-
-	/* Note corner case: we may *now* agree with them! */
-	if (lnchn->closing.our_fee == lnchn->closing.their_fee) {
-		const struct bitcoin_tx *close;
-		log_info(lnchn->log, "accept_pkt_close_sig: we agree");
-		/* FIXME-OLD #2:
-		 *
-		 * Once a node has sent or received a `close_signature` with
-		 * matching `close_fee` it SHOULD close the connection and
-		 * SHOULD sign and broadcast the final closing transaction.
-		 */
-		close = mk_bitcoin_close(lnchn, lnchn);
-		broadcast_tx(lnchn->dstate->topology, lnchn, close, NULL);
-		tal_free(close);
-		return false;
-	}
-
-	return true;
-}
-
-/* We can get update_commit in both normal and shutdown states. */
-static Pkt *handle_pkt_commit(struct LNchannel *lnchn, const Pkt *pkt)
-{
-	Pkt *err;
-	const char *errmsg;
-	struct sha256 preimage;
-	struct commit_info *ci;
-	bool to_them_only;
-	/* FIXME: We can actually merge these two... */
-	static const struct htlcs_table commit_changes[] = {
-		{ RCVD_ADD_REVOCATION, RCVD_ADD_ACK_COMMIT },
-		{ RCVD_REMOVE_HTLC, RCVD_REMOVE_COMMIT },
-		{ RCVD_ADD_HTLC, RCVD_ADD_COMMIT },
-		{ RCVD_REMOVE_REVOCATION, RCVD_REMOVE_ACK_COMMIT }
-	};
-	static const struct feechanges_table commit_feechanges[] = {
-		{ RCVD_FEECHANGE_REVOCATION, RCVD_FEECHANGE_ACK_COMMIT },
-		{ RCVD_FEECHANGE, RCVD_FEECHANGE_COMMIT }
-	};
-	static const struct htlcs_table revocation_changes[] = {
-		{ RCVD_ADD_ACK_COMMIT, SENT_ADD_ACK_REVOCATION },
-		{ RCVD_REMOVE_COMMIT, SENT_REMOVE_REVOCATION },
-		{ RCVD_ADD_COMMIT, SENT_ADD_REVOCATION },
-		{ RCVD_REMOVE_ACK_COMMIT, SENT_REMOVE_ACK_REVOCATION }
-	};
-	static const struct feechanges_table revocation_feechanges[] = {
-		{ RCVD_FEECHANGE_ACK_COMMIT, SENT_FEECHANGE_ACK_REVOCATION },
-		{ RCVD_FEECHANGE_COMMIT, SENT_FEECHANGE_REVOCATION }
-	};
-
-	ci = internal_new_commit_info(lnchn, lnchn->local.commit->commit_num + 1);
-
-	db_start_transaction(lnchn);
-
-	/* FIXME-OLD #2:
-	 *
-	 * A node MUST NOT send an `update_commit` message which does
-	 * not include any updates.
-	 */
-	errmsg = changestates(lnchn,
-			      commit_changes, ARRAY_SIZE(commit_changes),
-			      commit_feechanges, ARRAY_SIZE(commit_feechanges),
-			      true);
-	if (errmsg) {
-		db_abort_transaction(lnchn);
-		return pkt_err(lnchn, "%s", errmsg);
-	}
-
-	/* Create new commit info for this commit tx. */
-	ci->revocation_hash = lnchn->local.next_revocation_hash;
-
-	/* FIXME-OLD #2:
-	 *
-	 * A receiving node MUST apply all local acked and unacked
-	 * changes except unacked fee changes to the local commitment
-	 */
-	/* (We already applied them to staging_cstate as we went) */
-	ci->cstate = copy_cstate(ci, lnchn->local.staging_cstate);
-	ci->tx = create_commit_tx(ci, lnchn, &ci->revocation_hash,
-				  ci->cstate, LOCAL, &to_them_only);
-	bitcoin_txid(ci->tx, &ci->txid);
-
-	log_debug(lnchn->log, "Check tx %"PRIu64" sig", ci->commit_num);
-	log_add_struct(lnchn->log, " for %s", struct channel_state, ci->cstate);
-	log_add_struct(lnchn->log, " (txid %s)", struct sha256_double, &ci->txid);
-
-	/* FIXME-OLD #2:
-	 *
-	 * If the commitment transaction has only a single output which pays
-	 * to the other node, `sig` MUST be unset.  Otherwise, a sending node
-	 * MUST apply all remote acked and unacked changes except unacked fee
-	 * changes to the remote commitment before generating `sig`.
-	 */
-	if (!to_them_only)
-		ci->sig = tal(ci, ecdsa_signature);
-
-	err = accept_pkt_commit(lnchn, pkt, ci->sig);
-	if (err)
-		return err;
-
-	/* FIXME-OLD #2:
-	 *
-	 * A receiving node MUST apply all local acked and unacked changes
-	 * except unacked fee changes to the local commitment, then it MUST
-	 * check `sig` is valid for that transaction.
-	 */
-	if (ci->sig && !check_tx_sig(ci->tx, 0,
-				     NULL,
-				     lnchn->anchor.witnessscript,
-				     &lnchn->remote.commitkey,
-				     ci->sig)) {
-		db_abort_transaction(lnchn);
-		return pkt_err(lnchn, "Bad signature");
-	}
-
-	/* Switch to the new commitment. */
-	tal_free(lnchn->local.commit);
-	lnchn->local.commit = ci;
-	lnchn->local.commit->order = lnchn->order_counter++;
-
-	db_new_commit_info(lnchn, LOCAL, NULL);
-	lnchn_get_revocation_hash(lnchn, ci->commit_num + 1,
-				 &lnchn->local.next_revocation_hash);
-	lnchn->their_commitsigs++;
-
-	/* Now, send the revocation. */
-
-	/* We have their signature on the current one, right? */
-	assert(to_them_only || lnchn->local.commit->sig);
-	assert(lnchn->local.commit->commit_num > 0);
-
-	errmsg = changestates(lnchn,
-			      revocation_changes, ARRAY_SIZE(revocation_changes),
-			      revocation_feechanges,
-			      ARRAY_SIZE(revocation_feechanges),
-			      true);
-	if (errmsg) {
-		log_broken(lnchn->log, "queue_pkt_revocation: %s", errmsg);
-		db_abort_transaction(lnchn);
-		return pkt_err(lnchn, "Database error");
-	}
-
-	lnchn_get_revocation_preimage(lnchn, lnchn->local.commit->commit_num - 1,
-				     &preimage);
-
-	/* Fire off timer if this ack caused new changes */
-	if (lnchn_uncommitted_changes(lnchn))
-		remote_changes_pending(lnchn);
-
-	queue_pkt_revocation(lnchn, &preimage, &lnchn->local.next_revocation_hash);
-
-	/* If we're shutting down and no more HTLCs, begin closing */
-	if (lnchn->closing.their_script && !committed_to_htlcs(lnchn))
-		start_closing_in_transaction(lnchn);
-
-	if (db_commit_transaction(lnchn) != NULL)
-		return pkt_err(lnchn, "Database error");
-
-	return NULL;
-}
-
-static Pkt *handle_pkt_htlc_add(struct LNchannel *lnchn, const Pkt *pkt)
-{
-	struct htlc *htlc;
-	Pkt *err;
-
-	err = accept_pkt_htlc_add(lnchn, pkt, &htlc);
-	if (err)
-		return err;
-	assert(htlc->state == RCVD_ADD_HTLC);
-
-	/* FIXME-OLD #2:
-	 *
-	 * A node MUST NOT offer `amount_msat` it cannot pay for in
-	 * the remote commitment transaction at the current `fee_rate` (see
-	 * "Fee Calculation" ).  A node SHOULD fail the connection if
-	 * this occurs.
-	 */
-	if (!cstate_add_htlc(lnchn->local.staging_cstate, htlc, true)) {
-		u64 id = htlc->id;
-		log_broken_struct(lnchn->log, "They cannot afford htlc %s",
-				  struct htlc, htlc);
-		log_add_struct(lnchn->log, " cstate %s",
-			       struct channel_state,
-			       lnchn->local.staging_cstate);
-		tal_free(htlc);
-		return pkt_err(lnchn, "Cannot afford htlc %"PRIu64, id);
-	}
-	return NULL;
-}
-
-static Pkt *handle_pkt_htlc_fail(struct LNchannel *lnchn, const Pkt *pkt)
-{
-	struct htlc *htlc;
-	u8 *fail;
-	Pkt *err;
-
-	err = accept_pkt_htlc_fail(lnchn, pkt, &htlc, &fail);
-	if (err)
-		return err;
-
-	/* This can happen with re-transmissions; simply note it. */
-	if (htlc->fail) {
-		log_debug(lnchn->log, "HTLC %"PRIu64" failed twice", htlc->id);
-		htlc->fail = tal_free(htlc->fail);
-	}
-
-	db_start_transaction(lnchn);
-
-	set_htlc_fail(lnchn, htlc, fail, tal_count(fail));
-	tal_free(fail);
-
-	if (db_commit_transaction(lnchn) != NULL)
-		return pkt_err(lnchn, "database error");
-
-	cstate_fail_htlc(lnchn->local.staging_cstate, htlc);
-
-	/* FIXME-OLD #2:
-	 *
-	 * ... and the receiving node MUST add the HTLC fulfill/fail
-	 * to the unacked changeset for its local commitment.
-	 */
-	htlc_changestate(htlc, SENT_ADD_ACK_REVOCATION, RCVD_REMOVE_HTLC, false);
-	return NULL;
-}
-
-static Pkt *handle_pkt_htlc_fulfill(struct LNchannel *lnchn, const Pkt *pkt)
-{
-	struct htlc *htlc;
-	Pkt *err;
-	struct preimage r;
-
-	err = accept_pkt_htlc_fulfill(lnchn, pkt, &htlc, &r);
-	if (err)
-		return err;
-
-	/* Reconnect may mean HTLC was already fulfilled.  That's OK. */
-	if (!htlc->r) {
-		db_start_transaction(lnchn);
-		set_htlc_rval(lnchn, htlc, &r);
-
-		/* We can relay this upstream immediately. */
-		our_htlc_fulfilled(lnchn, htlc);
-		if (db_commit_transaction(lnchn) != NULL)
-			return pkt_err(lnchn, "database error");
-	}
-
-	/* FIXME-OLD #2:
-	 *
-	 * ... and the receiving node MUST add the HTLC fulfill/fail
-	 * to the unacked changeset for its local commitment.
-	 */
-	cstate_fulfill_htlc(lnchn->local.staging_cstate, htlc);
-	htlc_changestate(htlc, SENT_ADD_ACK_REVOCATION, RCVD_REMOVE_HTLC, false);
-	return NULL;
-}
 
 //static void set_feechange(struct LNchannel *lnchn, u64 fee_rate,
 //			  enum feechange_state state)
@@ -627,135 +388,7 @@ static Pkt *handle_pkt_htlc_fulfill(struct LNchannel *lnchn, const Pkt *pkt)
 //	return NULL;
 //}
 
-static Pkt *handle_pkt_revocation(struct LNchannel *lnchn, const Pkt *pkt,
-				  enum state next_state)
-{
-	Pkt *err;
-	const char *errmsg;
-	static const struct htlcs_table changes[] = {
-		{ SENT_ADD_COMMIT, RCVD_ADD_REVOCATION },
-		{ SENT_REMOVE_ACK_COMMIT, RCVD_REMOVE_ACK_REVOCATION },
-		{ SENT_ADD_ACK_COMMIT, RCVD_ADD_ACK_REVOCATION },
-		{ SENT_REMOVE_COMMIT, RCVD_REMOVE_REVOCATION }
-	};
-	static const struct feechanges_table feechanges[] = {
-		{ SENT_FEECHANGE_COMMIT, RCVD_FEECHANGE_REVOCATION },
-		{ SENT_FEECHANGE_ACK_COMMIT, RCVD_FEECHANGE_ACK_REVOCATION }
-	};
 
-	err = accept_pkt_revocation(lnchn, pkt);
-	if (err)
-		return err;
-
-	/* FIXME-OLD #2:
-	 *
-	 * The receiver of `update_revocation`... MUST add the remote
-	 * unacked changes to the set of local acked changes.
-	 */
-	db_start_transaction(lnchn);
-	errmsg = changestates(lnchn, changes, ARRAY_SIZE(changes),
-			      feechanges, ARRAY_SIZE(feechanges), true);
-	if (errmsg) {
-		log_broken(lnchn->log, "accept_pkt_revocation: %s", errmsg);
-		db_abort_transaction(lnchn);
-		return pkt_err(lnchn, "failure accepting update_revocation: %s",
-			       errmsg);
-	}
-	db_save_shachain(lnchn);
-	db_update_next_revocation_hash(lnchn);
-	set_lnchn_state(lnchn, next_state, __func__, true);
-	db_remove_their_prev_revocation_hash(lnchn);
-
-	/* If we're shutting down and no more HTLCs, begin closing */
-	if (lnchn->closing.their_script && !committed_to_htlcs(lnchn))
-		start_closing_in_transaction(lnchn);
-
-	if (db_commit_transaction(lnchn) != NULL)
-		return pkt_err(lnchn, "database error");
-
-	return NULL;
-}
-
-/* This is the io loop while we're doing shutdown. */
-static bool shutdown_pkt_in(struct LNchannel *lnchn, const Pkt *pkt)
-{
-	Pkt *err = NULL;
-
-	assert(lnchn->state == STATE_SHUTDOWN
-	       || lnchn->state == STATE_SHUTDOWN_COMMITTING);
-
-	switch (pkt->pkt_case) {
-	case PKT__PKT_UPDATE_REVOCATION:
-		if (lnchn->state == STATE_SHUTDOWN)
-			return lnchn_received_unexpected_pkt(lnchn, pkt, __func__);
-		else {
-			err = handle_pkt_revocation(lnchn, pkt, STATE_SHUTDOWN);
-			if (!err)
-				lnchn_update_complete(lnchn);
-		}
-		break;
-
-	case PKT__PKT_UPDATE_ADD_HTLC:
-		/* FIXME-OLD #2:
-		 *
-		 * A node MUST NOT send a `update_add_htlc` after a
-		 * `close_shutdown` */
-		if (lnchn->closing.their_script)
-			err = pkt_err(lnchn, "Update during shutdown");
-		else
-			err = handle_pkt_htlc_add(lnchn, pkt);
-		break;
-
-	case PKT__PKT_CLOSE_SHUTDOWN:
-		/* FIXME-OLD #2:
-		 *
-		 * A node... MUST NOT send more than one `close_shutdown`. */
-		if (lnchn->closing.their_script)
-			return lnchn_received_unexpected_pkt(lnchn, pkt, __func__);
-		else {
-			err = accept_pkt_close_shutdown(lnchn, pkt);
-			if (!err) {
-				db_start_transaction(lnchn);
-				db_set_their_closing_script(lnchn);
-				/* If no more HTLCs, we're closing. */
-				if (!committed_to_htlcs(lnchn))
-					start_closing_in_transaction(lnchn);
-				if (db_commit_transaction(lnchn) != NULL)
-					err = pkt_err(lnchn, "database error");
-			}
-		}
-		break;
-
-	case PKT__PKT_UPDATE_FULFILL_HTLC:
-		err = handle_pkt_htlc_fulfill(lnchn, pkt);
-		break;
-	case PKT__PKT_UPDATE_FAIL_HTLC:
-		err = handle_pkt_htlc_fail(lnchn, pkt);
-		break;
-	case PKT__PKT_UPDATE_FEE:
-		err = handle_pkt_feechange(lnchn, pkt);
-		break;
-	case PKT__PKT_UPDATE_COMMIT:
-		err = handle_pkt_commit(lnchn, pkt);
-		break;
-	case PKT__PKT_ERROR:
-		return lnchn_received_unexpected_pkt(lnchn, pkt, __func__);
-
-	case PKT__PKT_AUTH:
-	case PKT__PKT_OPEN:
-	case PKT__PKT_OPEN_ANCHOR:
-	case PKT__PKT_OPEN_COMMIT_SIG:
-	case PKT__PKT_OPEN_COMPLETE:
-	case PKT__PKT_CLOSE_SIGNATURE:
-	default:
-		return lnchn_received_unexpected_pkt(lnchn, pkt, __func__);
-	}
-
-	if (err)
-		return lnchn_comms_err(lnchn, err);
-
-	return true;
-}
 
 static bool lnchn_start_shutdown(struct LNchannel *lnchn)
 {
@@ -775,7 +408,7 @@ static bool lnchn_start_shutdown(struct LNchannel *lnchn)
 
 	//redeemscript = bitcoin_redeem_single(lnchn, &lnchn->local.finalkey);
 
-    lnchn->closing.our_script = lnchn->final_redeemscript;//scriptpubkey_p2sh(lnchn, redeemscript);
+//    lnchn->closing.our_script = lnchn->final_redeemscript;//scriptpubkey_p2sh(lnchn, redeemscript);
 	//tal_free(redeemscript);
 
 	/* FIXME-OLD #2:
@@ -783,7 +416,7 @@ static bool lnchn_start_shutdown(struct LNchannel *lnchn)
 	 * A node SHOULD send a `close_shutdown` (if it has
 	 * not already) after receiving `close_shutdown`.
 	 */
-	lnchn->closing.shutdown_order = lnchn->order_counter++;
+	
 	db_set_our_closing_script(lnchn);
 
 	queue_pkt_close_shutdown(lnchn);
@@ -803,235 +436,6 @@ static bool lnchn_start_shutdown(struct LNchannel *lnchn)
 }
 
 
-static bool command_htlc_set_fail(struct LNchannel *lnchn, struct htlc *htlc,
-				  enum fail_error error_code, const char *why)
-{
-	const u8 *fail = failinfo_create(htlc,
-					 &lnchn->dstate->id, error_code, why);
-
-	set_htlc_fail(lnchn, htlc, fail, tal_count(fail));
-	tal_free(fail);
-	return command_htlc_fail(lnchn, htlc);
-}
-
-static bool command_htlc_fail(struct LNchannel *lnchn, struct htlc *htlc)
-{
-	/* If onchain, nothing we can do. */
-	if (!state_can_remove_htlc(lnchn->state))
-		return false;
-
-	/* FIXME-OLD #2:
-	 *
-	 * The sending node MUST add the HTLC fulfill/fail to the
-	 * unacked changeset for its remote commitment
-	 */
-	cstate_fail_htlc(lnchn->remote.staging_cstate, htlc);
-
-	htlc_changestate(htlc, RCVD_ADD_ACK_REVOCATION, SENT_REMOVE_HTLC, false);
-
-	remote_changes_pending(lnchn);
-
-	queue_pkt_htlc_fail(lnchn, htlc);
-	return true;
-}
-
-static bool command_htlc_fulfill(struct LNchannel *lnchn, struct htlc *htlc)
-{
-	if (lnchn->state == STATE_CLOSE_ONCHAIN_THEIR_UNILATERAL
-	    || lnchn->state == STATE_CLOSE_ONCHAIN_OUR_UNILATERAL) {
-		return fulfill_onchain(lnchn, htlc);
-	}
-
-	if (!state_can_remove_htlc(lnchn->state))
-		return false;
-
-	/* FIXME-OLD #2:
-	 *
-	 * The sending node MUST add the HTLC fulfill/fail to the
-	 * unacked changeset for its remote commitment
-	 */
-	cstate_fulfill_htlc(lnchn->remote.staging_cstate, htlc);
-
-	htlc_changestate(htlc, RCVD_ADD_ACK_REVOCATION, SENT_REMOVE_HTLC, false);
-
-	remote_changes_pending(lnchn);
-
-	queue_pkt_htlc_fulfill(lnchn, htlc);
-	return true;
-}
-
-const char *command_htlc_add(struct LNchannel *lnchn, u64 msatoshi,
-			     unsigned int expiry,
-			     const struct sha256 *rhash,
-			     struct htlc *src,
-			     const u8 *route,
-			     u32 *error_code,
-			     struct htlc **htlc)
-{
-	struct abs_locktime locktime;
-
-	if (!blocks_to_abs_locktime(expiry, &locktime)) {
-		log_unusual(lnchn->log, "add_htlc: fail: bad expiry %u", expiry);
-		*error_code = BAD_REQUEST_400;
-		return "bad expiry";
-	}
-
-	if (expiry < get_block_height(lnchn->dstate->topology) + lnchn->dstate->config.min_htlc_expiry) {
-		log_unusual(lnchn->log, "add_htlc: fail: expiry %u is too soon",
-			    expiry);
-		*error_code = BAD_REQUEST_400;
-		return "expiry too soon";
-	}
-
-	if (expiry > get_block_height(lnchn->dstate->topology) + lnchn->dstate->config.max_htlc_expiry) {
-		log_unusual(lnchn->log, "add_htlc: fail: expiry %u is too far",
-			    expiry);
-		*error_code = BAD_REQUEST_400;
-		return "expiry too far";
-	}
-
-	/* FIXME-OLD #2:
-	 *
-	 * A node MUST NOT add a HTLC if it would result in it
-	 * offering more than 300 HTLCs in the remote commitment transaction.
-	 */
-	if (lnchn->remote.staging_cstate->side[LOCAL].num_htlcs == 300) {
-		log_unusual(lnchn->log, "add_htlc: fail: already at limit");
-		*error_code = SERVICE_UNAVAILABLE_503;
-		return "channel full";
-	}
-
-	if (!state_can_add_htlc(lnchn->state)) {
-		log_unusual(lnchn->log, "add_htlc: fail: lnchn state %s",
-			    state_name(lnchn->state));
-		*error_code = NOT_FOUND_404;
-		return "lnchn not available";
-	}
-
-	*htlc = lnchn_new_htlc(lnchn, msatoshi, rhash, expiry, SENT_ADD_HTLC);
-
-	/* FIXME-OLD #2:
-	 *
-	 * The sending node MUST add the HTLC addition to the unacked
-	 * changeset for its remote commitment
-	 */
-	if (!cstate_add_htlc(lnchn->remote.staging_cstate, *htlc, true)) {
-		/* FIXME-OLD #2:
-		 *
-		 * A node MUST NOT offer `amount_msat` it cannot pay for in
-		 * the remote commitment transaction at the current `fee_rate`
-		 */
- 		log_unusual(lnchn->log, "add_htlc: fail: Cannot afford %"PRIu64
- 			    " milli-satoshis in their commit tx",
- 			    msatoshi);
-		log_add_struct(lnchn->log, " channel state %s",
-			       struct channel_state,
-			       lnchn->remote.staging_cstate);
- 		*htlc = tal_free(*htlc);
-		*error_code = SERVICE_UNAVAILABLE_503;
-		return "cannot afford htlc";
- 	}
-
-	remote_changes_pending(lnchn);
-
-	queue_pkt_htlc_add(lnchn, *htlc);
-
-	/* Make sure we never offer the same one twice. */
-	lnchn->htlc_id_counter++;
-
-	return NULL;
-}
-
-/* FIXME-OLD #2:
- *
- * On disconnection, a node MUST reverse any uncommitted changes sent by the
- * other side (ie. `update_add_htlc`, `update_fee`, `update_fail_htlc` and
- * `update_fulfill_htlc` for which no `update_commit` has been received).  A
- * node SHOULD retain the `r` value from the `update_fulfill_htlc`, however.
-*/
-static void forget_uncommitted_changes(struct LNchannel *lnchn)
-{
-	struct htlc *h;
-	struct htlc_map_iter it;
-	bool retry;
-
-	if (!lnchn->remote.commit || !lnchn->remote.commit->cstate)
-		return;
-
-	log_debug(lnchn->log, "Forgetting uncommitted");
-	log_debug_struct(lnchn->log, "LOCAL: changing from %s",
-			 struct channel_state, lnchn->local.staging_cstate);
-	log_add_struct(lnchn->log, " to %s",
-			 struct channel_state, lnchn->local.commit->cstate);
-	log_debug_struct(lnchn->log, "REMOTE: changing from %s",
-			 struct channel_state, lnchn->remote.staging_cstate);
-	log_add_struct(lnchn->log, " to %s",
-			 struct channel_state, lnchn->remote.commit->cstate);
-
-	tal_free(lnchn->local.staging_cstate);
-	tal_free(lnchn->remote.staging_cstate);
-	lnchn->local.staging_cstate
-		= copy_cstate(lnchn, lnchn->local.commit->cstate);
-	lnchn->remote.staging_cstate
-		= copy_cstate(lnchn, lnchn->remote.commit->cstate);
-
-	/* We forget everything we're routing, and re-send.  This
-	 * works for the reload-from-database case as well as the
-	 * normal reconnect. */
-again:
-	retry = false;
-	for (h = htlc_map_first(&lnchn->htlcs, &it);
-	     h;
-	     h = htlc_map_next(&lnchn->htlcs, &it)) {
-		switch (h->state) {
-		case SENT_ADD_HTLC:
-			/* Adjust counter to lowest HTLC removed */
-			if (lnchn->htlc_id_counter > h->id) {
-				log_debug(lnchn->log,
-					  "Lowering htlc_id_counter to %"PRIu64,
-					  h->id);
-				lnchn->htlc_id_counter = h->id;
-			}
-			 /* Fall thru */
-		case RCVD_ADD_HTLC:
-			log_debug(lnchn->log, "Forgetting %s %"PRIu64,
-				  htlc_state_name(h->state), h->id);
-			/* May miss some due to delete reorg. */
-			tal_free(h);
-			retry = true;
-			break;
-		case RCVD_REMOVE_HTLC:
-			log_debug(lnchn->log, "Undoing %s %"PRIu64,
-				  htlc_state_name(h->state), h->id);
-			htlc_undostate(h, RCVD_REMOVE_HTLC,
-				       SENT_ADD_ACK_REVOCATION);
-			break;
-		case SENT_REMOVE_HTLC:
-			log_debug(lnchn->log, "Undoing %s %"PRIu64,
-				  htlc_state_name(h->state), h->id);
-			htlc_undostate(h, SENT_REMOVE_HTLC,
-				       RCVD_ADD_ACK_REVOCATION);
-			break;
-		default:
-			break;
-		}
-	}
-	if (retry)
-		goto again;
-
-	/* Forget uncommitted feechanges */
-	lnchn->feechanges[SENT_FEECHANGE]
-		= tal_free(lnchn->feechanges[SENT_FEECHANGE]);
-	lnchn->feechanges[RCVD_FEECHANGE]
-		= tal_free(lnchn->feechanges[RCVD_FEECHANGE]);
-
-	/* Make sure our HTLC counter is correct. */
-	if (lnchn->htlc_id_counter != 0)
-		assert(htlc_get(&lnchn->htlcs, lnchn->htlc_id_counter-1, LOCAL));
-	assert(!htlc_get(&lnchn->htlcs, lnchn->htlc_id_counter, LOCAL));
-}
-
-
 static bool want_feechange(const struct LNchannel *lnchn)
 {
 	if (!state_is_normal(lnchn->state) && !state_is_shutdown(lnchn->state))
@@ -1042,14 +446,6 @@ static bool want_feechange(const struct LNchannel *lnchn)
 	/* FIXME: Send fee changes when we want it */
 	return false;
 }
-
-static void destroy_lnchn(struct LNchannel *lnchn)
-{
-	if (lnchn->conn)
-		io_close(lnchn->conn);
-	list_del_from(&lnchn->dstate->lnchns, &lnchn->list);
-}
-
 
 struct commit_info *internal_new_commit_info(const tal_t *ctx, u64 commit_num)
 {
@@ -1116,7 +512,7 @@ struct LNchannel *new_LNChannel(struct lightningd_state *dstate,
     lnchn->rt.temp_errormsg = NULL;
     memset(lnchn->rt.feechanges, 0, sizeof(lnchn->rt.feechanges));
 
-	tal_add_destructor(lnchn, destroy_lnchn);
+//	tal_add_destructor(lnchn, destroy_lnchn);
 	return lnchn;
 }
 
@@ -1317,24 +713,6 @@ void reopen_LNChannel(struct LNchannel *lnchn)
 //	}
 //	return min_block;
 //}
-
-
-
-/* To avoid freeing underneath ourselves, we free outside event loop. */
-void cleanup_lnchns(struct lightningd_state *dstate)
-{
-	struct LNchannel *lnchn, *next;
-
-	list_for_each_safe(&dstate->lnchns, lnchn, next, list) {
-		/* Deletes itself from list. */
-		if (!lnchn->conn && lnchn->state == STATE_CLOSED)
-			tal_free(lnchn);
-	}
-}
-
-
-
-
 
 //static void json_close(struct command *cmd,
 //		       const char *buffer, const jsmntok_t *params)

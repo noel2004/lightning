@@ -63,40 +63,40 @@ void lnchn_negotiate_from_remote(struct LNchannel *lnchn)
 	lnchn->local.mindepth = lnchn->remote.mindepth;
 
 }
-
-/* Creation the bitcoin anchor tx, spending output user provided. */
-static bool bitcoin_create_anchor(struct LNchannel *lnchn)
-{
-	struct bitcoin_tx *tx = bitcoin_tx(lnchn, 1, 1);
-	size_t i;
-
-	/* We must be offering anchor for us to try creating it */
-	assert(lnchn->local.offer_anchor);
-
-	tx->output[0].script = scriptpubkey_p2wsh(tx, lnchn->anchor.witnessscript);
-	tx->output[0].amount = lnchn->anchor.input->out_amount;
-
-	tx->input[0].txid = lnchn->anchor.input->txid;
-	tx->input[0].index = lnchn->anchor.input->index;
-	tx->input[0].amount = tal_dup(tx->input, u64,
-				      &lnchn->anchor.input->in_amount);
-
-	if (!wallet_add_signed_input(lnchn->dstate,
-				     &lnchn->anchor.input->walletkey,
-				     tx, 0))
-		return false;
-
-	bitcoin_txid(tx, &lnchn->anchor.txid);
-	lnchn->anchor.tx = tx;
-	lnchn->anchor.index = 0;
-	/* We'll need this later, when we're told to broadcast it. */
-	lnchn->anchor.satoshis = tx->output[0].amount;
-
-	/* To avoid malleation, all inputs must be segwit! */
-	for (i = 0; i < tal_count(tx->input); i++)
-		assert(tx->input[i].witness);
-	return true;
-}
+//
+///* Creation the bitcoin anchor tx, spending output user provided. */
+//static bool bitcoin_create_anchor(struct LNchannel *lnchn)
+//{
+//	struct bitcoin_tx *tx = bitcoin_tx(lnchn, 1, 1);
+//	size_t i;
+//
+//	/* We must be offering anchor for us to try creating it */
+//	assert(lnchn->local.offer_anchor);
+//
+//	tx->output[0].script = scriptpubkey_p2wsh(tx, lnchn->anchor.witnessscript);
+//	tx->output[0].amount = lnchn->anchor.input->out_amount;
+//
+//	tx->input[0].txid = lnchn->anchor.input->txid;
+//	tx->input[0].index = lnchn->anchor.input->index;
+//	tx->input[0].amount = tal_dup(tx->input, u64,
+//				      &lnchn->anchor.input->in_amount);
+//
+//	if (!wallet_add_signed_input(lnchn->dstate,
+//				     &lnchn->anchor.input->walletkey,
+//				     tx, 0))
+//		return false;
+//
+//	bitcoin_txid(tx, &lnchn->anchor.txid);
+//	lnchn->anchor.tx = tx;
+//	lnchn->anchor.index = 0;
+//	/* We'll need this later, when we're told to broadcast it. */
+//	lnchn->anchor.satoshis = tx->output[0].amount;
+//
+//	/* To avoid malleation, all inputs must be segwit! */
+//	for (i = 0; i < tal_count(tx->input); i++)
+//		assert(tx->input[i].witness);
+//	return true;
+//}
 
 ///* We may have gone down before broadcasting the anchor.  Try again. */
 //void rebroadcast_anchors(struct lightningd_state *dstate)
@@ -166,26 +166,10 @@ static bool setup_first_commit(struct LNchannel *lnchn)
 	return true;
 }
 
-static bool lnchn_first_open(struct LNchannel *lnchn, 
-    const struct pubkey *chnid,
-    bool offer_anchor) {
-
-    lnchn->id = tal_dup(lnchn, struct pubkey, chnid);
-    lnchn->local.commit_fee_rate = desired_commit_feerate(lnchn->dstate);
-    log_debug(lnchn->log, "Using local fee rate %"PRIu64, lnchn->local.commit_fee_rate);
-
-    lnchn->local.offer_anchor = offer_anchor;
-    lnchn->remote.offer_anchor = !offer_anchor;
-
-    //TODO: add redeem addr option
-    return lnchn_crypto_on(lnchn, NULL);
-
-}
-
 /* Crypto is on, we are live. */
 static bool lnchn_crypto_on(struct LNchannel *lnchn, char *redeem_addr)
 {
-    struct bitcoin_address redeem_addr;
+//    struct bitcoin_address redeem_addr;
 
 	lnchn_secrets_init(lnchn);
 
@@ -200,6 +184,22 @@ static bool lnchn_crypto_on(struct LNchannel *lnchn, char *redeem_addr)
 
 	lnchn_get_revocation_hash(lnchn, 0, &lnchn->local.next_revocation_hash);
     return true;
+}
+
+static bool lnchn_first_open(struct LNchannel *lnchn, 
+    const struct pubkey *chnid,
+    bool offer_anchor) {
+
+    lnchn->id = tal_dup(lnchn, struct pubkey, chnid);
+    lnchn->local.commit_fee_rate = desired_commit_feerate(lnchn->dstate);
+    log_debug(lnchn->log, "Using local fee rate %"PRIu64, lnchn->local.commit_fee_rate);
+
+    lnchn->local.offer_anchor = offer_anchor;
+    lnchn->remote.offer_anchor = !offer_anchor;
+
+    //TODO: add redeem addr option
+    return lnchn_crypto_on(lnchn, NULL);
+
 }
 
 static void send_open_message(struct LNchannel *lnchn)
@@ -256,6 +256,8 @@ void internal_openphase_retry_msg(struct LNchannel *lnchn)
         lite_anchor_pay_notify(lnchn->dstate->payment, lnchn); break;
     case STATE_OPEN_WAIT_FOR_COMMIT_SIGPKT:
         send_anchor_message(lnchn); break;
+    case STATE_OPEN_WAIT_ANCHORDEPTH_AND_THEIRCOMPLETE:
+        send_first_commit_message(lnchn); break;
     case STATE_OPEN_WAIT_FOR_ANCHORPKT:
         break;
     default://any else states no need a retry msg
@@ -270,7 +272,6 @@ bool lnchn_notify_open_remote(struct LNchannel *lnchn,
     const struct pubkey *remote_key[2] /*commit key and final key*/    
 )
 {
-	struct commit_info *ci;
 
     if (lnchn->state != STATE_INIT ||
         lnchn->state != STATE_OPEN_WAIT_FOR_OPENPKT) {
@@ -348,7 +349,7 @@ bool lnchn_open_local(struct LNchannel *lnchn, const struct pubkey *chnid) {
 	db_create_lnchn(lnchn);
 
 	if (db_commit_transaction(lnchn) != NULL) {
-		lnchn_database_err(lnchn);
+		internal_lnchn_temp_breakdown(lnchn, "db fail");
         return false;
 	}
 
@@ -359,7 +360,7 @@ bool lnchn_open_local(struct LNchannel *lnchn, const struct pubkey *chnid) {
 
 bool lnchn_open_anchor(struct LNchannel *lnchn, const struct bitcoin_tx *anchor_tx) {
 
-    if (lnchn->state != STATE_OPEN_WAIT_FOR_ANCHORPKT) {
+    if (lnchn->state != STATE_OPEN_WAIT_FOR_CREATEANCHOR) {
         return false;
     }
 
@@ -395,7 +396,7 @@ bool lnchn_open_anchor(struct LNchannel *lnchn, const struct bitcoin_tx *anchor_
     internal_set_lnchn_state(lnchn,  STATE_OPEN_WAIT_FOR_COMMIT_SIGPKT, __func__, true);
 
     if (db_commit_transaction(lnchn) != NULL){
-        lnchn_database_err(lnchn);
+        internal_lnchn_temp_breakdown(lnchn, "db fail");
         return false;
     }
 
@@ -403,36 +404,95 @@ bool lnchn_open_anchor(struct LNchannel *lnchn, const struct bitcoin_tx *anchor_
     return true;
 }
 
-bool lnchn_notify_anchor(struct LNchannel *lnchn, const struct pubkey *chnid,
-    const struct sha256_double *txid, unsigned int index, 
-    unsigned long long amount, const struct sha256 *revocation_hash
-) {
+static bool first_commit(struct LNchannel *lnchn,
+    const struct sha256 *revocation_hash,
+    const struct ecdsa_signature_ *sig) {
 
-    if (anchor_too_large(amount)) {
-        internal_lnchn_fail_on_notify(lnchn, "Anchor millisatoshis exceeds 32 bits");
-        return false;
-    }     
+    struct sha256 next_hash;
+    if (lnchn->local.offer_anchor) {
+        assert(sig);
+    }
+    enum state next =
+        lnchn->state == STATE_OPEN_WAIT_FOR_COMMIT_SIGPKT ?
+        STATE_OPEN_WAIT_ANCHORDEPTH :
+        STATE_OPEN_WAIT_ANCHORDEPTH_AND_THEIRCOMPLETE;
+
+    lnchn_get_revocation_hash(lnchn, 1, &next_hash);
+
+    internal_lnchn_update_commit(lnchn, REMOTE, revocation_hash, NULL);
+    internal_lnchn_update_commit(lnchn, LOCAL, &next_hash, sig);
 
     db_start_transaction(lnchn);
+    if (next == STATE_OPEN_WAIT_ANCHORDEPTH_AND_THEIRCOMPLETE) {
+        //also dump anchor
+        db_set_anchor(lnchn);
+    }
 
-    db_new_commit_info(lnchn, LOCAL, NULL);
-    db_new_commit_info(lnchn, REMOTE, NULL);
-    internal_set_lnchn_state(lnchn,  STATE_OPEN_WAIT_ANCHORDEPTH_AND_THEIRCOMPLETE, __func__, true);
+    db_new_commit_info(lnchn, LOCAL);
+    db_new_commit_info(lnchn, REMOTE);
+    internal_set_lnchn_state(lnchn,  next, __func__, true);
 
     if (db_commit_transaction(lnchn) != NULL){
-        lnchn_database_err(lnchn);
+        internal_lnchn_temp_breakdown(lnchn, "db fail");
         return false;
     }
 
     return true;
 }
 
-bool lnchn_notify_first_commit(struct LNmessage *msg,
+bool lnchn_notify_anchor(struct LNchannel *lnchn, 
+    const struct sha256_double *txid, unsigned int index, 
+    unsigned long long amount, const struct sha256 *revocation_hash
+) {
+
+    if (lnchn->state == STATE_OPEN_WAIT_ANCHORDEPTH_AND_THEIRCOMPLETE) {
+        //duplicate message
+        return true;
+    }else if (lnchn->state != STATE_OPEN_WAIT_FOR_ANCHORPKT) {
+        log_broken(lnchn->log, "Unexpected anchor message");
+        log_add_struct(lnchn->log, " for channel: %s", struct LNchannel, lnchn);
+        internal_lnchn_fail_on_notify(lnchn, "Unexpected anchor message");
+        return false;
+    }
+
+    if (anchor_too_large(amount)) {
+        internal_lnchn_fail_on_notify(lnchn, "Anchor millisatoshis exceeds 32 bits");
+        return false;
+    }     
+
+    lnchn->anchor.ours = false;
+    lnchn->anchor.min_depth = get_block_height(lnchn->dstate->topology);
+
+    if (!first_commit(lnchn, revocation_hash, NULL
+        /* we do not care the local commit*/)) {
+        return false;
+    }
+
+    send_first_commit_message(lnchn);
+    return true;
+}
+
+bool lnchn_notify_first_commit(struct LNchannel *lnchn,
     const struct sha256 *revocation_hash,
     const struct ecdsa_signature_ *sig
 ) {
 
+    if (lnchn->state == STATE_OPEN_WAIT_ANCHORDEPTH) {
+        //duplicate message
+        return true;
+    }
+    else if (lnchn->state != STATE_OPEN_WAIT_FOR_COMMIT_SIGPKT) {
+        log_broken(lnchn->log, "Unexpected first commit message");
+        log_add_struct(lnchn->log, " for channel: %s", struct LNchannel, lnchn);
+        internal_lnchn_fail_on_notify(lnchn, "Unexpected first commit message");
+        return false;
+    }
 
+    //we don't need to outsourcing anything ...
+
+    if (!first_commit(lnchn, revocation_hash, sig)) {
+        return false;
+    }
 
     return false;
 }
@@ -443,99 +503,48 @@ static void on_first_commit_task(const struct LNchannel* lnchn, enum outsourcing
 
 }
 
-static bool open_ouranchor_pkt_in(struct LNchannel *lnchn, const Pkt *pkt)
-{
-	Pkt *err;
+//static bool open_ouranchor_pkt_in(struct LNchannel *lnchn, const Pkt *pkt)
+//{
+//	Pkt *err;
+//
+//	if (pkt->pkt_case != PKT__PKT_OPEN_COMMIT_SIG)
+//		return lnchn_received_unexpected_pkt(lnchn, pkt, __func__);
+//
+//	lnchn->local.commit->sig = tal(lnchn->local.commit,
+//				      ecdsa_signature);
+//	err = accept_pkt_open_commit_sig(lnchn, pkt,
+//					 lnchn->local.commit->sig);
+//	if (!err &&
+//	    !check_tx_sig(lnchn->local.commit->tx, 0,
+//			  NULL,
+//			  lnchn->anchor.witnessscript,
+//			  &lnchn->remote.commitkey,
+//			  lnchn->local.commit->sig))
+//		err = pkt_err(lnchn, "Bad signature");
+//
+//	if (err) {
+//		lnchn->local.commit->sig = tal_free(lnchn->local.commit->sig);
+//		return lnchn_comms_err(lnchn, err);
+//	}
+//
+//	lnchn->their_commitsigs++;
+//
+//	db_start_transaction(lnchn);
+//	db_set_anchor(lnchn);
+//	db_new_commit_info(lnchn, LOCAL, NULL);
+//	set_lnchn_state(lnchn,
+//		       STATE_OPEN_WAIT_ANCHORDEPTH_AND_THEIRCOMPLETE,
+//		       __func__, true);
+//	if (db_commit_transaction(lnchn) != NULL)
+//		return lnchn_database_err(lnchn);
+//
+//	broadcast_tx(lnchn->dstate->topology,
+//		     lnchn, lnchn->anchor.tx, funding_tx_failed);
+//	lnchn_watch_anchor(lnchn, lnchn->local.mindepth);
+//	return true;
+//}
 
-	if (pkt->pkt_case != PKT__PKT_OPEN_COMMIT_SIG)
-		return lnchn_received_unexpected_pkt(lnchn, pkt, __func__);
 
-	lnchn->local.commit->sig = tal(lnchn->local.commit,
-				      ecdsa_signature);
-	err = accept_pkt_open_commit_sig(lnchn, pkt,
-					 lnchn->local.commit->sig);
-	if (!err &&
-	    !check_tx_sig(lnchn->local.commit->tx, 0,
-			  NULL,
-			  lnchn->anchor.witnessscript,
-			  &lnchn->remote.commitkey,
-			  lnchn->local.commit->sig))
-		err = pkt_err(lnchn, "Bad signature");
-
-	if (err) {
-		lnchn->local.commit->sig = tal_free(lnchn->local.commit->sig);
-		return lnchn_comms_err(lnchn, err);
-	}
-
-	lnchn->their_commitsigs++;
-
-	db_start_transaction(lnchn);
-	db_set_anchor(lnchn);
-	db_new_commit_info(lnchn, LOCAL, NULL);
-	set_lnchn_state(lnchn,
-		       STATE_OPEN_WAIT_ANCHORDEPTH_AND_THEIRCOMPLETE,
-		       __func__, true);
-	if (db_commit_transaction(lnchn) != NULL)
-		return lnchn_database_err(lnchn);
-
-	broadcast_tx(lnchn->dstate->topology,
-		     lnchn, lnchn->anchor.tx, funding_tx_failed);
-	lnchn_watch_anchor(lnchn, lnchn->local.mindepth);
-	return true;
-}
-
-
-static bool open_theiranchor_pkt_in(struct LNchannel *lnchn, const Pkt *pkt)
-{
-	Pkt *err;
-	const char *db_err;
-
-	if (pkt->pkt_case != PKT__PKT_OPEN_ANCHOR)
-		return lnchn_received_unexpected_pkt(lnchn, pkt, __func__);
-
-	err = accept_pkt_anchor(lnchn, pkt);
-	if (err) {
-		lnchn_open_complete(lnchn, err->error->problem);
-		return lnchn_comms_err(lnchn, err);
-	}
-
-	lnchn->anchor.ours = false;
-	if (!setup_first_commit(lnchn)) {
-		err = pkt_err(lnchn, "Insufficient funds for fee");
-		lnchn_open_complete(lnchn, err->error->problem);
-		return lnchn_comms_err(lnchn, err);
-	}
-
-	log_debug_struct(lnchn->log, "Creating sig for %s",
-			 struct bitcoin_tx,
-			 lnchn->remote.commit->tx);
-	log_add_struct(lnchn->log, " using key %s",
-		       struct pubkey, &lnchn->local.commitkey);
-
-	lnchn->remote.commit->sig = tal(lnchn->remote.commit,
-				       ecdsa_signature);
-	lnchn_sign_theircommit(lnchn, lnchn->remote.commit->tx,
-			      lnchn->remote.commit->sig);
-
-	lnchn->remote.commit->order = lnchn->order_counter++;
-	db_start_transaction(lnchn);
-	db_set_anchor(lnchn);
-	db_new_commit_info(lnchn, REMOTE, NULL);
-	lnchn_add_their_commit(lnchn,
-			      &lnchn->remote.commit->txid,
-			      lnchn->remote.commit->commit_num);
-	set_lnchn_state(lnchn, STATE_OPEN_WAIT_ANCHORDEPTH_AND_THEIRCOMPLETE,
-		       __func__, true);
-	db_err = db_commit_transaction(lnchn);
-	if (db_err) {
-		lnchn_open_complete(lnchn, db_err);
-		return lnchn_database_err(lnchn);
-	}
-
-	queue_pkt_open_commit_sig(lnchn);
-	lnchn_watch_anchor(lnchn, lnchn->local.mindepth);
-	return true;
-}
 
 
 //static void lnchn_depth_ok(struct LNchannel *lnchn)
@@ -619,78 +628,15 @@ static bool open_theiranchor_pkt_in(struct LNchannel *lnchn, const Pkt *pkt)
 //	return KEEP_WATCHING;
 //}
 
-static void funding_tx_failed(struct LNchannel *lnchn,
-			      int exitstatus,
-			      const char *err)
-{
-	const char *str = tal_fmt(lnchn, "Broadcasting funding gave %i: %s",
-				  exitstatus, err);
+//static void funding_tx_failed(struct LNchannel *lnchn,
+//			      int exitstatus,
+//			      const char *err)
+//{
+//	const char *str = tal_fmt(lnchn, "Broadcasting funding gave %i: %s",
+//				  exitstatus, err);
+//
+//	lnchn_open_complete(lnchn, str);
+//	lnchn_breakdown(lnchn);
+//	queue_pkt_err(lnchn, pkt_err(lnchn, "Funding failed"));
+//}
 
-	lnchn_open_complete(lnchn, str);
-	lnchn_breakdown(lnchn);
-	queue_pkt_err(lnchn, pkt_err(lnchn, "Funding failed"));
-}
-
-
-static bool open_wait_pkt_in(struct LNchannel *lnchn, const Pkt *pkt)
-{
-	Pkt *err;
-	const char *db_err;
-
-	/* If they want to shutdown during this, we do mutual close dance. */
-	if (pkt->pkt_case == PKT__PKT_CLOSE_SHUTDOWN) {
-		err = accept_pkt_close_shutdown(lnchn, pkt);
-		if (err)
-			return lnchn_comms_err(lnchn, err);
-
-		lnchn_open_complete(lnchn, "Shutdown request received");
-		db_start_transaction(lnchn);
-		db_set_their_closing_script(lnchn);
-		start_closing_in_transaction(lnchn);
-		if (db_commit_transaction(lnchn) != NULL)
-			return lnchn_database_err(lnchn);
-
-		return false;
-	}
-
-	switch (lnchn->state) {
-	case STATE_OPEN_WAIT_ANCHORDEPTH_AND_THEIRCOMPLETE:
-	case STATE_OPEN_WAIT_THEIRCOMPLETE:
-		if (pkt->pkt_case != PKT__PKT_OPEN_COMPLETE)
-			return lnchn_received_unexpected_pkt(lnchn, pkt, __func__);
-
-		err = accept_pkt_open_complete(lnchn, pkt);
-		if (err) {
-			lnchn_open_complete(lnchn, err->error->problem);
-			return lnchn_comms_err(lnchn, err);
-		}
-
-		db_start_transaction(lnchn);
-		if (lnchn->state == STATE_OPEN_WAIT_THEIRCOMPLETE) {
-			lnchn_open_complete(lnchn, NULL);
-			set_lnchn_state(lnchn, STATE_NORMAL, __func__, true);
-			announce_channel(lnchn->dstate, lnchn);
-			sync_routing_table(lnchn->dstate, lnchn);
-		} else {
-			set_lnchn_state(lnchn, STATE_OPEN_WAIT_ANCHORDEPTH,
-				       __func__, true);
-		}
-
-		db_err = db_commit_transaction(lnchn);
-		if (db_err) {
-			lnchn_open_complete(lnchn, db_err);
-			return lnchn_database_err(lnchn);
-		}
-		return true;
-
-	case STATE_OPEN_WAIT_ANCHORDEPTH:
-		return lnchn_received_unexpected_pkt(lnchn, pkt, __func__);
-
-	default:
-		log_unusual(lnchn->log,
-			    "%s: unexpected state %s",
-			    __func__, state_name(lnchn->state));
-		lnchn_fail(lnchn, __func__);
-		return false;
-	}
-}

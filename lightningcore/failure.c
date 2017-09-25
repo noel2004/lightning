@@ -1,4 +1,5 @@
 #include "failure.h"
+#include <ccan/short_types/short_types.h>
 #include <ccan/tal/str/str.h>
 
 /* FIXME: Crypto! */

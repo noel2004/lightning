@@ -33,6 +33,88 @@
 #include <sys/types.h>
 
 
+//const char *command_htlc_add(struct LNchannel *lnchn, u64 msatoshi,
+//			     unsigned int expiry,
+//			     const struct sha256 *rhash,
+//			     struct htlc *src,
+//			     const u8 *route,
+//			     u32 *error_code,
+//			     struct htlc **htlc)
+//{
+//	struct abs_locktime locktime;
+//
+//	if (!blocks_to_abs_locktime(expiry, &locktime)) {
+//		log_unusual(lnchn->log, "add_htlc: fail: bad expiry %u", expiry);
+//		*error_code = BAD_REQUEST_400;
+//		return "bad expiry";
+//	}
+//
+//	if (expiry < get_block_height(lnchn->dstate->topology) + lnchn->dstate->config.min_htlc_expiry) {
+//		log_unusual(lnchn->log, "add_htlc: fail: expiry %u is too soon",
+//			    expiry);
+//		*error_code = BAD_REQUEST_400;
+//		return "expiry too soon";
+//	}
+//
+//	if (expiry > get_block_height(lnchn->dstate->topology) + lnchn->dstate->config.max_htlc_expiry) {
+//		log_unusual(lnchn->log, "add_htlc: fail: expiry %u is too far",
+//			    expiry);
+//		*error_code = BAD_REQUEST_400;
+//		return "expiry too far";
+//	}
+//
+//	/* FIXME-OLD #2:
+//	 *
+//	 * A node MUST NOT add a HTLC if it would result in it
+//	 * offering more than 300 HTLCs in the remote commitment transaction.
+//	 */
+//	if (lnchn->remote.staging_cstate->side[LOCAL].num_htlcs == 300) {
+//		log_unusual(lnchn->log, "add_htlc: fail: already at limit");
+//		*error_code = SERVICE_UNAVAILABLE_503;
+//		return "channel full";
+//	}
+//
+//	if (!state_can_add_htlc(lnchn->state)) {
+//		log_unusual(lnchn->log, "add_htlc: fail: lnchn state %s",
+//			    state_name(lnchn->state));
+//		*error_code = NOT_FOUND_404;
+//		return "lnchn not available";
+//	}
+//
+//	*htlc = lnchn_new_htlc(lnchn, msatoshi, rhash, expiry, SENT_ADD_HTLC);
+//
+//	/* FIXME-OLD #2:
+//	 *
+//	 * The sending node MUST add the HTLC addition to the unacked
+//	 * changeset for its remote commitment
+//	 */
+//	if (!cstate_add_htlc(lnchn->remote.staging_cstate, *htlc, true)) {
+//		/* FIXME-OLD #2:
+//		 *
+//		 * A node MUST NOT offer `amount_msat` it cannot pay for in
+//		 * the remote commitment transaction at the current `fee_rate`
+//		 */
+// 		log_unusual(lnchn->log, "add_htlc: fail: Cannot afford %"PRIu64
+// 			    " milli-satoshis in their commit tx",
+// 			    msatoshi);
+//		log_add_struct(lnchn->log, " channel state %s",
+//			       struct channel_state,
+//			       lnchn->remote.staging_cstate);
+// 		*htlc = tal_free(*htlc);
+//		*error_code = SERVICE_UNAVAILABLE_503;
+//		return "cannot afford htlc";
+// 	}
+//
+//	remote_changes_pending(lnchn);
+//
+//	queue_pkt_htlc_add(lnchn, *htlc);
+//
+//	/* Make sure we never offer the same one twice. */
+//	lnchn->htlc_id_counter++;
+//
+//	return NULL;
+//}
+
 bool lnchn_add_htlc(struct LNchannel *chn, u64 msatoshi,
     unsigned int expiry,
     const struct sha256 *rhash,

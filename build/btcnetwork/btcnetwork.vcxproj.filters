@@ -27,9 +27,6 @@
     <ClCompile Include="..\..\btcnetwork\c\watch.c">
       <Filter>c</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\btcnetwork\c\chaintopology.c">
-      <Filter>c</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\btcnetwork\c\bitcoind.h">

@@ -99,6 +99,21 @@
     <ClCompile Include="..\..\ccan\ccan\noerr\noerr.c">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\ccan\ccan\str\hex\hex.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\ccan\ccan\read_write_all\read_write_all.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\ccan\ccan\isaac\isaac.c">
+      <Filter>源文件\crypto</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\ccan\ccan\isaac\isaac64.c">
+      <Filter>源文件\crypto</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\ccan\ccan\autodata\autodata.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\ccan_config.h">

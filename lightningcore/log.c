@@ -402,7 +402,7 @@ static char *arg_log_level(const char *arg, struct log *log)
 	size_t i;
 
 	for (i = 0; i < ARRAY_SIZE(log_levels); i++) {
-		if (strcasecmp(arg, log_levels[i].name) == 0) {
+		if (strcmp(arg, log_levels[i].name) == 0) {
 			set_log_level(log->lr, log_levels[i].level);
 			return NULL;
 		}
