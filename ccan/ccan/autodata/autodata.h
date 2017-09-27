@@ -42,10 +42,13 @@
  */
 #if (defined _WIN32 || defined __WIN32__) && ! defined __CYGWIN__
 
-#define AUTODATA(name, ptr) \
-    __pragma(section(#name))  \
-	static const __declspec(allocate(#name)) autodata_##name##_ *NEEDED \
+#define AUTODATA_(name, secname, ptr) \
+    __pragma(section(#secname))  \
+	static const volatile __declspec(allocate(#secname)) autodata_##name##_ *NEEDED \
 	AUTODATA_VAR_(name, __LINE__) = (ptr);
+
+#define AUTODATA(name, ptr) AUTODATA_(name, xautodata_##name, ptr) 
+
 #else
 #define AUTODATA(name, ptr) \
 	static const autodata_##name##_ *NEEDED		\
