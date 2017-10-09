@@ -15,6 +15,46 @@ void autodata_free(void *table UNNEEDED)
 {
 }
 #else
+
+#if (defined _WIN32 || defined __WIN32__) && ! defined __CYGWIN__
+
+void *autodata_get_section(void *start, void *stop, size_t *nump)
+{
+	const size_t pointer_size = sizeof(void*);
+	void **p;
+	void *actual_beg = NULL;
+	void ** actual_last = (void**)stop;
+
+	*nump = 0;
+
+	if (((unsigned long)start - (unsigned long)stop) % pointer_size) {
+		return NULL;
+	}
+
+	for (p = (void**) start ; stop != p; ++p) {
+		if (*p == NULL || *p == p)continue;
+		break;
+	}
+
+	if (p == stop)return NULL;
+
+	actual_beg = p;
+
+	for (p = (void**) stop; actual_beg != p; --p) {
+		if (*p == NULL || *p == p)continue;
+		break;
+	}
+
+	*nump = p - (void**) actual_beg + 1;
+	return actual_beg;
+}
+
+void autodata_free(void *table UNNEEDED)
+{
+}
+
+#else
+
 #include <ccan/ptr_valid/ptr_valid.h>
 
 void *autodata_make_table(const void *example, const char *name, size_t *nump)
@@ -77,4 +117,6 @@ void autodata_free(void *table)
 {
 	free(table);
 }
+#endif
+
 #endif

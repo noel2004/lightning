@@ -40,21 +40,10 @@
  *	AUTODATA(names, "Arabella");
  *	AUTODATA(names, "Alex");
  */
-#if (defined _WIN32 || defined __WIN32__) && ! defined __CYGWIN__
-
-#define AUTODATA_(name, secname, ptr) \
-    __pragma(section(#secname))  \
-	static const volatile __declspec(allocate(#secname)) autodata_##name##_ *NEEDED \
-	AUTODATA_VAR_(name, __LINE__) = (ptr);
-
-#define AUTODATA(name, ptr) AUTODATA_(name, xautodata_##name, ptr) 
-
-#else
 #define AUTODATA(name, ptr) \
 	static const autodata_##name##_ *NEEDED		\
 	__attribute__((section("xautodata_" #name)))	\
 	AUTODATA_VAR_(name, __LINE__) = (ptr);
-#endif
 /**
  * autodata_get - get an autodata set
  * @name: the name of the set of autodata
@@ -96,6 +85,38 @@ void autodata_free(void *p);
 #if HAVE_SECTION_START_STOP
 void *autodata_get_section(void *start, void *stop, size_t *nump);
 #else
+
+#if (defined _WIN32 || defined __WIN32__) && ! defined __CYGWIN__
+
+#define AUTODATA_(name, secname, ptr) \
+    __pragma(section(#secname))  \
+	const __declspec(allocate(#secname)) autodata_##name##_ *\
+	AUTODATA_VAR_(name, __LINE__) = (ptr);
+
+#define AUTODATA(name, ptr) AUTODATA_(name, xauto_$##name##_, ptr) 
+
+#define AUTODATA_TYPE_(name, secname_s, secname_e, type)					\
+	typedef type autodata_##name##_;				\
+	__pragma(section(#secname_s))					\
+	static __declspec(allocate(#secname_s)) void *start_autodata_##name = &start_autodata_##name; \
+	__pragma(section(#secname_e))					\
+	static __declspec(allocate(#secname_e)) void *end_autodata_##name = &end_autodata_##name
+
+#define AUTODATA_TYPE(name, type) AUTODATA_TYPE_(name, xauto_$##name##^, xauto_$##name##`, type)
+
+#define autodata_get_(name, secname, nump)					\
+	((autodata_##name##_ **)					\
+	 autodata_make_table(#secname, (nump)))
+
+#define autodata_get(name, nump)					\
+	((autodata_##name##_ **)					\
+	 autodata_get_section(start_autodata_##name,			\
+			      end_autodata_##name, (nump)))
+
+void *autodata_get_section(void *start, void *stop, size_t *nump);
+
+#else
+
 #define AUTODATA_TYPE(name, type)					\
 	typedef type autodata_##name##_;				\
 	static const void *autodata_##name##_ex = &autodata_##name##_ex
@@ -114,6 +135,8 @@ void *autodata_get_section(void *start, void *stop, size_t *nump);
 	 autodata_make_table(&autodata_##name##_ex, #name, (nump)))
 
 void *autodata_make_table(const void *example, const char *name, size_t *nump);
+#endif
+
 #endif
 
 #endif /* CCAN_AUTODATA_H */

@@ -4,3 +4,6 @@
 AUTODATA_TYPE(autostrings, char);
 
 AUTODATA(autostrings, "helper");
+AUTODATA(autostrings, "hello");
+AUTODATA(autostrings, "world");
+
