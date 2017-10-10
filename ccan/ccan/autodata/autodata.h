@@ -104,10 +104,6 @@ void *autodata_get_section(void *start, void *stop, size_t *nump);
 
 #define AUTODATA_TYPE(name, type) AUTODATA_TYPE_(name, xauto_$##name##^, xauto_$##name##`, type)
 
-#define autodata_get_(name, secname, nump)					\
-	((autodata_##name##_ **)					\
-	 autodata_make_table(#secname, (nump)))
-
 #define autodata_get(name, nump)					\
 	((autodata_##name##_ **)					\
 	 autodata_get_section(start_autodata_##name,			\
