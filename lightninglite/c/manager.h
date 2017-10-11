@@ -1,6 +1,7 @@
 #ifndef LIGHTNING_LITE_C_INTERFACE_MANAGER_H
 #define LIGHTNING_LITE_C_INTERFACE_MANAGER_H
 
+struct lightningd_state;
 struct LNchannels;
 struct LNchannel;
 struct LNchannelQuery;
@@ -10,6 +11,8 @@ struct pubkey;
 struct sha256;
 struct sha256_double;
 
+void    lite_init_channels(struct lightningd_state* state);
+void    lite_clean_channels(struct lightningd_state* state);
 
 /* 
    data needed to be query is updated as transaction

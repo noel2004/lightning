@@ -140,6 +140,7 @@
     <ClInclude Include="..\..\bitcoin\script.h" />
     <ClInclude Include="..\..\bitcoin\shadouble.h" />
     <ClInclude Include="..\..\bitcoin\signature.h" />
+    <ClInclude Include="..\..\bitcoin\simple.h" />
     <ClInclude Include="..\..\bitcoin\tx.h" />
     <ClInclude Include="..\..\bitcoin\varint.h" />
   </ItemGroup>
@@ -152,6 +153,7 @@
     <ClCompile Include="..\..\bitcoin\script.c" />
     <ClCompile Include="..\..\bitcoin\shadouble.c" />
     <ClCompile Include="..\..\bitcoin\signature.c" />
+    <ClCompile Include="..\..\bitcoin\simple.c" />
     <ClCompile Include="..\..\bitcoin\tx.c" />
     <ClCompile Include="..\..\bitcoin\varint.c" />
   </ItemGroup>

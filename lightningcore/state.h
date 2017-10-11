@@ -3,7 +3,6 @@
 #include "config.h"
 
 #include "state_types.h"
-#include "bitcoin/pubkey.h"
 #include <stdbool.h>
 
 #include <ccan/list/list.h>

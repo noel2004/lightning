@@ -50,6 +50,9 @@
     <ClInclude Include="..\..\bitcoin\preimage.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\bitcoin\simple.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\bitcoin\base58.c">
@@ -80,6 +83,9 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="..\..\bitcoin\varint.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bitcoin\simple.c">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>
