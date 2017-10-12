@@ -2,24 +2,52 @@
 #include <unordered_map>
 #include <array>
 
-extern "C"{
-#include "bitcoin/simple.h"
-#include "lightningcore/state.h"
-#include "c/manager.h"
+namespace {
 
-    typedef std::array<unsigned char, SIMPLE_PUBKEY_DATASIZE> iPubkey;
-
-    struct iPbukeyHash
+    struct iLongKeyHash
     {
-        size_t operator()(const iPubkey&) const
+        template<class L>
+        size_t operator()(const L& i) const
         {
-            return 0;
+            static const size_t szsz = sizeof(size_t);
+            size_t v;
+            memcpy(&v, i.data() + SIMPLE_PUBKEY_DATASIZE - szsz, szsz);
+            return v;
         }
     };
 
-    struct LNchannels : public std::unordered_map<iPubkey, struct LNchannels*, iPbukeyHash>{};
+}
 
-    void    lite_init_channel(struct lightningd_state* state)
+extern "C" {
+#include "bitcoin/simple.h"
+#include "lightningcore/state.h"
+#include "lightningcore/lnchannel_api.h"
+#include "c/manager.h"
+}
+
+namespace {
+    typedef std::array<unsigned char, SIMPLE_PUBKEY_DATASIZE> iPubkey;
+    typedef std::array<unsigned char, SIMPLE_SHA256_DATASIZE> iShakey;
+
+    typedef std::pair<struct htlc*, struct LNchannels*>       htlcItem;
+    typedef std::pair<htlcItem, htlcItem>                     htlcChain;
+
+    inline struct htlc* chain_source(const htlcChain& c) { return c.first.first; }
+    inline struct LNchannels* chain_source_chn(const htlcChain& c) { return c.first.second; }
+    inline struct htlc* chain_downstream(const htlcChain& c) { return c.second.first; }
+    inline struct LNchannels* chain_downstream_chn(const htlcChain& c) { return c.second.second; }
+    inline bool   we_has(void* p) { return p; }
+}
+ 
+
+extern "C" {
+    struct LNchannels
+    {
+        std::unordered_map<iPubkey, struct LNchannels*, iLongKeyHash> channel_map;
+        std::unordered_map<iShakey, htlcChain, iLongKeyHash>       htlc_map;
+    };
+
+    void    lite_init_channels(struct lightningd_state* state)
     {
         delete state->channels;
         state->channels = new LNchannels;
@@ -41,6 +69,15 @@ extern "C"{
     {
     }
 
+    void    lite_reg_htlc(struct LNchannels *mgr, const struct LNchannel *lnchn, const struct htlc *htlc)
+    {
+
+    }
+
+    void    lite_unreg_htlc(struct LNchannels *mgr, const struct htlc *htlc)
+    {
+
+    }
 
     struct LNchannelQuery* lite_query_channel(struct LNchannels *mgr, const struct pubkey *id)
     {

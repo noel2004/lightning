@@ -89,8 +89,6 @@ struct LNChannel_rt
 };
 
 struct LNchannel {
-	/* dstate->peers list */
-	struct list_node list;
 
 	/* State in state machine. */
 	enum state state;

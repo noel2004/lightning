@@ -26,6 +26,7 @@
     <ClCompile Include="..\..\lightningcore\failure.c" />
     <ClCompile Include="..\..\lightningcore\htlc.c" />
     <ClCompile Include="..\..\lightningcore\lnchannel.c" />
+    <ClCompile Include="..\..\lightningcore\lnchannel_api.c" />
     <ClCompile Include="..\..\lightningcore\lnchannel_commit.c" />
     <ClCompile Include="..\..\lightningcore\lnchannel_htlc.c" />
     <ClCompile Include="..\..\lightningcore\lnchannel_open.c" />
@@ -37,10 +38,6 @@
     <ClCompile Include="..\..\lightningcore\pseudorand.c" />
     <ClCompile Include="..\..\lightningcore\secrets.c" />
     <ClCompile Include="..\..\lightningcore\version.c" />
-    <ClCompile Include="..\..\protos\peer.pb.cc">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\lightningcore\channel.h" />
@@ -50,6 +47,7 @@
     <ClInclude Include="..\..\lightningcore\failure.h" />
     <ClInclude Include="..\..\lightningcore\feechange.h" />
     <ClInclude Include="..\..\lightningcore\htlc.h" />
+    <ClInclude Include="..\..\lightningcore\lnchannel_api.h" />
     <ClInclude Include="..\..\lightningcore\log.h" />
     <ClInclude Include="..\..\lightningcore\lnchannel.h" />
     <ClInclude Include="..\..\lightningcore\lnchannel_internal.h" />
@@ -64,7 +62,6 @@
     <ClInclude Include="..\..\lightninglite\c\manager.h" />
     <ClInclude Include="..\..\lightninglite\c\message.h" />
     <ClInclude Include="..\..\lightninglite\c\payment.h" />
-    <ClInclude Include="..\..\protos\peer.pb.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\bitcoin\bitcoin.vcxproj">
