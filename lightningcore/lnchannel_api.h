@@ -1,6 +1,10 @@
 #ifndef LIGHTNING_CORE_LNCHANNEL_API_H
 #define LIGHTNING_CORE_LNCHANNEL_API_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct LNchannel;
 struct htlc;
 struct pubkey;
@@ -24,8 +28,14 @@ struct LNchannel* LNAPI_channel_copy(const struct LNchannel*, unsigned int copy_
 void   NAPI_channel_copy(struct LNchannel*, const struct LNchannel*, unsigned int copy_mask);
 
 struct htlc* LNAPI_htlc_copy(const struct htlc*, void *tal_ctx);
+/*take API from htlc.h*/
+int         LNAPI_htlc_route_is_upstream(const struct htlc *h);
 
 void         LNAPI_object_release(void *);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
 

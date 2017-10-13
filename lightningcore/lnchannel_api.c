@@ -21,21 +21,26 @@ struct LNchannel* LNAPI_channel_copy(const struct LNchannel* chn,
     unsigned int copy_mask, void *tal_ctx)
 {
     struct LNchannel *lnchn = talz((tal_t*)tal_ctx, struct LNchannel);
+    htlc_map_init(&lnchn->htlcs);
+    shachain_init(&lnchn->their_preimages);
+
     NAPI_channel_copy(lnchn, chn, copy_mask);
     return lnchn;
 }
 
 void   NAPI_channel_copy(struct LNchannel* dst, const struct LNchannel* src, unsigned int copy_mask)
 {
-    size_t sz;
 #define SIMPLE_CREATE(NAME, TYPE) if(!dst->NAME){dst->NAME  = tal_dup(dst, TYPE, src->NAME);}\
                                     else memcpy(dst->NAME, src->NAME, sizeof(TYPE))
+#define SIMPLE_REPLACE(NAME, TYPE) tal_free(dst->NAME),dst->NAME  = tal_dup(dst, TYPE, src->NAME)
+#define SIMPLE_REPLACEARR(NAME, TYPE) tal_free(dst->NAME),dst->NAME  = tal_dup_arr(dst, TYPE, src->NAME, (tal_len(src->NAME)), 0)
 #define SIMPLE_COPY(NAME) memcpy(&dst->NAME, &src->NAME, sizeof(dst->NAME))
 
     //trivial
     dst->state = src->state;
     dst->state_height = src->state_height;
     SIMPLE_CREATE(id, struct pubkey);
+    if(src->notify_fail_reason)SIMPLE_REPLACEARR(notify_fail_reason, char);
 
     if (copy_mask & LNchn_copy_anchor)
     {
@@ -45,75 +50,60 @@ void   NAPI_channel_copy(struct LNchannel* dst, const struct LNchannel* src, uns
         dst->anchor.min_depth = src->anchor.min_depth;
         dst->anchor.ok_depth = src->anchor.ok_depth;
         dst->anchor.ours = src->anchor.ours;
-        if (src->anchor.input)SIMPLE_CREATE(anchor.input, struct anchor_input);
-        if (src->anchor.tx)SIMPLE_CREATE(anchor.tx, struct bitcoin_tx);
-        tal_free(dst->anchor.witnessscript);
-        sz = tal_len(src->anchor.witnessscript);
-        dst->anchor.witnessscript = tal_dup_arr(dst, u8, src->anchor.witnessscript, sz, 0);
+        if (src->anchor.input)SIMPLE_REPLACE(anchor.input, struct anchor_input);
+        SIMPLE_REPLACEARR(anchor.witnessscript, u8);
+        /*TODO: need bitcoin tx copy*/
+        dst->anchor.tx = NULL;
     }
 
     if (copy_mask & LNchn_copy_ourcommit)
     {
+        SIMPLE_COPY(local);
+        if(src->local.commit)SIMPLE_REPLACE(local.commit, struct commit_info);
+        SIMPLE_REPLACE(local.commit->cstate, struct channel_state);
+        dst->local.staging_cstate = dst->local.commit->cstate;
 
+        dst->local.commit->tx = NULL;
     }
 
     if (copy_mask & LNchn_copy_theircommit)
     {
+        SIMPLE_COPY(remote);
+        if (src->remote.commit)SIMPLE_REPLACE(remote.commit, struct commit_info);
+        SIMPLE_REPLACE(remote.commit->cstate, struct channel_state);
+        dst->remote.staging_cstate = dst->remote.commit->cstate;
 
+        dst->remote.commit->tx = NULL;
     }
 
-    lnchn->anchor.ok_depth = -1;
-    //	lnchn->order_counter = 0;
-    lnchn->their_commitsigs = 0;
-    lnchn->closing.their_sig = NULL;
-    lnchn->closing.our_script = NULL;
-    lnchn->closing.their_script = NULL;
-    lnchn->closing.shutdown_order = (s64)-1LL;
-    lnchn->closing.closing_order = (s64)-1LL;
-    lnchn->closing.sigs_in = 0;
-    lnchn->onchain.tx = NULL;
-    lnchn->onchain.resolved = NULL;
-    lnchn->onchain.htlcs = NULL;
-    lnchn->commit_timer = NULL;
-    lnchn->fake_close = false;
-    lnchn->output_enabled = true;
-    lnchn->local.offer_anchor = false;
-    lnchn->broadcast_index = 0;
-    if (!blocks_to_rel_locktime(dstate->config.locktime_blocks,
-        &lnchn->local.locktime))
-        fatal("Could not convert locktime_blocks");
-    lnchn->local.mindepth = dstate->config.anchor_confirms;
-    lnchn->local.commit = lnchn->remote.commit = NULL;
-    lnchn->local.staging_cstate = lnchn->remote.staging_cstate = NULL;
-    lnchn->log = tal_steal(lnchn, log);
-    log_debug(lnchn->log, "New lnchn %p", lnchn);
-    lnchn->notify_fail_reason = NULL;
-
-    lnchn->remote.offer_anchor = false;
-
-    htlc_map_init(&lnchn->htlcs);
-    //	memset(lnchn->feechanges, 0, sizeof(lnchn->feechanges));
-    shachain_init(&lnchn->their_preimages);
-
-    /* init runtime */
-    lnchn->rt.outsourcing_counter = 0;
-    lnchn->rt.outsourcing_lock = false;
-    lnchn->rt.prev_call = NULL;
-    lnchn->rt.changed_htlc_cache = NULL;
-    lnchn->rt.their_last_commit = NULL;
-    lnchn->rt.temp_errormsg = NULL;
-    memset(lnchn->rt.feechanges, 0, sizeof(lnchn->rt.feechanges));
-
-    //	tal_add_destructor(lnchn, destroy_lnchn);
+    if (copy_mask & LNchn_copy_closing)
+    {
+        SIMPLE_COPY(closing);
+        if (src->closing.their_sig) { 
+            SIMPLE_REPLACE(closing.their_sig, ecdsa_signature);
+            SIMPLE_REPLACEARR(closing.our_script, u8);
+            SIMPLE_REPLACEARR(closing.our_script, u8);
+        }
+    }
 
 }
 
-struct htlc* LNAPI_htlc_copy(const struct htlc* h)
+struct htlc* LNAPI_htlc_copy(const struct htlc* src, void *tal_ctx)
 {
+    struct htlc *dst = talz((tal_t*)tal_ctx, struct htlc);
 
+    *dst = *src;
+
+    if (src->r) { SIMPLE_CREATE(r, struct preimage); }
+    if (src->fail) { SIMPLE_REPLACEARR(fail, u8); }
+    if (src->src_expiry) { SIMPLE_REPLACE(src_expiry, struct abs_locktime); }
+
+    return dst;
 }
+
+int         LNAPI_htlc_route_is_upstream(const struct htlc *h) { return h->routing & 1; }
 
 void         LNAPI_object_release(void * p)
 {
-
+    tal_free(p);
 }

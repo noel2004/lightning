@@ -1,15 +1,23 @@
 #ifndef LIGHTNING_BITCOIN_SIMPLE_H
 #define LIGHTNING_BITCOIN_SIMPLE_H
 
-struct pubkey;
+#ifdef __cplusplus
+extern "C"{
+#endif
+
+    struct pubkey;
 #define SIMPLE_PUBKEY_DATASIZE 33
-unsigned char*  simple_pubkey_data(struct pubkey*);
-unsigned int    simple_pubkey_size(struct pubkey*);
+    const unsigned char*  simple_pubkey_data(const struct pubkey*);
+    unsigned int    simple_pubkey_size(const struct pubkey*);
 
-struct sha256;
+    struct sha256;
 #define SIMPLE_SHA256_DATASIZE 32
-unsigned char*  simple_sha256_data(struct sha256*);
+    const unsigned char*  simple_sha256_data(const struct sha256*);
 
-void            simple_freeobjects(void*);
+    void            simple_freeobjects(void*);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* LIGHTNING_BITCOIN_SIMPLE_H */

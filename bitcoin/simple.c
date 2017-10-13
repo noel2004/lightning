@@ -4,10 +4,10 @@
 #include <ccan/tal/tal.h>
 #include "pubkey.h"
 
-unsigned char*  simple_pubkey_data(struct pubkey* pk) { return pk->pubkey.data_uc; }
-unsigned int    simple_pubkey_size(struct pubkey* pk) { return pk->compressed ? sizeof(pk->pubkey.data) : sizeof(pk->pubkey.data_uc); }
+const unsigned char*  simple_pubkey_data(const struct pubkey* pk) { return pk->pubkey.data_uc; }
+unsigned int    simple_pubkey_size(const struct pubkey* pk) { return pk->compressed ? sizeof(pk->pubkey.data) : sizeof(pk->pubkey.data_uc); }
 
-unsigned char*  simple_sha256_data(struct sha256* s) { return s->u.u8; }
+const unsigned char*  simple_sha256_data(const struct sha256* s) { return s->u.u8; }
 
 void            simple_freeobjects(void* p) { tal_free(p); }
 

@@ -21,8 +21,9 @@ void    lite_clean_channels(struct lightningd_state* state);
    * commit_info:txid
 */
 void    lite_update_channel(struct LNchannels *mgr, const struct LNchannel *lnchn);
-void    lite_reg_htlc(struct LNchannels *mgr, const struct LNchannel *lnchn, const struct htlc *htlc);
-void    lite_unreg_htlc(struct LNchannels *mgr, const struct htlc *htlc);
+void    lite_reg_htlc(struct LNchannels *mgr, const struct LNchannel *lnchn, 
+    const struct sha256* hash, const struct htlc *htlc);
+void    lite_unreg_htlc(struct LNchannels *mgr, const struct sha256* hash, const struct htlc *htlc);
 
 struct LNchannelQuery* lite_query_channel(struct LNchannels *mgr, const struct pubkey *id);
 struct LNchannelQuery* lite_query_channel_from_htlc(struct LNchannels *mgr, const struct sha256* hash, int issrc);
