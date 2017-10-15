@@ -93,6 +93,16 @@ extern "C" {
 
     void    lite_update_channel(struct LNchannels *mgr, const struct LNchannel *lnchn)
     {
+        auto& ipk = pubkey_from_raw(LNAPI_channel_pubkey(lnchn));
+        auto fret = mgr->channel_map.find(ipk);
+        if (fret == mgr->channel_map.end()) {
+            mgr->channel_map.insert(LNchannels::channelmap_type::value_type(
+                ipk, LNAPI_channel_copy(lnchn, LNchn_copy_all, nullptr)));
+        }
+        else {
+            NAPI_channel_update(fret->second, lnchn, LNchn_copy_all);
+        }
+
     }
 
     void    lite_reg_htlc(struct LNchannels *mgr, const struct LNchannel *lnchn, 
@@ -189,9 +199,9 @@ extern "C" {
         //do nothing: we just keep the original htlc
     }
 
-    void    lite_query_commit_txid(const struct LNchannelQuery *q, struct sha256_double *commit_txid[3])
+    void    lite_query_commit_txid(const struct LNchannelQuery *q, const struct sha256_double *commit_txid[3])
     {
-
+        LNAPI_channel_commits(q->p, commit_txid);
     }
 
     const struct pubkey *lite_query_pubkey(const struct LNchannelQuery *q)
@@ -202,7 +212,8 @@ extern "C" {
 
     int lite_query_isactive(const struct LNchannelQuery *q)
     {
-        return 0;
+        auto s = LNAPI_channel_state(q->p);
+        return s < STATE_SHUTDOWN && s >= STATE_NORMAL;
     }
 
     const struct sha256_double *lite_query_anchor_txid(const struct LNchannelQuery *q)

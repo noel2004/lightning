@@ -1049,4 +1049,5 @@ bool lnchn_check_closed(struct LNchannel *chn) {
     //TODO: check all the onchain.resolved is filled
     //TODO: check all involved htlc is in "can remove" status
     //(downloadstream must dead first if it was in htlc chain)
+    return true;
 }

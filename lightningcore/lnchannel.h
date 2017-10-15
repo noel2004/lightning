@@ -43,8 +43,7 @@ bool lnchn_add_htlc(struct LNchannel *chn, u64 msatoshi,
 
 bool lnchn_update_htlc(struct LNchannel *lnchn, const struct sha256 *rhash);
 
-bool lnchn_do_commit(struct LNchannel *chn, 
-    const struct sha256 *next_revocation);
+bool lnchn_do_commit(struct LNchannel *chn);
 
 bool lnchn_resolve_htlc(struct LNchannel *lnchn, const struct sha256 *rhash, 
     const struct preimage *r, enum fail_error *error_code);
@@ -130,6 +129,7 @@ bool lnchn_notify_commit(struct LNchannel *lnchn,
 bool lnchn_notify_remote_commit(struct LNchannel *lnchn,
     u64 commit_num,
     const ecdsa_signature *sig,
+    const struct sha256 *next_revocation,
     const struct sha256 *revocation_image
 );
 

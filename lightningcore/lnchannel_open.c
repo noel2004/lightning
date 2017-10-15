@@ -182,7 +182,6 @@ static bool lnchn_crypto_on(struct LNchannel *lnchn, char *redeem_addr)
     log_info(lnchn->log, "set redeem address as {%s}", useaddr);
     internal_set_lnchn_state(lnchn, STATE_OPEN_WAIT_FOR_OPENPKT, __func__, true);
 
-	lnchn_get_revocation_hash(lnchn, 0, &lnchn->local.next_revocation_hash);
     return true;
 }
 
@@ -197,6 +196,7 @@ static bool lnchn_first_open(struct LNchannel *lnchn,
     lnchn->local.offer_anchor = offer_anchor;
     lnchn->remote.offer_anchor = !offer_anchor;
 
+    lnchn_get_revocation_hash(lnchn, 0, &lnchn->local.next_revocation_hash);
     //TODO: add redeem addr option
     return lnchn_crypto_on(lnchn, NULL);
 
@@ -417,10 +417,13 @@ static bool first_commit(struct LNchannel *lnchn,
         STATE_OPEN_WAIT_ANCHORDEPTH :
         STATE_OPEN_WAIT_ANCHORDEPTH_AND_THEIRCOMPLETE;
 
-    lnchn_get_revocation_hash(lnchn, 1, &next_hash);
+    lnchn_get_revocation_hash(lnchn, 0, &next_hash);
 
-    internal_lnchn_update_commit(lnchn, REMOTE, revocation_hash, NULL);
-    internal_lnchn_update_commit(lnchn, LOCAL, &next_hash, sig);
+    internal_lnchn_update_commit(lnchn, REMOTE, NULL);
+    internal_lnchn_update_commit(lnchn, LOCAL, sig);
+    lnchn->remote.next_revocation_hash = *revocation_hash;
+    lnchn_get_revocation_hash(lnchn, 1, 
+        &lnchn->local.next_revocation_hash);
 
     db_start_transaction(lnchn);
     if (next == STATE_OPEN_WAIT_ANCHORDEPTH_AND_THEIRCOMPLETE) {
@@ -430,6 +433,7 @@ static bool first_commit(struct LNchannel *lnchn,
 
     db_new_commit_info(lnchn, LOCAL);
     db_new_commit_info(lnchn, REMOTE);
+    db_update_next_revocation_hash(lnchn);
     internal_set_lnchn_state(lnchn,  next, __func__, true);
 
     if (db_commit_transaction(lnchn) != NULL){

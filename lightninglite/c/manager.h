@@ -44,7 +44,7 @@ void    lite_release_htlc(struct LNchannels *mgr, const struct htlc *htlc);
    query commit_txid: [local, remote, <previous remote>], can be NULL, 
    previous remote only exist when channel is under commting state   
 */
-void    lite_query_commit_txid(const struct LNchannelQuery *q, struct sha256_double *commit_txid[3]);
+void    lite_query_commit_txid(const struct LNchannelQuery *q, const struct sha256_double *commit_txid[3]);
 
 const struct pubkey *lite_query_pubkey(const struct LNchannelQuery *q);
 

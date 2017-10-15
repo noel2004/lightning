@@ -453,7 +453,7 @@ static void send_commit_msg(struct LNchannel *lnchn) {
     lite_msg_commit_purpose(lnchn->dstate->message_svr, 
         lnchn->remote.commit->commit_num,
         lnchn->remote.commit->sig,
-        &lnchn->remote.next_revocation_hash,
+        &lnchn->local.next_revocation_hash,
         tal_count(msgs), msgs);
 
     tal_free(msgs);
@@ -469,6 +469,7 @@ static void send_commit_recv_msg(struct LNchannel *lnchn) {
     lite_msg_commit_resp(lnchn->dstate->message_svr,
         lnchn->remote.commit->commit_num,
         lnchn->remote.commit->sig,
+        &lnchn->local.next_revocation_hash,
         &preimage);
 
 }
@@ -549,6 +550,7 @@ static void on_commit_outsourcing_finish(struct LNchannel *lnchn, enum outsourci
         db_new_commit_info(lnchn, LOCAL);
         if(lnchn->rt.feechanges[LOCAL])
             db_new_feechange(lnchn, lnchn->rt.feechanges[LOCAL]);
+        db_update_next_revocation_hash(lnchn);
     }
 
     internal_set_lnchn_state(lnchn, remote_only ?
@@ -578,8 +580,7 @@ static void on_commit_outsourcing_finish(struct LNchannel *lnchn, enum outsourci
    is only updated when all status is OK
 */
 static bool update_commit(struct LNchannel *lnchn, 
-    enum side side, const struct sha256 *next_revocation,
-    const ecdsa_signature *remote_sig)
+    enum side side, const ecdsa_signature *remote_sig)
 {
     struct commit_info *ci;
     bool only_other_side;
@@ -592,7 +593,7 @@ static bool update_commit(struct LNchannel *lnchn,
         vside->commit->commit_num + 1 : 0);
 
     /* Create new commit info for this commit tx. */
-    ci->revocation_hash = lnchn->remote.next_revocation_hash;
+    ci->revocation_hash = vside->next_revocation_hash;
     ci->cstate = copy_cstate(ci, vside->staging_cstate);
     ci->tx = create_commit_tx(ci, lnchn, &ci->revocation_hash,
         ci->cstate, side, &only_other_side, &htlcs_update);
@@ -651,7 +652,6 @@ static bool update_commit(struct LNchannel *lnchn,
 
     /* Switch to the new commitment. */
     vside->commit = ci;
-    vside->next_revocation_hash = *next_revocation;
 
     /* Update htlc indexs. */
     update_htlc_in_channel(lnchn, side, htlcs_update);
@@ -661,14 +661,12 @@ static bool update_commit(struct LNchannel *lnchn,
 }
 
 void internal_lnchn_update_commit(struct LNchannel *lnchn,
-    enum side side, const struct sha256 *next_revocation,
-    const ecdsa_signature *sig) {
+    enum side side, const ecdsa_signature *sig) {
 
-    update_commit(lnchn, side, next_revocation, sig);
+    update_commit(lnchn, side, sig);
 }
 
-bool lnchn_do_commit(struct LNchannel *lnchn, 
-    const struct sha256 *next_revocation)
+bool lnchn_do_commit(struct LNchannel *lnchn)
 {
     struct htlc **add_t, **rem_t, **other_t;
     static const enum htlc_state changed_states[] = 
@@ -731,7 +729,7 @@ bool lnchn_do_commit(struct LNchannel *lnchn,
         return false;
     }
 
-    if (!update_commit(lnchn, REMOTE, next_revocation, NULL))return false;
+    if (!update_commit(lnchn, REMOTE, NULL))return false;
 
     //channel must be updated before outsourcing!
     lite_update_channel(lnchn->dstate->channels, lnchn);
@@ -751,7 +749,6 @@ bool lnchn_notify_commit(struct LNchannel *lnchn,
     const struct msg_htlc_entry *htlc_entry
 ) {
     struct htlc **htlcs_update;
-    struct sha256 next_hash;
     static const enum htlc_state changed_states[] = 
         { RCVD_REMOVE_COMMIT, RCVD_ADD_COMMIT };/*del, add*/
     size_t applied_t;
@@ -811,11 +808,11 @@ bool lnchn_notify_commit(struct LNchannel *lnchn,
         return false;
     }
 
+    if (!update_commit(lnchn, LOCAL, sig))return false;
+    if (!update_commit(lnchn, REMOTE, NULL))return false;
     lnchn_get_revocation_hash(lnchn, lnchn->local.commit->commit_num + 1,
-        &next_hash);
-    if (!update_commit(lnchn, LOCAL, &next_hash, sig))return false;
-
-    if (!update_commit(lnchn, REMOTE, next_revocation, NULL))return false;
+        &lnchn->local.next_revocation_hash);
+    lnchn->remote.next_revocation_hash = *next_revocation;
 
     lite_update_channel(lnchn->dstate->channels, lnchn);
     //set outsourcing
@@ -841,6 +838,7 @@ static void on_commit_revoke_outsourcing_finish(struct LNchannel *lnchn,
         db_new_feechange(lnchn, lnchn->rt.feechanges[LOCAL]);
 
     db_save_shachain(lnchn);
+    db_update_next_revocation_hash(lnchn);
 
     if (db_commit_transaction(lnchn) != NULL) {
         internal_lnchn_temp_breakdown(lnchn, "db fail");
@@ -852,9 +850,9 @@ static void on_commit_revoke_outsourcing_finish(struct LNchannel *lnchn,
 bool lnchn_notify_remote_commit(struct LNchannel *lnchn,
     u64 commit_num,
     const ecdsa_signature *sig,
+    const struct sha256 *next_revocation,
     const struct sha256 *revocation_image
 ) {
-    struct sha256 next_hash;
 
     if (lnchn->state != STATE_NORMAL_COMMITTING) {
         internal_lnchn_fail_on_notify(lnchn, "channel is not in committing state");
@@ -888,9 +886,11 @@ bool lnchn_notify_remote_commit(struct LNchannel *lnchn,
     }
 
 
+    if (!update_commit(lnchn, LOCAL, sig))return false;
+
+    lnchn->remote.next_revocation_hash = *next_revocation;
     lnchn_get_revocation_hash(lnchn, lnchn->local.commit->commit_num + 1,
-        &next_hash);
-    if (!update_commit(lnchn, LOCAL, &next_hash, sig))return false;
+        &lnchn->local.next_revocation_hash);
 
     lite_update_channel(lnchn->dstate->channels, lnchn);
     internal_outsourcing_for_committing(lnchn, LOCAL, on_commit_revoke_outsourcing_finish);

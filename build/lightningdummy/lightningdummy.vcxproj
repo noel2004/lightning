@@ -23,6 +23,9 @@
     <ClCompile Include="..\..\lightninglite\message_dummy.cpp" />
     <ClCompile Include="..\..\lightninglite\payment_dummy.cpp" />
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\lightninglite\dummy.h" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>
     <ProjectGuid>{39CA5157-C2C6-4704-9294-56CE2DD0B55D}</ProjectGuid>

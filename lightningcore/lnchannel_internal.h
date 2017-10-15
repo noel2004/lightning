@@ -57,7 +57,7 @@ struct LNChannel_visible_state {
 	unsigned int mindepth;
 	/* Commitment fee they're offering (satoshi). */
 	u64 commit_fee_rate;
-	/* Revocation hash for next commit tx. */
+	/* Revocation hash for next commit tx.  */
 	struct sha256 next_revocation_hash;
 	/* Commit txs: last one is current. */
 	struct commit_info *commit;
@@ -235,8 +235,7 @@ void internal_htlc_fullfill(struct LNchannel *chn, const struct preimage *r, str
 void internal_htlc_fail(struct LNchannel *chn, const u8 *fail, size_t len, struct htlc *h);
 
 void internal_lnchn_update_commit(struct LNchannel *lnchn,
-    enum side side, const struct sha256 *next_revocation,
-    const ecdsa_signature *);
+    enum side side, const ecdsa_signature *);
 
 void internal_lnchn_breakdown(struct LNchannel *lnchn);
 

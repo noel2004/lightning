@@ -9,9 +9,12 @@ struct LNchannel;
 struct htlc;
 struct pubkey;
 struct sha256;
+struct sha256_double;
 
 const struct pubkey* LNAPI_channel_pubkey(const struct LNchannel*);
+void               LNAPI_channel_commits(const struct LNchannel*, const struct sha256_double*[3]);
 const struct htlc* LNAPI_channel_htlc(const struct LNchannel*, const struct sha256*);
+int                LNAPI_channel_state(const struct LNchannel*);
 
 typedef enum LNchannelPart_e
 {
@@ -25,7 +28,7 @@ typedef enum LNchannelPart_e
 } LNchannelPart;
 
 struct LNchannel* LNAPI_channel_copy(const struct LNchannel*, unsigned int copy_mask, void *tal_ctx);
-void   NAPI_channel_copy(struct LNchannel*, const struct LNchannel*, unsigned int copy_mask);
+void   NAPI_channel_update(struct LNchannel*, const struct LNchannel*, unsigned int copy_mask);
 
 struct htlc* LNAPI_htlc_copy(const struct htlc*, void *tal_ctx);
 /*take API from htlc.h*/
