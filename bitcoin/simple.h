@@ -21,6 +21,11 @@ extern "C"{
     struct sha256*  simple_sha256_create(void* ctx, const unsigned char*);
     struct sha256_double*  simple_sha256double_create(void* ctx, const unsigned char*);
 
+    struct preimage;
+#define SIMPLE_PREIMAGE_DATASIZE 32
+    const unsigned char*  simple_preimage_data(const struct preimage*);
+    struct preimage*  simple_preimage_create(void* ctx, const unsigned char*);
+
     struct ecdsa_signature_;
 #define SIMPLE_ECDSA_DATASIZE 64
     const unsigned char*  simple_ecdsasig_data(const struct ecdsa_signature_*);

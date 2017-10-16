@@ -19,6 +19,8 @@ struct pubkey {
     unsigned int sign_type;
 };
 
+struct pubkey *pubkey_create_btc(const tal_t *ctx, bool compressed);
+
 /* Convert from hex string of DER (scriptPubKey from validateaddress) */
 bool pubkey_from_hexstr(const char *derstr, size_t derlen, struct pubkey *key);
 

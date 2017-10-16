@@ -62,6 +62,15 @@ bool pubkey_from_hexstr(const char *derstr, size_t slen, struct pubkey *key)
     return !hex_decode(derstr, slen, &key->pubkey, dlen);
 }
 
+struct pubkey *pubkey_create_btc(const tal_t *ctx, bool compressed)
+{
+    struct pubkey *pk = talz(ctx, struct pubkey);
+    pk->sign_type = EC_FLAG_ECDSA;
+    pk->compressed = compressed;
+
+    return pk;
+}
+
 char *pubkey_to_hexstr(const tal_t *ctx, const struct pubkey *key)
 {
 	return tal_hexstr(ctx, &key->pubkey, key->compressed ? EC_PUBLIC_KEY_LEN : EC_PUBLIC_KEY_UNCOMPRESSED_LEN);

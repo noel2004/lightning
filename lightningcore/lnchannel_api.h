@@ -10,6 +10,7 @@ struct htlc;
 struct pubkey;
 struct sha256;
 struct sha256_double;
+struct msg_htlc_entry;
 
 const struct pubkey* LNAPI_channel_pubkey(const struct LNchannel*);
 void               LNAPI_channel_commits(const struct LNchannel*, const struct sha256_double*[3]);
@@ -33,6 +34,13 @@ void   NAPI_channel_update(struct LNchannel*, const struct LNchannel*, unsigned 
 struct htlc* LNAPI_htlc_copy(const struct htlc*, void *tal_ctx);
 /*take API from htlc.h*/
 int         LNAPI_htlc_route_is_upstream(const struct htlc *h);
+
+/*message helpers*/
+int         LNAPI_u8arr_size(const unsigned char* str);
+struct msg_htlc_entry* LNAPI_htlc_entry_create(unsigned int, void *tal_ctx);
+void        LIAPI_htlc_entry_fill_hash(struct msg_htlc_entry*, unsigned int index, const unsigned char*);
+void        LIAPI_htlc_entry_fill_del(struct msg_htlc_entry*, unsigned int index,
+    const unsigned char*, unsigned int sz/*if sz is zero, fill r instead of fail*/);
 
 void         LNAPI_object_release(void *);
 

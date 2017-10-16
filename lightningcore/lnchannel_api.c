@@ -6,6 +6,12 @@
 #include <ccan/structeq/structeq.h>
 #include <ccan/tal/str/str.h>
 #include <ccan/tal/tal.h>
+#include <ccan/crypto/sha256/sha256.h>
+#include <ccan/short_types/short_types.h>
+#include <ccan/tal/tal.h>
+#include "bitcoin/shadouble.h"
+#include "bitcoin/signature.h"
+#include "bitcoin/preimage.h"
 
 const struct pubkey* LNAPI_channel_pubkey(const struct LNchannel* chn)
 {
@@ -126,6 +132,31 @@ struct htlc* LNAPI_htlc_copy(const struct htlc* src, void *tal_ctx)
 }
 
 int         LNAPI_htlc_route_is_upstream(const struct htlc *h) { return h->routing & 1; }
+
+int         LNAPI_u8arr_size(const unsigned char* str) { return tal_len(str); }
+
+struct msg_htlc_entry* LNAPI_htlc_entry_create(unsigned int size, void *tal_ctx) 
+{ return tal_arrz(tal_ctx, struct msg_htlc_entry, size); }
+
+void        LIAPI_htlc_entry_fill_hash(struct msg_htlc_entry* h, unsigned int index, const unsigned char* hash)
+{
+    struct sha256* p = talz(h, struct sha256);
+    memcpy(p->u.u8, hash, sizeof(p->u.u8));
+    h[index].rhash = p;
+}
+
+void        LIAPI_htlc_entry_fill_del(struct msg_htlc_entry* h, unsigned int index,
+    const unsigned char* data, unsigned int sz/*if sz is zero, fill r instead of fail*/)
+{
+    if (sz == 0) {
+        struct preimage *r = talz(h, struct preimage);
+        memcpy(r->r, data, sizeof(r->r));
+        h[index].action.del.r = r;
+    }
+    else {
+        h[index].action.del.fail = tal_dup_arr(h, u8, data, sz, 0);
+    }
+}
 
 void         LNAPI_object_release(void * p)
 {
