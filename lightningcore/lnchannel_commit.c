@@ -414,6 +414,7 @@ static bool verify_commit_tasks(struct LNchannel *lnchn,
 static void send_commit_msg(struct LNchannel *lnchn) {
 
     //reconstruct changed htlcs and messages
+    struct sha256 next_hash;
     struct msg_htlc_entry* msgs, *msg_h;
     size_t i, n;
 
@@ -450,10 +451,12 @@ static void send_commit_msg(struct LNchannel *lnchn) {
     }
 
     tal_resize(&msgs, msg_h - msgs);
+    lnchn_get_revocation_hash(lnchn, lnchn->local.commit->commit_num + 2,
+        &next_hash);/*cost is cheap, so we do not cache it*/
     lite_msg_commit_purpose(lnchn->dstate->message_svr, 
         lnchn->remote.commit->commit_num,
         lnchn->remote.commit->sig,
-        &lnchn->local.next_revocation_hash,
+        &next_hash,
         tal_count(msgs), msgs);
 
     tal_free(msgs);

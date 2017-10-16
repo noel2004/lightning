@@ -131,3 +131,14 @@ void         LNAPI_object_release(void * p)
 {
     tal_free(p);
 }
+
+int        LNAPI_lnchn_update_htlc(struct LNchannel *lnchn, const struct sha256 *rhash)
+{
+    return lnchn_update_htlc(lnchn, rhash);
+}
+
+int        LNAPI_lnchn_do_commit(struct LNchannel *chn)
+{
+    return lnchn_do_commit(chn);
+}
+

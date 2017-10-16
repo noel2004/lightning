@@ -1,5 +1,6 @@
 
 #include <unordered_map>
+#include <unordered_set>
 #include <array>
 #include <cassert>
 #include "bitcoin/simple.h"
@@ -68,6 +69,8 @@ extern "C" {
         channelmap_type channel_map;
         typedef std::unordered_map<iShakey, htlcChain, iLongKeyHash>          htlcmap_type;
         htlcmap_type    htlc_map;
+
+        std::unordered_set<iPubkey, iLongKeyHash>       updated_list;
     };
 
     void    lite_init_channels(struct lightningd_state* state)
@@ -89,6 +92,7 @@ extern "C" {
     struct LNchannelComm
     {
         struct LNchannel *p;
+        struct LNchannels *mgr;
     };
 
     void    lite_update_channel(struct LNchannels *mgr, const struct LNchannel *lnchn)
@@ -164,7 +168,7 @@ extern "C" {
 
     struct LNchannelComm*  lite_comm_channel(struct LNchannels *mgr, struct LNchannelQuery *q)
     {
-        auto r = new LNchannelComm;
+        auto r = new LNchannelComm{ nullptr, mgr };
         auto fret = mgr->channel_map.find(pubkey_from_raw(LNAPI_channel_pubkey(q->p)));
         assert(fret != mgr->channel_map.end());
         r->p = fret->second;
@@ -230,12 +234,13 @@ extern "C" {
 
     void lite_notify_chn_commit(struct LNchannelComm* c)
     {
-
+        c->mgr->updated_list.insert(pubkey_from_raw(LNAPI_channel_pubkey(c->p)));
     }
 
     void lite_notify_chn_htlc_update(struct LNchannelComm* c, const struct sha256* hash)
     {
-
+        //CAUTION: don't do this in a real implement
+        LNAPI_lnchn_update_htlc(c->p, hash);
     }
 
 

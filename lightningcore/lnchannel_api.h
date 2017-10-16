@@ -36,6 +36,11 @@ int         LNAPI_htlc_route_is_upstream(const struct htlc *h);
 
 void         LNAPI_object_release(void *);
 
+/*lnchannel.h wrapper*/
+int        LNAPI_lnchn_update_htlc(struct LNchannel *lnchn, const struct sha256 *rhash);
+int        LNAPI_lnchn_do_commit(struct LNchannel *chn);
+
+
 #ifdef __cplusplus
 }
 #endif
