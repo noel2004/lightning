@@ -8,6 +8,7 @@
 #include "bitcoin/script.h"
 #include "bitcoin/shadouble.h"
 #include "bitcoin/preimage.h"
+#include "lnchannel_api.h"
 #include "failure.h"
 #include "feechange.h"
 #include "htlc.h"
@@ -22,8 +23,6 @@ struct lightningd_state;
 struct LNchannel;
 struct bitcoin_tx;
 struct txowatch;
-struct sha256_double;
-struct msg_htlc_entry;
 
 struct LNchannel *new_LNChannel(struct lightningd_state *dstate,
 		      struct log *log);
@@ -33,6 +32,7 @@ void reopen_LNChannel(struct LNchannel *lnchn);
 
 bool lnchn_open_local(struct LNchannel *lnchn, const struct pubkey *chnid);
 
+/* anchor_tx must be created under lnchn ctx and not released by caller */
 bool lnchn_open_anchor(struct LNchannel *lnchn, const struct bitcoin_tx *anchor_tx);
 
 bool lnchn_add_htlc(struct LNchannel *chn, u64 msatoshi,
@@ -55,14 +55,6 @@ bool lnchn_resolve_htlc(struct LNchannel *lnchn, const struct sha256 *rhash,
 const struct sha256_double* lnchn_get_anchor_txid(struct LNchannel *lnchn, bool force);
 
 enum state  lnchn_get_state(struct LNchannel *lnchn);
-
-struct LNchannel_config
-{
-    struct rel_locktime delay;
-    u32    min_depth;
-    u64    initial_fee_rate;
-    u64    purpose_satoshi;
-};
 
 void lnchn_negotiate_from_remote(struct LNchannel *lnchn);
 

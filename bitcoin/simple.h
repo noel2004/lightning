@@ -31,7 +31,7 @@ extern "C"{
     const unsigned char*  simple_ecdsasig_data(const struct ecdsa_signature_*);
     struct ecdsa_signature_* simple_ecdsasig_create(void* ctx, const unsigned char*);
 
-    void            simple_freeobjects(void*);
+    void            simple_freeobjects(const void*);
 
 #ifdef __cplusplus
 }

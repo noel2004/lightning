@@ -35,7 +35,10 @@
 static bool check_config_compatible(const struct lightningd_state *dstate,
     const struct LNchannel_config *nego_config)
 {
-    u32 delay_blk = rel_locktime_to_blocks(&nego_config->delay);
+    struct rel_locktime t;
+    if (!blocks_to_rel_locktime(nego_config->delay, &t))return false;
+
+    u32 delay_blk = nego_config->delay;
     u64 feerate = get_feerate(dstate->topology);
 
     if (delay_blk > dstate->config.locktime_max)
@@ -209,7 +212,7 @@ static void send_open_message(struct LNchannel *lnchn)
 
     config.initial_fee_rate = lnchn->local.commit_fee_rate;
     config.min_depth = lnchn->local.mindepth;
-    config.delay = lnchn->local.locktime;
+    config.delay = rel_locktime_to_blocks(&lnchn->local.locktime);
     //TODO: acceptor should indicate a minium (or supposed) value he will accept
     config.purpose_satoshi = 0;
 
@@ -308,8 +311,8 @@ bool lnchn_notify_open_remote(struct LNchannel *lnchn,
     //update remote data and corresponding local one
     lnchn->remote.commit_fee_rate = nego_config->initial_fee_rate;
     log_debug(lnchn->log, "Using remote fee rate %"PRIu64, lnchn->remote.commit_fee_rate);
-    lnchn->remote.locktime = nego_config->delay;
 	lnchn->remote.mindepth = nego_config->min_depth;
+    blocks_to_rel_locktime(nego_config->delay, &lnchn->remote.locktime);
 
     lnchn_negotiate_from_remote(lnchn);
 

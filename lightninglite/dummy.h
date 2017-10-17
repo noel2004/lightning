@@ -2,7 +2,9 @@
 #ifndef LIGHTNING_LITE_DUMMY_IMPL_H
 #define LIGHTNING_LITE_DUMMY_IMPL_H
 
-#include <future>
+#include <functional>
+#include "lightningcore/lnchannel_api.h"
+#include "bitcoin/simple.h"
 
 namespace lnl_dummy {
 
@@ -16,22 +18,24 @@ namespace lnl_dummy {
     };
 
     template<class F>
-    class task_package : protected task_package_base
+    class task_package : public task_package_base
     {
         F funcobj;
         void execute() override { funcobj(); }
 
     public:
-        task_package(F&& o) : funcobj(o){}
+        task_package(const F& o) : funcobj(o) { }
 
     };
 
-    void  add_task(task_package_base*);
+    void  add_task_p(task_package_base*);
     template<class F>
-    void  add_task(F&& o) { add_task(new task_package<F>(o)); }
+    void  add_task(const F& o) { add_task_p(new task_package<F>(o)); }
 
     void  dump_tasks();
     void  clear_tasks();
+
+    struct LNchannel* dummy_get_channel(const struct pubkey *);
 
 }//namespace lnl_dummy
 

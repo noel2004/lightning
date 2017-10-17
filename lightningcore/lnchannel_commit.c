@@ -454,6 +454,7 @@ static void send_commit_msg(struct LNchannel *lnchn) {
     lnchn_get_revocation_hash(lnchn, lnchn->local.commit->commit_num + 2,
         &next_hash);/*cost is cheap, so we do not cache it*/
     lite_msg_commit_purpose(lnchn->dstate->message_svr, 
+        lnchn->id,
         lnchn->remote.commit->commit_num,
         lnchn->remote.commit->sig,
         &next_hash,
@@ -470,6 +471,7 @@ static void send_commit_recv_msg(struct LNchannel *lnchn) {
         &preimage);
 
     lite_msg_commit_resp(lnchn->dstate->message_svr,
+        lnchn->id,
         lnchn->remote.commit->commit_num,
         lnchn->remote.commit->sig,
         &lnchn->local.next_revocation_hash,
@@ -485,6 +487,7 @@ static void send_commit_resp_ack_msg(struct LNchannel *lnchn) {
         &preimage);
 
     lite_msg_commit_resp_ack(lnchn->dstate->message_svr,
+        lnchn->id,
         lnchn->remote.commit->commit_num,
         &preimage);
 }
@@ -913,7 +916,7 @@ static void on_commit_final_outsourcing_finish(struct LNchannel *lnchn,
     log_debug(lnchn->log, "recv commit %"PRIu64" finish", lnchn->local.commit->commit_num);
     log_add_struct(lnchn->log, " current channel is %s", struct LNchannel, lnchn);
 
-    lite_msg_commit_final(lnchn->dstate->message_svr);
+    lite_msg_commit_final(lnchn->dstate->message_svr, lnchn->id);
 }
 
 bool lnchn_notify_revo_commit(struct LNchannel *lnchn,
@@ -929,7 +932,7 @@ bool lnchn_notify_revo_commit(struct LNchannel *lnchn,
     }
     else if (lnchn->state == STATE_NORMAL) {
         //duplicated message
-        lite_msg_commit_final(lnchn->dstate->message_svr);
+        lite_msg_commit_final(lnchn->dstate->message_svr, lnchn->id);
         return true;
     }else if (lnchn->state != STATE_NORMAL_COMMITTING_RECV) {
         internal_lnchn_fail_on_notify(lnchn, "channel is not in committing recv state");

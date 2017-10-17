@@ -3,8 +3,7 @@
 #include <unordered_set>
 #include <array>
 #include <cassert>
-#include "bitcoin/simple.h"
-#include "lightningcore/lnchannel_api.h"
+#include "dummy.h"
 
 namespace {
 

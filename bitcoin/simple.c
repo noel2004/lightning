@@ -29,5 +29,5 @@ struct sha256_double*  simple_sha256double_create(void* ctx, const unsigned char
 struct ecdsa_signature_* simple_ecdsasig_create(void* ctx, const unsigned char* u){ SIMPLE_CREATE_TYPE(data, struct ecdsa_signature_, SIMPLE_ECDSA_DATASIZE); }
 struct preimage*  simple_preimage_create(void* ctx, const unsigned char* u){ SIMPLE_CREATE_TYPE(r, struct preimage, SIMPLE_PREIMAGE_DATASIZE); }
 
-void            simple_freeobjects(void* p) { tal_free(p); }
+void            simple_freeobjects(const void* p) { tal_free(p); }
 

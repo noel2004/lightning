@@ -52,6 +52,7 @@ struct msg_htlc_entry
 };
 
 void    lite_msg_commit_purpose(struct LNmessage *msg,
+    const struct pubkey *target,
     unsigned long long commit_num,
     const struct ecdsa_signature_ *sig,
     const struct sha256 *next_revocation,
@@ -60,6 +61,7 @@ void    lite_msg_commit_purpose(struct LNmessage *msg,
 );
 
 void    lite_msg_commit_resp(struct LNmessage *msg,
+    const struct pubkey *target,
     unsigned long long commit_num,
     const struct ecdsa_signature_ *sig,
     const struct sha256 *revocation_hash,
@@ -67,10 +69,12 @@ void    lite_msg_commit_resp(struct LNmessage *msg,
 );
 
 void    lite_msg_commit_resp_ack(struct LNmessage *msg,
+    const struct pubkey *target,
     unsigned long long commit_num,
     const struct sha256 *revocation_image
 );
 
-void    lite_msg_commit_final(struct LNmessage *msg);
+void    lite_msg_commit_final(struct LNmessage *msg, 
+    const struct pubkey *target);
 
 #endif
