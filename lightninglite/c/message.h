@@ -11,7 +11,7 @@ struct htlc;
 struct ecdsa_signature_;
 
 /*take target id from channel id*/
-void    lite_msg_open(struct LNmessage *msg, const struct pubkey *target, 
+void    lite_msg_open(struct LNmessage *msg, const struct pubkey *source, 
     const struct LNchannel_config *nego_config, 
     const struct sha256 *revocation_hash,
     const struct pubkey *channel_key[2]);

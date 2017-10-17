@@ -1,13 +1,14 @@
 
 #include "dummy.h"
 #include <memory>
+#include <array>
 
 namespace {
     template<class T>
     struct pointer_wrapper
     {
         std::shared_ptr<T> wrapped_p;
-        operator T*() const { return wrapped_p.get(); }
+        operator const T*() const { return wrapped_p.get(); }
     };
 }
 
@@ -28,7 +29,21 @@ extern "C" {
         const struct sha256 *revocation_hash,
         const struct pubkey *channel_key[2])
     {
-        std::shared_ptr<struct pubkey> ptarget(simple_pubkey_create(msg->alloc_ctx, simple_pubkey_data(target)), simple_freeobjects);
+        /* TODO: create channel */
+        auto p = lnl_dummy::dummy_get_channel(target);
+
+        pointer_wrapper<struct LNchannel_config> pconfwrap{ 
+            std::shared_ptr<struct LNchannel_config>(new struct LNchannel_config) };        
+        *pconfwrap.wrapped_p = *nego_config;
+
+        lnl_dummy::add_task(std::bind(&LNAPI_channelnotify_open_remote,
+            p,
+            WRAP_SHRPTR(struct pubkey, pubkey, target),
+            pconfwrap,
+            WRAP_SHRPTR(struct sha256, sha256, revocation_hash),
+            WRAP_SHRPTR(struct pubkey, pubkey, channel_key[0]),
+            WRAP_SHRPTR(struct pubkey, pubkey, channel_key[1])
+        ));
     }
 
     void    lite_msg_anchor(struct LNmessage *msg, const struct pubkey *target,
@@ -143,11 +158,11 @@ extern "C" {
 namespace lnl_dummy {
 
     void init_messages(struct lightningd_state* state) {
-
+        state->message_svr = new LNmessage{ nullptr};
     }
 
     void clean_messages(struct lightningd_state* state) {
-
+        delete state->message_svr;
     }
 }
 

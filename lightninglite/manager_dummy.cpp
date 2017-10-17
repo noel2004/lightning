@@ -239,7 +239,7 @@ extern "C" {
     void lite_notify_chn_htlc_update(struct LNchannelComm* c, const struct sha256* hash)
     {
         //CAUTION: don't do this in a real implement
-        LNAPI_lnchn_update_htlc(c->p, hash);
+        LNAPI_channel_update_htlc(c->p, hash);
     }
 
 

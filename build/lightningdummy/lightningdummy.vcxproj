@@ -19,9 +19,11 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\lightninglite\chain_dummy.cpp" />
     <ClCompile Include="..\..\lightninglite\manager_dummy.cpp" />
     <ClCompile Include="..\..\lightninglite\message_dummy.cpp" />
     <ClCompile Include="..\..\lightninglite\payment_dummy.cpp" />
+    <ClCompile Include="..\..\lightninglite\watch_dummy.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\lightninglite\dummy.h" />

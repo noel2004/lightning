@@ -1,7 +1,6 @@
 #ifndef LIGHTNING_BTCNETWORK_CHAINTOPOLOGY_C_INTERFACE_H
 #define LIGHTNING_BTCNETWORK_CHAINTOPOLOGY_C_INTERFACE_H
 #include "config.h"
-#include "bitcoin/shadouble.h"
 #include <ccan/short_types/short_types.h>
 
 struct sha256_double;

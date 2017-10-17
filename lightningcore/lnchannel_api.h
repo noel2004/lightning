@@ -66,7 +66,8 @@ int        LNAPI_channelnotify_open_remote(struct LNchannel *chn,
     const struct pubkey *remotechnid,                
     const struct LNchannel_config *nego_config,
     const struct sha256 *revocation_hash,      
-    const struct pubkey *remote_key[2] 
+    const struct pubkey *remote_commit_key,
+    const struct pubkey *remote_final_key
 );
 int        LNAPI_channelnotify_anchor(struct LNchannel *chn,
     const struct sha256_double *txid,

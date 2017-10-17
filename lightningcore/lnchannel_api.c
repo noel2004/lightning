@@ -197,11 +197,13 @@ int        LNAPI_channelnotify_open_remote(struct LNchannel *chn,
     const struct pubkey *remotechnid,
     const struct LNchannel_config *nego_config,
     const struct sha256 *revocation_hash,
-    const struct pubkey *remote_key[2]
+    const struct pubkey *remote_commit_key,
+    const struct pubkey *remote_final_key
 )
 {
+    const struct pubkey *pk[2] = { remote_commit_key , remote_final_key };
     return lnchn_notify_open_remote(chn, remotechnid, nego_config, 
-        revocation_hash, remote_key) ? 0 : check_failure(chn);
+        revocation_hash, pk) ? 0 : check_failure(chn);
 }
 
 int        LNAPI_channelnotify_anchor(struct LNchannel *chn,
