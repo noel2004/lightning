@@ -129,25 +129,25 @@ void internal_lnchn_temp_breakdown(struct LNchannel *lnchn, const char* reason)
 void internal_lnchn_breakdown(struct LNchannel *lnchn)
 {
 
-	/* If we have a closing tx, use it. */
-	if (lnchn->closing.their_sig) {
-		const struct bitcoin_tx *close = mk_bitcoin_close(lnchn, lnchn);
-		log_unusual(lnchn->log, "lnchn breakdown: sending close tx");
-		broadcast_tx(lnchn->dstate->topology, lnchn, close, NULL);
-		tal_free(close);
-	/* If we have a signed commit tx (maybe not if we just offered
-	 * anchor, or they supplied anchor, or no outputs to us). */
-	} else if (lnchn->local.commit && lnchn->local.commit->sig) {
-		log_unusual(lnchn->log, "lnchn breakdown: sending commit tx");
-		sign_commit_tx(lnchn);
-		broadcast_tx(lnchn->dstate->topology, lnchn,
-			     lnchn->local.commit->tx, NULL);
-	} else {
-		log_info(lnchn->log, "lnchn breakdown: nothing to do");
-		/* We close immediately. */
-		set_lnchn_state(lnchn, STATE_CLOSED, __func__, false);
-		db_forget_lnchn(lnchn);
-	}
+	///* If we have a closing tx, use it. */
+	//if (lnchn->closing.their_sig) {
+	//	const struct bitcoin_tx *close = mk_bitcoin_close(lnchn, lnchn);
+	//	log_unusual(lnchn->log, "lnchn breakdown: sending close tx");
+	//	broadcast_tx(lnchn->dstate->topology, lnchn, close, NULL);
+	//	tal_free(close);
+	///* If we have a signed commit tx (maybe not if we just offered
+	// * anchor, or they supplied anchor, or no outputs to us). */
+	//} else if (lnchn->local.commit && lnchn->local.commit->sig) {
+	//	log_unusual(lnchn->log, "lnchn breakdown: sending commit tx");
+	//	sign_commit_tx(lnchn);
+	//	broadcast_tx(lnchn->dstate->topology, lnchn,
+	//		     lnchn->local.commit->tx, NULL);
+	//} else {
+	//	log_info(lnchn->log, "lnchn breakdown: nothing to do");
+	//	/* We close immediately. */
+	//	set_lnchn_state(lnchn, STATE_CLOSED, __func__, false);
+	//	db_forget_lnchn(lnchn);
+	//}
 
 }
 
@@ -426,7 +426,7 @@ static bool lnchn_start_shutdown(struct LNchannel *lnchn)
 	} else {
 		newstate = STATE_SHUTDOWN;
 	}
-	set_lnchn_state(lnchn, newstate, __func__, true);
+	internal_set_lnchn_state(lnchn, newstate, __func__, true);
 
 	/* Catch case where we've exchanged and had no HTLCs anyway. */
 	if (lnchn->closing.their_script && !committed_to_htlcs(lnchn))

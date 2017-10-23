@@ -245,3 +245,9 @@ extern "C" {
 
 }
 
+namespace lnl_dummy {
+    struct LNchannel* dummy_get_channel(struct LNchannels *, const struct pubkey *) 
+    {
+        return nullptr; 
+    }
+}

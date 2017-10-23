@@ -650,13 +650,13 @@ static void reset_onchain_closing(struct LNchannel *lnchn, const struct bitcoin_
             tal_count(tx->output));
 
     /* If we have any HTLCs we're not committed to yet, fail them now. */
-    for (h = htlc_map_first(&lnchn->htlcs, &it);
-        h;
-        h = htlc_map_next(&lnchn->htlcs, &it)) {
-        if (!htlc_is_fixed(h)) {
-            internal_fail_own_htlc(lnchn, h);
-        }
-    }
+    //for (h = htlc_map_first(&lnchn->htlcs, &it);
+    //    h;
+    //    h = htlc_map_next(&lnchn->htlcs, &it)) {
+    //    if (!htlc_is_fixed(h)) {
+    //        internal_fail_own_htlc(lnchn, h);
+    //    }
+    //}
 
 }
 

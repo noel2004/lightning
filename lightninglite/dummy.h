@@ -35,7 +35,7 @@ namespace lnl_dummy {
     void  dump_tasks();
     void  clear_tasks();
 
-    struct LNchannel* dummy_get_channel(const struct pubkey *);
+    struct LNchannel* dummy_get_channel(struct LNchannels *, const struct pubkey *);
 
 }//namespace lnl_dummy
 

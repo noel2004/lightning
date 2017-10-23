@@ -18,6 +18,7 @@ extern "C" {
 
     struct LNmessage {
         void* alloc_ctx;
+        struct lightningd_state* state;
     };
 
 #define WRAP_SHRPTR(TYPE, SUFFIX, NAME) pointer_wrapper<TYPE>{\
@@ -30,7 +31,7 @@ extern "C" {
         const struct pubkey *channel_key[2])
     {
         /* TODO: create channel */
-        auto p = lnl_dummy::dummy_get_channel(target);
+        auto p = lnl_dummy::dummy_get_channel(msg->state->channels, target);
 
         pointer_wrapper<struct LNchannel_config> pconfwrap{ 
             std::shared_ptr<struct LNchannel_config>(new struct LNchannel_config) };        
@@ -52,7 +53,7 @@ extern "C" {
         unsigned long long amount,
         const struct sha256 *revocation_hash)
     {
-        auto p = lnl_dummy::dummy_get_channel(target);
+        auto p = lnl_dummy::dummy_get_channel(msg->state->channels, target);
         lnl_dummy::add_task(std::bind(&LNAPI_channelnotify_anchor,
             p,
             WRAP_SHRPTR(struct sha256_double, sha256double, txid),
@@ -67,7 +68,7 @@ extern "C" {
         const struct ecdsa_signature_ *sig
     )
     {
-        auto p = lnl_dummy::dummy_get_channel(target);
+        auto p = lnl_dummy::dummy_get_channel(msg->state->channels, target);
         lnl_dummy::add_task(std::bind(&LNAPI_channelnotify_first_commit,
             p,
             WRAP_SHRPTR(struct sha256, sha256, revocation_hash),
@@ -84,7 +85,7 @@ extern "C" {
         const struct msg_htlc_entry *htlc_entry
     )
     {
-        auto p = lnl_dummy::dummy_get_channel(target);
+        auto p = lnl_dummy::dummy_get_channel(msg->state->channels, target);
         auto htlcs = LNAPI_htlc_entry_create(num_htlc_entry, msg->alloc_ctx);
         for (size_t i = 0; i < num_htlc_entry; ++i) {
             LNAPI_htlc_entry_fill_hash(htlcs, i, simple_sha256_data(htlc_entry[i].rhash));
@@ -120,7 +121,7 @@ extern "C" {
         const struct sha256 *revocation_image
     )
     {
-        auto p = lnl_dummy::dummy_get_channel(target);
+        auto p = lnl_dummy::dummy_get_channel(msg->state->channels, target);
         lnl_dummy::add_task(std::bind(&LNAPI_channelnotify_remote_commit,
             p,
             commit_num,
@@ -136,7 +137,7 @@ extern "C" {
         const struct sha256 *revocation_image
     )
     {
-        auto p = lnl_dummy::dummy_get_channel(target);
+        auto p = lnl_dummy::dummy_get_channel(msg->state->channels, target);
         lnl_dummy::add_task(std::bind(&LNAPI_channelnotify_revo_commit,
             p,
             commit_num,
@@ -147,7 +148,7 @@ extern "C" {
     void    lite_msg_commit_final(struct LNmessage *msg, 
         const struct pubkey *target)
     {
-        auto p = lnl_dummy::dummy_get_channel(target);
+        auto p = lnl_dummy::dummy_get_channel(msg->state->channels, target);
         lnl_dummy::add_task(std::bind(&LNAPI_channelnotify_commit_done,
             p
         ));
@@ -158,7 +159,7 @@ extern "C" {
 namespace lnl_dummy {
 
     void init_messages(struct lightningd_state* state) {
-        state->message_svr = new LNmessage{ nullptr};
+        state->message_svr = new LNmessage{ nullptr, state };
     }
 
     void clean_messages(struct lightningd_state* state) {
