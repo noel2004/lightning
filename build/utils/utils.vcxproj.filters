@@ -1,0 +1,59 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="源文件">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="头文件">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;hm;inl;inc;xsd</Extensions>
+    </Filter>
+    <Filter Include="sodium-lite">
+      <UniqueIdentifier>{18ce5b47-14b1-4bac-a295-3923b64b3704}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\utils\type_to_string.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\utils\utils.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\utils\opt_bits.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\utils\sodium\randombytes.c">
+      <Filter>sodium-lite</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\utils\sodium\randombytes_sysrandom.c">
+      <Filter>sodium-lite</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\utils\sodium\utils.c">
+      <Filter>sodium-lite</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\utils\type_to_string.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\utils\utils.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\utils\opt_bits.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\utils\sodium\export.h">
+      <Filter>sodium-lite</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\utils\sodium\randombytes.h">
+      <Filter>sodium-lite</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\utils\sodium\randombytes_sysrandom.h">
+      <Filter>sodium-lite</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\utils\sodium\utils.h">
+      <Filter>sodium-lite</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>

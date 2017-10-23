@@ -1,0 +1,151 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="源文件">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="头文件">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;hm;inl;inc;xsd</Extensions>
+    </Filter>
+    <Filter Include="源文件\ccan">
+      <UniqueIdentifier>{22cb3805-10f3-4ea6-9ea2-039b575e1c71}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="源文件\secp256k1">
+      <UniqueIdentifier>{52b5214a-bed1-4d50-978d-c10f4503b5a1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="头文件\ccan">
+      <UniqueIdentifier>{ff263478-de22-4fa9-8a53-b2bdc7a9b5ae}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="头文件\export">
+      <UniqueIdentifier>{d4e92f28-0e55-4267-97b7-244f9b654565}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="ReadMe.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\libwally-core\src\aes.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\libwally-core\src\base58.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\libwally-core\src\bip32.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\libwally-core\src\bip38.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\libwally-core\src\bip39.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\libwally-core\src\hex.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\libwally-core\src\hmac.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\libwally-core\src\internal.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\libwally-core\src\mnemonic.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\libwally-core\src\pbkdf2.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\libwally-core\src\scrypt.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\libwally-core\src\sign.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\libwally-core\src\wordlist.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\libwally-core\src\ccan\ccan\crypto\ripemd160\ripemd160.c">
+      <Filter>源文件\ccan</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\libwally-core\src\ccan\ccan\crypto\sha256\sha256.c">
+      <Filter>源文件\ccan</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\libwally-core\src\ccan\ccan\crypto\sha512\sha512.c">
+      <Filter>源文件\ccan</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\libwally-core\src\ccan\ccan\str\hex\hex.c">
+      <Filter>源文件\ccan</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\libwally-core\src\ccan\ccan\tap\tap.c">
+      <Filter>源文件\ccan</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\libwally-core\src\secp256k1\src\secp256k1.c">
+      <Filter>源文件\secp256k1</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\libwally-core\src\base58.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\libwally-core\src\bip32_int.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\libwally-core\src\hmac.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\libwally-core\src\internal.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\libwally-core\src\mnemonic.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\libwally-core\src\wordlist.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\libwally-core\src\ccan\ccan\compiler\compiler.h">
+      <Filter>头文件\ccan</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\libwally-core\src\ccan\ccan\crypto\ripemd160\ripemd160.h">
+      <Filter>头文件\ccan</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\libwally-core\src\ccan\ccan\crypto\sha256\sha256.h">
+      <Filter>头文件\ccan</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\libwally-core\src\ccan\ccan\crypto\sha512\sha512.h">
+      <Filter>头文件\ccan</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\libwally-core\src\ccan\ccan\endian\endian.h">
+      <Filter>头文件\ccan</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\libwally-core\src\ccan\ccan\str\hex\hex.h">
+      <Filter>头文件\ccan</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\libwally-core\src\ccan\ccan\tap\tap.h">
+      <Filter>头文件\ccan</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\libwally-core\include\wally_bip32.h">
+      <Filter>头文件\export</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\libwally-core\include\wally_bip38.h">
+      <Filter>头文件\export</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\libwally-core\include\wally_bip39.h">
+      <Filter>头文件\export</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\libwally-core\include\wally_core.h">
+      <Filter>头文件\export</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\libwally-core\include\wally_crypto.h">
+      <Filter>头文件\export</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\libwally-core\src\hmac.inl">
+      <Filter>头文件</Filter>
+    </None>
+    <None Include="..\..\libwally-core\src\pbkdf2.inl">
+      <Filter>头文件</Filter>
+    </None>
+  </ItemGroup>
+</Project>

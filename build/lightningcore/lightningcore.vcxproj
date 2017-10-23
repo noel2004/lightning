@@ -1,0 +1,210 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\lightningcore\channel.c" />
+    <ClCompile Include="..\..\lightningcore\close_tx.c" />
+    <ClCompile Include="..\..\lightningcore\commit_tx.c" />
+    <ClCompile Include="..\..\lightningcore\db.c" />
+    <ClCompile Include="..\..\lightningcore\failure.c" />
+    <ClCompile Include="..\..\lightningcore\htlc.c" />
+    <ClCompile Include="..\..\lightningcore\lnchannel.c" />
+    <ClCompile Include="..\..\lightningcore\lnchannel_api.c" />
+    <ClCompile Include="..\..\lightningcore\lnchannel_commit.c" />
+    <ClCompile Include="..\..\lightningcore\lnchannel_htlc.c" />
+    <ClCompile Include="..\..\lightningcore\lnchannel_open.c" />
+    <ClCompile Include="..\..\lightningcore\lnchannel_redeem.c" />
+    <ClCompile Include="..\..\lightningcore\log.c" />
+    <ClCompile Include="..\..\lightningcore\names.c" />
+    <ClCompile Include="..\..\lightningcore\output_to_htlc.c" />
+    <ClCompile Include="..\..\lightningcore\permute_tx.c" />
+    <ClCompile Include="..\..\lightningcore\pseudorand.c" />
+    <ClCompile Include="..\..\lightningcore\secrets.c" />
+    <ClCompile Include="..\..\lightningcore\version.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\lightningcore\channel.h" />
+    <ClInclude Include="..\..\lightningcore\close_tx.h" />
+    <ClInclude Include="..\..\lightningcore\commit_tx.h" />
+    <ClInclude Include="..\..\lightningcore\db.h" />
+    <ClInclude Include="..\..\lightningcore\failure.h" />
+    <ClInclude Include="..\..\lightningcore\feechange.h" />
+    <ClInclude Include="..\..\lightningcore\htlc.h" />
+    <ClInclude Include="..\..\lightningcore\lnchannel_api.h" />
+    <ClInclude Include="..\..\lightningcore\log.h" />
+    <ClInclude Include="..\..\lightningcore\lnchannel.h" />
+    <ClInclude Include="..\..\lightningcore\lnchannel_internal.h" />
+    <ClInclude Include="..\..\lightningcore\names.h" />
+    <ClInclude Include="..\..\lightningcore\output_to_htlc.h" />
+    <ClInclude Include="..\..\lightningcore\pseudorand.h" />
+    <ClInclude Include="..\..\lightningcore\remove_dust.h" />
+    <ClInclude Include="..\..\lightningcore\secrets.h" />
+    <ClInclude Include="..\..\lightningcore\state.h" />
+    <ClInclude Include="..\..\lightningcore\state_types.h" />
+    <ClInclude Include="..\..\lightningcore\version.h" />
+    <ClInclude Include="..\..\lightninglite\c\manager.h" />
+    <ClInclude Include="..\..\lightninglite\c\message.h" />
+    <ClInclude Include="..\..\lightninglite\c\payment.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\bitcoin\bitcoin.vcxproj">
+      <Project>{9b5e5dbd-e868-4d90-b68d-a8eaa73307f3}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\btcnetwork\btcnetwork.vcxproj">
+      <Project>{6e1598b2-95a5-4750-abef-a8392c44fc70}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\ccan\ccan.vcxproj">
+      <Project>{3fb34916-d1ef-4c70-915a-bc8fb052b403}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\sqlite\sqlite.vcxproj">
+      <Project>{2622eb1f-ef98-4045-8e52-58b3c5db9c61}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\utils\utils.vcxproj">
+      <Project>{47ce2b26-4ce2-421b-8a53-6c52b76f5d3b}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\wally\wally.vcxproj">
+      <Project>{7e84ed80-c336-40ec-ba5c-15e1dcf26789}</Project>
+    </ProjectReference>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{E732EDF6-EF8B-45DD-8AFA-991B6EBC62C0}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>lightningcore</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0.15063.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v141</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v141</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v141</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v141</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <TargetName>LNcore</TargetName>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <TargetName>LNcore</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(ProjectDir)..\..\;$(ProjectDir)..\..\ccan;$(ProjectDir)..\..\sqlite3;$(ProjectDir)..\..\libwally-core;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <AdditionalLibraryDirectories>
+      </AdditionalLibraryDirectories>
+      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(ProjectDir)..\..\;$(ProjectDir)..\..\ccan;$(ProjectDir)..\..\sqlite3;$(ProjectDir)..\..\libwally-core;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <AdditionalLibraryDirectories>
+      </AdditionalLibraryDirectories>
+      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <PreprocessorDefinitions>NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

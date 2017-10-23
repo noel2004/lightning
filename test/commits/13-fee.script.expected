@@ -1,0 +1,16 @@
+***A***
+LOCAL COMMIT:
+ Commit 1:
+  Fee level 1
+  SIGNED
+REMOTE COMMIT:
+ Commit 1:
+  SIGNED
+***B***
+LOCAL COMMIT:
+ Commit 1:
+  SIGNED
+REMOTE COMMIT:
+ Commit 1:
+  Fee level 1
+  SIGNED
