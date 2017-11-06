@@ -16,6 +16,7 @@ MESSAGE( STATUS "CMAKE_CXX_COMPILER: " ${CMAKE_CXX_COMPILER} )
 MESSAGE( STATUS "CMAKE_CXX_FLAGS: " ${CMAKE_CXX_FLAGS} )
 
 # include
+include_directories (.)
 include_directories (${CMAKE_BINARY_DIR})
 
 # sub directory
