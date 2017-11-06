@@ -31,14 +31,23 @@ IF (${ANDROID})
                   log )
 ENDIF(${ANDROID})
 
+# Generate ccan-configurator
+add_executable(
+                ccan-configurator
+                ccan/tools/configurator/configurator.c
+                )
+
+# Use ccan-configurator to generate ccan_config.h
+execute_process(COMMAND ccan-configurator ${CMAKE_C_COMPILER} > ccan_config.h)
+
 add_library( # Sets the name of the library.
              ln-core
-			 
+             
              # Sets the library as a shared library.
              SHARED
              
-			 dummy.c
-			 )
+             dummy.c
+             )
 
 target_link_libraries( # Specifies the target library.
                        ln-core
@@ -50,3 +59,4 @@ target_link_libraries( # Specifies the target library.
                        sqlite3
                        "-Wl,--no-whole-archive"
                        )
+
