@@ -46,9 +46,6 @@ add_executable(
                 ccan/tools/configurator/configurator.c
                 )
 
-# Use ccan-configurator to generate ccan_config.h
-execute_process(COMMAND ccan-configurator ${CMAKE_C_COMPILER} > ccan_config.h)
-
 add_library( # Sets the name of the library.
              ln-core
 

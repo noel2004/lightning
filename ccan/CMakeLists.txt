@@ -24,7 +24,7 @@ set(CCAN_SOURCE_FILES
         ccan/tal/str/str.c
         ccan/tal/tal.c
         ccan/intmap/intmap.c
-        ccan/breakpoint/breakpoint.c
+        # ccan/breakpoint/breakpoint.c
         ccan/read_write_all/read_write_all.c
         ccan/noerr/noerr.c
         ccan/take/take.c
@@ -36,6 +36,7 @@ set(CCAN_SOURCE_FILES
         ccan/cdump/cdump.c
         ccan/mem/mem.c
         ccan/ilog/ilog.c
+        ccan/list/list.c
         )
 
 # static lib

@@ -152,4 +152,16 @@
 /* #undef uint8_t */
 
 #include "ccan_config.h"
+
+#if HAVE_UNALIGNED_ACCESS
+#define alignment_ok(p, n) (1)
+#else
+#define alignment_ok(p, n) ((size_t)(p) % (n) == 0)
+#endif
+
+/* Clear a set of memory areas passed as ptr1, len1, ptr2, len2 etc */
+void clear_n(unsigned int count, ...);
+
+#define CCAN_CLEAR_MEMORY(p, len) clear_n(1, p, len)
+
 #endif /*LIBWALLYCORE_CONFIG_H*/

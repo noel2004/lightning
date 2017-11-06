@@ -29,6 +29,7 @@ set(WALLY_SOURCE_FILES
         src/secp256k1/src/secp256k1.c
         src/sign.c
         src/hmac.c
+        src/mnemonic.c
         )
 
 # static lib
