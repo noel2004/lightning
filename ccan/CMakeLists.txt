@@ -16,8 +16,8 @@ set(CCAN_SOURCE_FILES
         ccan/opt/parse.c
         ccan/opt/opt.c
         ccan/err/err.c
-        ccan/io/poll.c
-        ccan/io/io.c
+        # ccan/io/poll.c
+        # ccan/io/io.c
         ccan/timer/timer.c
         ccan/tal/grab_file/grab_file.c
         ccan/tal/path/path.c
