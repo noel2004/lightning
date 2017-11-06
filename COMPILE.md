@@ -13,16 +13,16 @@
     cd build
     cmake .. -G "MinGW Makefiles" -DCMAKE_SH="CMAKE_SH-NOTFOUND"
     cmake --build . --target ccan-configurator
-    cmake .. -G "MinGW Makefiles" -DCMAKE_SH="CMAKE_SH-NOTFOUND"
+	./ccan-configurator gcc > ccan_config.h
     cmake --build . --target ln-core
 
-## Linux
+## Linux(Clang)
 
     mkdir -p build
     cd build
-    cmake ..
+    cmake .. -DLINUX=1
     cmake --build . --target ccan-configurator
-    cmake ..
+	./ccan-configurator clang > ccan_config.h
     cmake --build . --target ln-core
     
 ## Android
