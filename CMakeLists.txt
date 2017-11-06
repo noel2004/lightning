@@ -26,6 +26,7 @@ add_subdirectory(bitcoin)
 add_subdirectory(btcnetwork)
 add_subdirectory(ccan)
 add_subdirectory(sqlite3)
+add_subdirectory(utils)
 
 # Android
 IF (${ANDROID})
@@ -67,6 +68,7 @@ target_link_libraries( # Specifies the target library.
                        btcnetwork
                        ccan
                        sqlite3
+                       utils
                        "-Wl,--no-whole-archive"
                        )
 
