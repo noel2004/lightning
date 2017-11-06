@@ -1,7 +1,7 @@
 # include
 include_directories(.)
 
-# ccan
+# source files
 set(UTILS_SOURCE_FILES
         utils.c
         sodium/utils.c
@@ -11,7 +11,7 @@ set(UTILS_SOURCE_FILES
         opt_bits.c
         )
 
-# sqlite
+# static lib
 add_library( utils
              STATIC
              ${UTILS_SOURCE_FILES}

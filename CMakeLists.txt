@@ -25,6 +25,7 @@ include_directories (libwally-core)
 add_subdirectory(bitcoin)
 add_subdirectory(btcnetwork)
 add_subdirectory(ccan)
+add_subdirectory(libwally-core)
 add_subdirectory(sqlite3)
 add_subdirectory(utils)
 
@@ -68,6 +69,7 @@ target_link_libraries( # Specifies the target library.
                        btcnetwork
                        ccan
                        sqlite3
+                       wally
                        utils
                        "-Wl,--no-whole-archive"
                        )

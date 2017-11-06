@@ -1,14 +1,14 @@
 # include
 include_directories(.)
 
-# ccan
+# source files
 set(BTCNETWORK_SOURCE_FILES
         # c/bitcoind.c
         # c/chaintopology.c
         c/watch.c
         )
 
-# sqlite
+# static lib
 add_library( btcnetwork
              STATIC
              ${BTCNETWORK_SOURCE_FILES}

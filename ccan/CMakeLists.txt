@@ -1,7 +1,7 @@
 # include
 include_directories(.)
 
-# ccan
+# source files
 set(CCAN_SOURCE_FILES
         ccan/autodata/autodata.c
         ccan/crypto/sha256/sha256.c
@@ -38,7 +38,7 @@ set(CCAN_SOURCE_FILES
         ccan/ilog/ilog.c
         )
 
-# sqlite
+# static lib
 add_library( ccan
              STATIC
              ${CCAN_SOURCE_FILES}

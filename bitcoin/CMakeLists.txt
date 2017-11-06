@@ -2,7 +2,7 @@
 include_directories(.)
 include_directories (${CMAKE_BINARY_DIR})
 
-# ccan
+# source files
 set(BITCOIN_SOURCE_FILES
         varint.c
         base58.c
@@ -17,7 +17,7 @@ set(BITCOIN_SOURCE_FILES
         pubkey.c
         )
 
-# sqlite
+# static lib
 add_library( bitcoin
              STATIC
              ${BITCOIN_SOURCE_FILES}
