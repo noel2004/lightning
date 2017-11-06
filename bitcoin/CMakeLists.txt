@@ -1,5 +1,6 @@
 # include
 include_directories(.)
+include_directories (${CMAKE_BINARY_DIR})
 
 # ccan
 set(BITCOIN_SOURCE_FILES
