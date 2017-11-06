@@ -15,10 +15,12 @@ MESSAGE( STATUS "CMAKE_C_FLAGS: " ${CMAKE_C_FLAGS} )
 MESSAGE( STATUS "CMAKE_CXX_COMPILER: " ${CMAKE_CXX_COMPILER} )
 MESSAGE( STATUS "CMAKE_CXX_FLAGS: " ${CMAKE_CXX_FLAGS} )
 
-# sqlite
-add_subdirectory(sqlite3)
+# include
+include_directories (${CMAKE_BINARY_DIR})
 
-# include_directories(src)
+# sub directory
+add_subdirectory(sqlite3)
+add_subdirectory(ccan)
 
 # Android
 IF (${ANDROID})
@@ -42,10 +44,10 @@ execute_process(COMMAND ccan-configurator ${CMAKE_C_COMPILER} > ccan_config.h)
 
 add_library( # Sets the name of the library.
              ln-core
-             
+
              # Sets the library as a shared library.
              SHARED
-             
+
              dummy.c
              )
 
@@ -56,6 +58,7 @@ target_link_libraries( # Specifies the target library.
                        # included in the NDK.
                        ${log-lib}
                        "-Wl,--whole-archive"
+                       ccan
                        sqlite3
                        "-Wl,--no-whole-archive"
                        )
