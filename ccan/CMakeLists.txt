@@ -19,8 +19,8 @@ set(CCAN_SOURCE_FILES
         # ccan/io/poll.c
         # ccan/io/io.c
         ccan/timer/timer.c
-        ccan/tal/grab_file/grab_file.c
-        ccan/tal/path/path.c
+        # ccan/tal/grab_file/grab_file.c
+        # ccan/tal/path/path.c
         ccan/tal/str/str.c
         ccan/tal/tal.c
         ccan/intmap/intmap.c
