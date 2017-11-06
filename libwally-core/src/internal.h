@@ -19,6 +19,7 @@ const secp256k1_context *secp_ctx(void);
 #define PUBKEY_COMPRESSED   SECP256K1_EC_COMPRESSED
 #define PUBKEY_UNCOMPRESSED SECP256K1_EC_UNCOMPRESSED
 
+void clear_n(unsigned int count, ...);
 
 inline static void clear(void *p, size_t len)
 {

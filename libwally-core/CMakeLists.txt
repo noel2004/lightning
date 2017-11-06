@@ -1,6 +1,13 @@
 # include
-include_directories(.)
+include_directories(src)
+include_directories(src/ccan)
+include_directories(src/secp256k1)
+include_directories(src/secp256k1/src)
 include_directories (${CMAKE_BINARY_DIR})
+
+add_definitions(-DHAVE_CONFIG_H)
+add_definitions(-DWALLY_CORE_BUILD)
+add_definitions(-DWALLY_EXPORTS)
 
 # source files
 set(WALLY_SOURCE_FILES
