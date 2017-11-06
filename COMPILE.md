@@ -16,7 +16,11 @@
 
 ## Linux
 
-
+    mkdir -p build-vs
+	cd build-vs
+	cmake ../
+	make
+	
 ## Android
 
 
