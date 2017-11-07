@@ -51,6 +51,9 @@ IF (DEFINED ANDROID)
                   # Specifies the name of the NDK library that
                   # you want CMake to locate.
                   log )
+
+    # See: https://github.com/android-ndk/ndk/issues/477
+    add_definitions(-D_FILE_OFFSET_BITS=32)
 ENDIF()
 
 ## iOS
