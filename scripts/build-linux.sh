@@ -3,8 +3,8 @@
 mkdir -p build
 cd build
 cmake .. -DLINUX=1
-cmake --build . --target ccan-configurator
 if [ ! -f ccan_config.h ]; then
+    cmake --build . --target ccan-configurator
     ./ccan-configurator clang > ccan_config.h
 fi
 cmake --build . --target lncore
