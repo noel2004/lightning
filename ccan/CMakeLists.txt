@@ -39,11 +39,11 @@ set(CCAN_SOURCE_FILES
         ccan/list/list.c
         )
 
-IF(NOT ${WIN})
-set(CCAN_SOURCE_FILES
-        ${CCAN_SOURCE_FILES}
-        ccan/ptr_valid/ptr_valid.c
-        )
+IF(NOT DEFINED ${WIN})
+    set(CCAN_SOURCE_FILES
+            ${CCAN_SOURCE_FILES}
+            ccan/ptr_valid/ptr_valid.c
+            )
 ENDIF()
 
 # static lib
