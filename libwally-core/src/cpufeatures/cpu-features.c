@@ -546,14 +546,16 @@ get_elf_hwcap_from_proc_self_auxv(void) {
     struct { uint32_t tag; uint32_t value; } entry;
     uint32_t result = 0;
     const char filepath[] = "/proc/self/auxv";
-    int fd = TEMP_FAILURE_RETRY(open(filepath, O_RDONLY));
+    /* int fd = TEMP_FAILURE_RETRY(open(filepath, O_RDONLY)); */
+    int fd = -1;
     if (fd < 0) {
         return 0;
     }
 
 
     for (;;) {
-        int ret = TEMP_FAILURE_RETRY(read(fd, (char*)&entry, sizeof entry));
+        /* int ret = TEMP_FAILURE_RETRY(read(fd, (char*)&entry, sizeof entry)); */
+        int ret = -1;
         if (ret < 0) {
             break;
         }
