@@ -92,6 +92,25 @@ add_executable(
                 ccan/tools/configurator/configurator.c
                 )
 
+# Generate wally
+add_library( # Sets the name of the library.
+             wally
+
+             # Sets the library as a shared library.
+             SHARED
+
+             dummy.c
+             )
+
+target_link_libraries( # Specifies the target library.
+                       wally
+
+                       ${log-lib}
+                       ${WHOLE_ARCHIVE_START}
+                       wallystatic
+                       ${WHOLE_ARCHIVE_END}
+                       )
+
 # Generate lncore
 add_library( # Sets the name of the library.
              lncore
@@ -114,25 +133,7 @@ target_link_libraries( # Specifies the target library.
                        lightninglite
                        sqlite3
                        utils
-                       ${WHOLE_ARCHIVE_END}
-                       )
-
-# Generate wally
-add_library( # Sets the name of the library.
-             wally
-
-             # Sets the library as a shared library.
-             SHARED
-
-             dummy.c
-             )
-
-target_link_libraries( # Specifies the target library.
                        wally
-
-                       ${log-lib}
-                       ${WHOLE_ARCHIVE_START}
-                       wallystatic
                        ${WHOLE_ARCHIVE_END}
                        )
 
