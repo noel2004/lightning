@@ -1,5 +1,10 @@
 # Compile
 
+## 安装 cmake
+
+- https://cmake.org/download/ 下载对应版本
+
+
 ## Windows (VS2015)
 
     进入 scripts 目录
