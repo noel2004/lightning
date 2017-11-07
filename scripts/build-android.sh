@@ -74,9 +74,9 @@ build_so() {
         -DANDROID_PLATFORM="${ANDROID_PLATFORM}" \
         -DANDROID_STL="gnustl_static" \
         -DCMAKE_CXX_FLAGS="-std=c++11 -fexceptions -DANDROID=1" \
-        "${ROOT_DIR}"
+        "${ROOT_DIR}" || exit
 
-    ${NINJA_BIN}
+    ${NINJA_BIN} || exit
 }
 
 strip_so() {
