@@ -112,6 +112,7 @@ target_link_libraries( # Specifies the target library.
                        lightningcore
                        lightninglite
                        sqlite3
+                       wally
                        utils
                        ${WHOLE_ARCHIVE_END}
                        )
