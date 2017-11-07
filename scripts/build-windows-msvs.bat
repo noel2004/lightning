@@ -1,3 +1,3 @@
 cd ..
-cd build-msvs
+cd build-msvs -DWIN=1
 cmake ../

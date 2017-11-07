@@ -4,7 +4,7 @@ project(LNCORE)
 # PLATFORM
 
 ## Linux
-IF(${LINUX})
+IF(DEFINED LINUX)
     MESSAGE(STATUS "USE LINUX CONFIG")
     set (CMAKE_C_COMPILER "clang")
     set (CMAKE_CXX_COMPILER "clang++")
@@ -15,7 +15,7 @@ IF(${LINUX})
 ENDIF()
 
 ## MAC
-IF(${MAC})
+IF(DEFINED MAC)
     MESSAGE(STATUS "USE MAC CONFIG")
     set (CMAKE_C_COMPILER "clang")
     set (CMAKE_CXX_COMPILER "clang++")
@@ -26,8 +26,8 @@ IF(${MAC})
 ENDIF()
 
 ## Windows
-IF(${WIN})
-    IF(${MINGW64}) # Mingw64
+IF(DEFINED WIN)
+    IF(DEFINED MINGW64) # Mingw64
         MESSAGE(STATUS "USE WINDOWS MINGW64 CONFIG")
         set (CMAKE_C_COMPILER "gcc")
         set (CMAKE_CXX_COMPILER "g++")
@@ -39,7 +39,7 @@ IF(${WIN})
 ENDIF()
 
 ## Android
-IF (${ANDROID})
+IF (DEFINED ANDROID)
     MESSAGE(STATUS "USE ANDROID CONFIG")
     set (WHOLE_ARCHIVE_START "-Wl,--whole-archive")
     set (WHOLE_ARCHIVE_END "-Wl,--no-whole-archive")
@@ -50,10 +50,10 @@ IF (${ANDROID})
                   # Specifies the name of the NDK library that
                   # you want CMake to locate.
                   log )
-ENDIF(${ANDROID})
+ENDIF()
 
 ## iOS
-IF (${IOS})
+IF (DEFINED IOS)
     MESSAGE(STATUS "USE IOS CONFIG")
 ENDIF()
 
@@ -117,3 +117,16 @@ target_link_libraries( # Specifies the target library.
                        ${WHOLE_ARCHIVE_END}
                        )
 
+IF(DEFINED WIN)
+    IF(NOT DEFINED MINGW64) # MSVS
+		set_target_properties(lncore PROPERTIES LINK_FLAGS "
+		/WHOLEARCHIVE:bitcoin 
+		/WHOLEARCHIVE:btcnetwork 
+		/WHOLEARCHIVE:ccan 
+		/WHOLEARCHIVE:lightningcore
+		/WHOLEARCHIVE:lightninglite
+		/WHOLEARCHIVE:sqlite3
+		/WHOLEARCHIVE:wally
+		/WHOLEARCHIVE:utils")
+	ENDIF()
+ENDIF()
