@@ -79,12 +79,11 @@ include_directories (sqlite3)
 add_subdirectory(bitcoin)
 add_subdirectory(btcnetwork)
 add_subdirectory(ccan)
+add_subdirectory(libwally-core)
 add_subdirectory(lightningcore)
 add_subdirectory(lightninglite)
 add_subdirectory(sqlite3)
 add_subdirectory(utils)
-
-add_subdirectory(libwally-core)
 
 # Generate ccan-configurator
 add_executable(
@@ -114,25 +113,6 @@ target_link_libraries( # Specifies the target library.
                        lightninglite
                        sqlite3
                        utils
-                       ${WHOLE_ARCHIVE_END}
-                       )
-
-# Generate wally
-add_library( # Sets the name of the library.
-             wally
-
-             # Sets the library as a shared library.
-             SHARED
-
-             dummy.c
-             )
-
-target_link_libraries( # Specifies the target library.
-                       wally
-
-                       ${log-lib}
-                       ${WHOLE_ARCHIVE_START}
-                       wallystatic
                        ${WHOLE_ARCHIVE_END}
                        )
 
