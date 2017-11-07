@@ -79,6 +79,8 @@ add_subdirectory(bitcoin)
 add_subdirectory(btcnetwork)
 add_subdirectory(ccan)
 add_subdirectory(libwally-core)
+add_subdirectory(lightningcore)
+add_subdirectory(lightninglite)
 add_subdirectory(sqlite3)
 add_subdirectory(utils)
 
@@ -106,6 +108,8 @@ target_link_libraries( # Specifies the target library.
                        bitcoin
                        btcnetwork
                        ccan
+                       lightningcore
+                       lightninglite
                        sqlite3
                        wally
                        utils
