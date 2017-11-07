@@ -1,3 +1,7 @@
 cd ..
-cd build-msvs -DWIN=1
-cmake ../
+
+cd build-msvs
+
+cmake ../ -DWIN=1
+
+pause
