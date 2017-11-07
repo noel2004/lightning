@@ -41,6 +41,7 @@ ENDIF()
 ## Android
 IF (DEFINED ANDROID)
     MESSAGE(STATUS "USE ANDROID CONFIG: ${ANDROID}")
+    include_directories (build-android)
     set (WHOLE_ARCHIVE_START "-Wl,--whole-archive")
     set (WHOLE_ARCHIVE_END "-Wl,--no-whole-archive")
     link_directories(${CMAKE_SOURCE_DIR}/libs/${ANDROID_ABI}/)
@@ -55,6 +56,7 @@ ENDIF()
 ## iOS
 IF (DEFINED IOS)
     MESSAGE(STATUS "USE IOS CONFIG: ${IOS}")
+    include_directories (build-ios)
 ENDIF()
 
 # PLATFORM END
@@ -119,14 +121,14 @@ target_link_libraries( # Specifies the target library.
 
 IF(DEFINED WIN)
     IF(NOT DEFINED MINGW64) # MSVS
-		set_target_properties(lncore PROPERTIES LINK_FLAGS "
-		/WHOLEARCHIVE:bitcoin 
-		/WHOLEARCHIVE:btcnetwork 
-		/WHOLEARCHIVE:ccan 
-		/WHOLEARCHIVE:lightningcore
-		/WHOLEARCHIVE:lightninglite
-		/WHOLEARCHIVE:sqlite3
-		/WHOLEARCHIVE:wally
-		/WHOLEARCHIVE:utils")
-	ENDIF()
+        set_target_properties(lncore PROPERTIES LINK_FLAGS "
+        /WHOLEARCHIVE:bitcoin
+        /WHOLEARCHIVE:btcnetwork
+        /WHOLEARCHIVE:ccan
+        /WHOLEARCHIVE:lightningcore
+        /WHOLEARCHIVE:lightninglite
+        /WHOLEARCHIVE:sqlite3
+        /WHOLEARCHIVE:wally
+        /WHOLEARCHIVE:utils")
+    ENDIF()
 ENDIF()
