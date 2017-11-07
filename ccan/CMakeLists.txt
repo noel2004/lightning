@@ -4,9 +4,9 @@ include_directories(.)
 # source files
 set(CCAN_SOURCE_FILES
         ccan/autodata/autodata.c
-        ccan/crypto/sha256/sha256.c
+        # ccan/crypto/sha256/sha256.c
         ccan/crypto/shachain/shachain.c
-        ccan/crypto/ripemd160/ripemd160.c
+        # ccan/crypto/ripemd160/ripemd160.c
         ccan/crypto/siphash24/siphash24.c
         ccan/htable/htable.c
         ccan/time/time.c
@@ -32,7 +32,7 @@ set(CCAN_SOURCE_FILES
         ccan/isaac/isaac64.c
         ccan/str/debug.c
         ccan/str/str.c
-        ccan/str/hex/hex.c
+        # ccan/str/hex/hex.c
         ccan/cdump/cdump.c
         ccan/mem/mem.c
         ccan/ilog/ilog.c
