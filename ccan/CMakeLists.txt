@@ -37,6 +37,7 @@ set(CCAN_SOURCE_FILES
         ccan/mem/mem.c
         ccan/ilog/ilog.c
         ccan/list/list.c
+        ccan/ptr_valid/ptr_valid.c
         )
 
 # static lib
