@@ -8,4 +8,5 @@ if [ ! -f ccan_config.h ]; then
     ./ccan-configurator.exe gcc > ccan_config.h
 fi
 cmake --build . --target lncore
+cmake --build . --target wally
 

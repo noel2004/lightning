@@ -33,7 +33,7 @@ set(WALLY_SOURCE_FILES
         )
 
 # static lib
-add_library( wally
-             SHARED
+add_library( wallystatic
+             STATIC
              ${WALLY_SOURCE_FILES}
              )
