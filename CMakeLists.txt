@@ -31,8 +31,6 @@ IF(${WIN})
         MESSAGE(STATUS "USE WINDOWS MINGW64 CONFIG")
         set (CMAKE_C_COMPILER "gcc")
         set (CMAKE_CXX_COMPILER "g++")
-        set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
-        set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
         set (WHOLE_ARCHIVE_START "-Wl,--whole-archive")
         set (WHOLE_ARCHIVE_END "-Wl,--no-whole-archive")
     ELSE() # MSVS

@@ -37,8 +37,14 @@ set(CCAN_SOURCE_FILES
         ccan/mem/mem.c
         ccan/ilog/ilog.c
         ccan/list/list.c
+        )
+
+IF(NOT ${WIN})
+set(CCAN_SOURCE_FILES
+        ${CCAN_SOURCE_FILES}
         ccan/ptr_valid/ptr_valid.c
         )
+ENDIF()
 
 # static lib
 add_library( ccan
