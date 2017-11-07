@@ -7,5 +7,5 @@ cmake --build . --target ccan-configurator
 if [ ! -f ccan_config.h ]; then
     ./ccan-configurator clang > ccan_config.h
 fi
-cmake --build . --target ln-core
+cmake --build . --target lncore
 
