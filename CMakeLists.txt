@@ -73,6 +73,7 @@ include_directories (.)
 include_directories (${CMAKE_BINARY_DIR})
 include_directories (ccan)
 include_directories (libwally-core)
+include_directories (sqlite3)
 
 # sub directory
 add_subdirectory(bitcoin)
