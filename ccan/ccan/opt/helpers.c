@@ -11,6 +11,11 @@
 #include "private.h"
 #include <float.h>
 
+#ifdef _MSC_VER
+#define strncasecmp _strnicmp
+#define strcasecmp _stricmp
+#endif
+
 /* Upper bound to sprintf this simple type?  Each 3 bits < 1 digit. */
 #define CHAR_SIZE(type) (((sizeof(type)*CHAR_BIT + 2) / 3) + 1)
 
