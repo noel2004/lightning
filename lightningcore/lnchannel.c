@@ -167,35 +167,35 @@ static bool committed_to_htlcs(const struct LNchannel *lnchn)
 	return false;
 }
 
-static void lnchn_calculate_close_fee(struct LNchannel *lnchn)
-{
-	/* Use actual worst-case length of close tx: based on FIXME-OLD#02's
-	 * commitment tx numbers, but only 1 byte for output count */
-	const uint64_t txsize = 41 + 221 + 10 + 32 + 32;
-	uint64_t maxfee;
-
-	lnchn->closing.our_fee
-		= fee_by_feerate(txsize, get_feerate(lnchn->dstate->topology));
-
-	/* FIXME-OLD #2:
-	 * The sender MUST set `close_fee` lower than or equal to the
-	 * fee of the final commitment transaction, and MUST set
-	 * `close_fee` to an even number of satoshis.
-	 */
-	maxfee = commit_tx_fee(lnchn->local.commit->tx, lnchn->anchor.satoshis);
-	if (lnchn->closing.our_fee > maxfee) {
-		/* This could only happen if the fee rate dramatically */
-		log_unusual(lnchn->log,
-			    "Closing fee %"PRIu64" exceeded commit fee %"PRIu64", reducing.",
-			    lnchn->closing.our_fee, maxfee);
-		lnchn->closing.our_fee = maxfee;
-
-		/* This can happen if actual commit txfee is odd. */
-		if (lnchn->closing.our_fee & 1)
-			lnchn->closing.our_fee--;
-	}
-	assert(!(lnchn->closing.our_fee & 1));
-}
+//static void lnchn_calculate_close_fee(struct LNchannel *lnchn)
+//{
+//	/* Use actual worst-case length of close tx: based on FIXME-OLD#02's
+//	 * commitment tx numbers, but only 1 byte for output count */
+//	const uint64_t txsize = 41 + 221 + 10 + 32 + 32;
+//	uint64_t maxfee;
+//
+//	lnchn->closing.our_fee
+//		= fee_by_feerate(txsize, get_feerate(lnchn->dstate->topology));
+//
+//	/* FIXME-OLD #2:
+//	 * The sender MUST set `close_fee` lower than or equal to the
+//	 * fee of the final commitment transaction, and MUST set
+//	 * `close_fee` to an even number of satoshis.
+//	 */
+//	maxfee = commit_tx_fee(lnchn->local.commit->tx, lnchn->anchor.satoshis);
+//	if (lnchn->closing.our_fee > maxfee) {
+//		/* This could only happen if the fee rate dramatically */
+//		log_unusual(lnchn->log,
+//			    "Closing fee %"PRIu64" exceeded commit fee %"PRIu64", reducing.",
+//			    lnchn->closing.our_fee, maxfee);
+//		lnchn->closing.our_fee = maxfee;
+//
+//		/* This can happen if actual commit txfee is odd. */
+//		if (lnchn->closing.our_fee & 1)
+//			lnchn->closing.our_fee--;
+//	}
+//	assert(!(lnchn->closing.our_fee & 1));
+//}
 
 //static void start_closing_in_transaction(struct LNchannel *lnchn)
 //{
@@ -390,50 +390,50 @@ void lnchn_fail(struct LNchannel *lnchn, const char *caller)
 
 
 
-static bool lnchn_start_shutdown(struct LNchannel *lnchn)
-{
-	enum state newstate;
-	//u8 *redeemscript;
-
-	/* We might have uncommited changes; if so, commit them now. */
-	if (!do_commit(lnchn, NULL))
-		return false;
-
-	db_start_transaction(lnchn);
-
-	db_begin_shutdown(lnchn);
-
-	/* If they started close, we might not have sent ours. */
-	assert(!lnchn->closing.our_script);
-
-	//redeemscript = bitcoin_redeem_single(lnchn, &lnchn->local.finalkey);
-
-//    lnchn->closing.our_script = lnchn->final_redeemscript;//scriptpubkey_p2sh(lnchn, redeemscript);
-	//tal_free(redeemscript);
-
-	/* FIXME-OLD #2:
-	 *
-	 * A node SHOULD send a `close_shutdown` (if it has
-	 * not already) after receiving `close_shutdown`.
-	 */
-
-	db_set_our_closing_script(lnchn);
-
-	queue_pkt_close_shutdown(lnchn);
-
-	if (lnchn->state == STATE_NORMAL_COMMITTING) {
-		newstate = STATE_SHUTDOWN_COMMITTING;
-	} else {
-		newstate = STATE_SHUTDOWN;
-	}
-	internal_set_lnchn_state(lnchn, newstate, __func__, true);
-
-	/* Catch case where we've exchanged and had no HTLCs anyway. */
-	if (lnchn->closing.their_script && !committed_to_htlcs(lnchn))
-		start_closing_in_transaction(lnchn);
-
-	return db_commit_transaction(lnchn) == NULL;
-}
+//static bool lnchn_start_shutdown(struct LNchannel *lnchn)
+//{
+//	enum state newstate;
+//	//u8 *redeemscript;
+//
+//	/* We might have uncommited changes; if so, commit them now. */
+//	if (!do_commit(lnchn, NULL))
+//		return false;
+//
+//	db_start_transaction(lnchn);
+//
+//	db_begin_shutdown(lnchn);
+//
+//	/* If they started close, we might not have sent ours. */
+//	assert(!lnchn->closing.our_script);
+//
+//	//redeemscript = bitcoin_redeem_single(lnchn, &lnchn->local.finalkey);
+//
+////    lnchn->closing.our_script = lnchn->final_redeemscript;//scriptpubkey_p2sh(lnchn, redeemscript);
+//	//tal_free(redeemscript);
+//
+//	/* FIXME-OLD #2:
+//	 *
+//	 * A node SHOULD send a `close_shutdown` (if it has
+//	 * not already) after receiving `close_shutdown`.
+//	 */
+//
+//	db_set_our_closing_script(lnchn);
+//
+//	queue_pkt_close_shutdown(lnchn);
+//
+//	if (lnchn->state == STATE_NORMAL_COMMITTING) {
+//		newstate = STATE_SHUTDOWN_COMMITTING;
+//	} else {
+//		newstate = STATE_SHUTDOWN;
+//	}
+//	internal_set_lnchn_state(lnchn, newstate, __func__, true);
+//
+//	/* Catch case where we've exchanged and had no HTLCs anyway. */
+//	if (lnchn->closing.their_script && !committed_to_htlcs(lnchn))
+//		start_closing_in_transaction(lnchn);
+//
+//	return db_commit_transaction(lnchn) == NULL;
+//}
 
 
 static bool want_feechange(const struct LNchannel *lnchn)
