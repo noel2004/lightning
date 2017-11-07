@@ -3,6 +3,7 @@
 #include <unordered_set>
 #include <array>
 #include <cassert>
+#include <string.h>
 #include "dummy.h"
 
 namespace {
@@ -59,7 +60,7 @@ namespace {
 
     static const htlcChain nullhtlcChain = { {nullptr, nullptr}, {nullptr, nullptr} };
 }
- 
+
 
 extern "C" {
     struct LNchannels
@@ -108,13 +109,13 @@ extern "C" {
 
     }
 
-    void    lite_reg_htlc(struct LNchannels *mgr, const struct LNchannel *lnchn, 
+    void    lite_reg_htlc(struct LNchannels *mgr, const struct LNchannel *lnchn,
         const struct sha256* hash, const struct htlc *htlc)
     {
         auto ret = mgr->htlc_map.insert(LNchannels::htlcmap_type::value_type(
             shakey_from_raw(hash), nullhtlcChain));
         if (ret.second) {
-            (LNAPI_htlc_route_is_upstream(htlc) ? 
+            (LNAPI_htlc_route_is_upstream(htlc) ?
                 (htlcItem&)(ret.first->second.first) : (ret.first->second.second))
                 = { htlc, lnchn };
         }
@@ -126,7 +127,7 @@ extern "C" {
         }
     }
 
-    void    lite_unreg_htlc(struct LNchannels *mgr, const struct sha256* hash, 
+    void    lite_unreg_htlc(struct LNchannels *mgr, const struct sha256* hash,
         const struct htlc *htlc)
     {
         auto ret = mgr->htlc_map.find(shakey_from_raw(hash));
@@ -150,13 +151,13 @@ extern "C" {
         return new LNchannelQuery{ fret->second };
     }
 
-    struct LNchannelQuery* lite_query_channel_from_htlc(struct LNchannels *mgr, 
+    struct LNchannelQuery* lite_query_channel_from_htlc(struct LNchannels *mgr,
         const struct sha256 *hash, int issrc)
     {
         auto ret = mgr->htlc_map.find(shakey_from_raw(hash));
         assert(ret != mgr->htlc_map.end());
 
-        return new LNchannelQuery{ 
+        return new LNchannelQuery{
             issrc ? chain_source_chn(ret->second) : chain_downstream_chn(ret->second) };
     }
 
@@ -174,7 +175,7 @@ extern "C" {
         return r;
     }
 
-    struct LNchannelComm* lite_comm_channel_from_htlc(struct LNchannels *mgr, 
+    struct LNchannelComm* lite_comm_channel_from_htlc(struct LNchannels *mgr,
         const struct sha256* hash, int issrc)
     {
         auto q = lite_query_channel_from_htlc(mgr, hash, issrc);
@@ -188,7 +189,7 @@ extern "C" {
         delete c;
     }
 
-    const struct htlc *lite_query_htlc_direct(struct LNchannels *mgr, 
+    const struct htlc *lite_query_htlc_direct(struct LNchannels *mgr,
         const struct sha256* hash, int issrc)
     {
         auto ret = mgr->htlc_map.find(shakey_from_raw(hash));
@@ -246,8 +247,8 @@ extern "C" {
 }
 
 namespace lnl_dummy {
-    struct LNchannel* dummy_get_channel(struct LNchannels *, const struct pubkey *) 
+    struct LNchannel* dummy_get_channel(struct LNchannels *, const struct pubkey *)
     {
-        return nullptr; 
+        return nullptr;
     }
 }
