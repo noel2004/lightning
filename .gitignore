@@ -37,3 +37,4 @@ test/test_sphinx
 test/test_irc
 
 output
+cmake-build-debug
