@@ -44,13 +44,29 @@
 
 ## Android
 
+- 下载 NDK
+    - https://developer.android.com/ndk/downloads/index.html 
+- 下载 cmake
+    - https://dl.google.com/android/repository/cmake-3.6.3155560-linux-x86_64.zip
+    - https://dl.google.com/android/repository/cmake-3.6.3155560-darwin-x86_64.zip
+- 设置环境变量，指定 NDK 和 cmake 文件夹目录，默认值如下
+    - CMAKE_DIRECTORY="/build-tools/cmake-3.6.3155560"
+    - NDK_DIRECTORY="/build-tools/android-ndk-r15c"
+- 编译指定架构的动态库
+
+```
+./scripts/build-android.sh armeabi-v7a
+```
+
+- 编译所有架构的动态库
+
 ```
 ./scripts/build-android.sh
 ```
 
 - 输出动态库在 output/android 目录下
 
-## iOS
+## iOS (TODO)
 
 ```
 ./scripts/build-ios.sh
