@@ -15,5 +15,5 @@ cmake --build . --target lncore || exit 1
 
 cd ..
 
-cp build/liblncore.liblncore.dylib ${OUTPUT_DIR}/
+cp build/liblncore.dylib ${OUTPUT_DIR}/
 
