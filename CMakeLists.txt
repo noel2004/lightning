@@ -35,13 +35,14 @@ IF(DEFINED WIN)
         set (WHOLE_ARCHIVE_END "-Wl,--no-whole-archive")
     ELSE() # MSVS
         MESSAGE(STATUS "USE WINDOWS MSVS CONFIG: ${WIN}")
+        include_directories (include/msvs)
     ENDIF()
 ENDIF()
 
 ## Android
 IF (DEFINED ANDROID)
     MESSAGE(STATUS "USE ANDROID CONFIG: ${ANDROID}")
-    include_directories (build-android)
+    include_directories (include/android)
     set (WHOLE_ARCHIVE_START "-Wl,--whole-archive")
     set (WHOLE_ARCHIVE_END "-Wl,--no-whole-archive")
     link_directories(${CMAKE_SOURCE_DIR}/libs/${ANDROID_ABI}/)

@@ -43,8 +43,8 @@ echo "CI_DIR:           ${CI_DIR}"
 echo "ROOT_DIR:         ${ROOT_DIR}"
 echo "ANDROID_HOST_TAG: ${ANDROID_HOST_TAG}"
 
-OUTPUT_DIRECTORY="${ROOT_DIR}/android-sdk/"
-BUILD_DIRECTORY="${CI_DIR}/tmp/"
+OUTPUT_DIRECTORY="${ROOT_DIR}/output/"
+OUTPUT_DIRECTORY="${ROOT_DIR}/build/"
 mkdir -p ${OUTPUT_DIRECTORY}
 mkdir -p ${BUILD_DIRECTORY}
 
