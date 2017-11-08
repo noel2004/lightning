@@ -60,7 +60,7 @@ ENDIF()
 ## iOS
 IF (DEFINED IOS)
     MESSAGE(STATUS "USE IOS CONFIG: ${IOS}")
-    include_directories (build-ios)
+    include_directories (include/ios)
 ENDIF()
 
 # PLATFORM END
