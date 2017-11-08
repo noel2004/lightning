@@ -29,7 +29,6 @@ fi
 # NDK_DIRECTORY
 if [ -z "${NDK_DIRECTORY}" ];then
     NDK_DIRECTORY="/build-tools/android-ndk-r15c"
-    # NDK_DIRECTORY="/build-tools/android-ndk-r14b"
     # download url:
     # https://developer.android.com/ndk/downloads/index.html
 fi
