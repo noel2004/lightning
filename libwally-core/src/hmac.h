@@ -17,6 +17,10 @@ void hmac_sha256_internal(struct sha256 *sha,
                  const unsigned char *key, size_t key_len,
                  const unsigned char *msg, size_t msg_len);
 
+void hmac_sha256(struct sha256 *sha,
+                          const unsigned char *key, size_t key_len,
+                          const unsigned char *msg, size_t msg_len);
+
 /**
  * hmac_sha512 - Compute an HMAC using SHA-512
  *

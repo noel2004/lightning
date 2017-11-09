@@ -1,6 +1,7 @@
 
 #include "db.h"
 #include "log.h"
+#include "names.h"
 #include "lnchannel.h"
 #include "lnchannel_internal.h"
 #include "permute_tx.h"

@@ -1,4 +1,5 @@
 #include "watch.h"
+#include <string.h>
 
 void outsourcing_task_init(struct lnwatch_task* task, const struct sha256_double* commitid)
 {
