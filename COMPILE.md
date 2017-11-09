@@ -6,9 +6,9 @@
 
 ## Windows (Visual Studio)
 
-    进入 scripts 目录
-    双击  build-windows-msvs.bat
-    生成的工程在 build-msvs/LNCORE.sln，直接使用 Visual Studio 打开即可
+- 进入 scripts 目录
+- 双击  build-windows-msvs.bat，运行 cmake 生成 VS 工程
+- 生成的工程在 build-msvs/LNCORE.sln，直接使用 Visual Studio 打开即可
 
 ## Windows (Mingw64)
 
