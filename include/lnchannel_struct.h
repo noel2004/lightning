@@ -6,15 +6,11 @@
 extern "C" {
 #endif
 
-    struct LNchannel;
-    struct LNchannels;
-    struct htlc;
     struct pubkey;
     struct sha256;
     struct sha256_double;
+    struct preimage;
     struct ecdsa_signature_;
-    struct LNchannel_config;
-    struct msg_htlc_entry;
 
     struct LNchannel_config
     {
@@ -24,26 +20,26 @@ extern "C" {
         unsigned long long    purpose_satoshi;
     };
 
-    struct msg_htlc_add
+    struct LNchannel_msg_htlc_add
     {
         unsigned int       expiry;
         unsigned long long mstatoshi;
     };
 
-    struct msg_htlc_del
+    struct LNchannel_msg_htlc_del
     {
         const struct preimage *r; /* NULL if being revoked*/
         const unsigned char* fail;
         unsigned int failflag; /* 1: indicate htlc fail from end so retry is not needed*/
     };
 
-    struct msg_htlc_entry
+    struct LNchannel_msg_htlc_entry
     {
         const struct sha256 *rhash;
         int   action_type; /*1 is add and 0 is del*/
         union {
-            struct msg_htlc_add add;
-            struct msg_htlc_del del;
+            struct LNchannel_msg_htlc_add add;
+            struct LNchannel_msg_htlc_del del;
         } action;
     };
 

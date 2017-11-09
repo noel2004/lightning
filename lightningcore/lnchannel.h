@@ -1,26 +1,13 @@
 #ifndef LIGHTNING_CORE_LNCHANNEL_H
 #define LIGHTNING_CORE_LNCHANNEL_H
 #include "config.h"
-#include "bitcoin/locktime.h"
-#include "bitcoin/privkey.h"
-#include "bitcoin/pubkey.h"
-#include "bitcoin/address.h"
-#include "bitcoin/script.h"
-#include "bitcoin/shadouble.h"
-#include "bitcoin/preimage.h"
-#include "lnchannel_api.h"
-#include "failure.h"
-#include "feechange.h"
-#include "htlc.h"
-#include "state.h"
-#include <ccan/crypto/sha256/sha256.h>
-#include <ccan/crypto/shachain/shachain.h>
-#include <ccan/list/list.h>
-#include <ccan/time/time.h>
+#include "include/lnchannel_struct.h"
+#include <stdbool.h>
 
 struct log;
 struct lightningd_state;
 struct LNchannel;
+struct htlc;
 struct bitcoin_tx;
 struct txowatch;
 
@@ -29,6 +16,32 @@ struct LNchannel *new_LNChannel(struct lightningd_state *dstate,
 
 /* call on every channel after DB is loaded*/
 void reopen_LNChannel(struct LNchannel *lnchn);
+
+void        lnchn_object_release(const void *);
+
+const struct pubkey* lnchn_channel_pubkey(const struct LNchannel*);
+void               lnchn_channel_commits(const struct LNchannel*, const struct sha256_double*[3]);
+const struct htlc* lnchn_channel_htlc(const struct LNchannel*, const struct sha256*);
+int                lnchn_channel_state(const struct LNchannel*);
+const struct sha256_double* lnchn_channel_anchor_txid(struct LNchannel *lnchn);
+
+typedef enum LNchannelPart_e
+{
+    LNchn_copy_trivial = 0,
+    LNchn_copy_anchor = 1,
+    LNchn_copy_ourcommit = 2,
+    LNchn_copy_theircommit = 4,
+    LNchn_copy_closing = 8,
+    LNchn_copy_htlcs = 16, /*not implemeted yet*/
+    LNchn_copy_all = LNchn_copy_closing * 2 - 1,
+} LNchannelPart;
+
+struct LNchannel* lnchn_channel_copy(const struct LNchannel*, unsigned int copy_mask, void *tal_ctx);
+void   lnchn_channel_update(struct LNchannel*, const struct LNchannel*, unsigned int copy_mask);
+
+struct htlc* lnchn_htlc_copy(const struct htlc*, void *tal_ctx);
+/*take API from htlc.h*/
+int         lnchn_htlc_route_is_upstream(const struct htlc *h);
 
 bool lnchn_open_local(struct LNchannel *lnchn, const struct pubkey *chnid);
 
