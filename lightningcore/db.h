@@ -1,8 +1,14 @@
 #ifndef LIGHTNING_CORE_DB_H
 #define LIGHTNING_CORE_DB_H
 #include "config.h"
-#include "lnchannel.h"
 #include <stdbool.h>
+#include <ccan/short_types/short_types.h>
+
+struct lightningd_state;
+struct LNchannel;
+struct htlc;
+struct feechange;
+struct sha256_double;
 
 void db_init(struct lightningd_state *dstate);
 

@@ -43,11 +43,11 @@ struct LNchannel* LNAPI_channel_copy(const struct LNchannel* chn,
     htlc_map_init(&lnchn->htlcs);
     shachain_init(&lnchn->their_preimages);
 
-    NAPI_channel_update(lnchn, chn, copy_mask);
+    LNAPI_channel_update(lnchn, chn, copy_mask);
     return lnchn;
 }
 
-void   NAPI_channel_update(struct LNchannel* dst, const struct LNchannel* src, unsigned int copy_mask)
+void   LNAPI_channel_update(struct LNchannel* dst, const struct LNchannel* src, unsigned int copy_mask)
 {
 #define SIMPLE_CREATE(NAME, TYPE) if(!dst->NAME){dst->NAME  = tal_dup(dst, TYPE, src->NAME);}\
                                     else memcpy(dst->NAME, src->NAME, sizeof(TYPE))

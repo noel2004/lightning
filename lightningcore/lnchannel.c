@@ -1,8 +1,8 @@
 
 #include "db.h"
 #include "log.h"
-#include "lnchannel.h"
 #include "lnchannel_internal.h"
+#include "channel.h"
 #include "permute_tx.h"
 #include "close_tx.h"
 #include "commit_tx.h"
@@ -15,9 +15,6 @@
 #include "utils/utils.h"
 #include "utils/sodium/randombytes.h"
 #include <bitcoin/base58.h>
-#include <bitcoin/address.h>
-#include <bitcoin/script.h>
-#include <bitcoin/preimage.h>
 #include <bitcoin/tx.h>
 #include <ccan/array_size/array_size.h>
 #include <ccan/cast/cast.h>

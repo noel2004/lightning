@@ -25,6 +25,23 @@
 extern "C" {
 #endif
 
+struct LNchannel;
+struct LNchannels;
+struct htlc;
+struct pubkey;
+struct sha256;
+struct sha256_double;
+struct ecdsa_signature_;
+struct LNchannel_config;
+struct msg_htlc_entry;
+
+struct LNchannel_config
+{
+    unsigned long         delay;
+    unsigned long         min_depth;
+    unsigned long long    initial_fee_rate;
+    unsigned long long    purpose_satoshi;
+};
 
 const struct pubkey* LNAPI_channel_pubkey(const struct LNchannel*);
 void               LNAPI_channel_commits(const struct LNchannel*, const struct sha256_double*[3]);

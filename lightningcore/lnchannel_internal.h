@@ -3,11 +3,26 @@
 #ifndef LIGHTNING_CORE_LNCHANNEL_INTERNAL_H
 #define LIGHTNING_CORE_LNCHANNEL_INTERNAL_H
 #include "config.h"
+#include "bitcoin/locktime.h"
+#include "bitcoin/privkey.h"
+#include "bitcoin/pubkey.h"
+#include "bitcoin/address.h"
+#include "bitcoin/script.h"
+#include "bitcoin/shadouble.h"
+#include "bitcoin/preimage.h"
 #include "btcnetwork/c/chaintopology.h"
 #include "btcnetwork/c/watch.h"
 #include "lightninglite/c/manager.h"
 #include "lightninglite/c/message.h"
 #include "lightninglite/c/payment.h"
+#include "include/lnchannel_struct.h"
+#include "htlc.h"
+#include "failure.h"
+#include "state.h"
+#include <ccan/crypto/sha256/sha256.h>
+#include <ccan/crypto/shachain/shachain.h>
+#include <ccan/list/list.h>
+#include <ccan/time/time.h>
 
 struct anchor_input {
 	struct sha256_double txid;

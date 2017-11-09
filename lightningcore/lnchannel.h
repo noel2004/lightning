@@ -144,12 +144,6 @@ void debug_dump_lnchn(struct LNchannel *chn);
 /*check outsourcing pending, should not closed or you may lost something...*/
 bool lnchn_has_pending_outsourcing(struct LNchannel *chn);
 
-enum outsourcing_deliver{
-    OUTSOURCING_DELIVER_DONE,
-    OUTSOURCING_DELIVER_FAILED,
-    OUTSOURCING_DELIVER_CONFIRMED,
-};
-
 /* watch message, incoming tx struct MUST be allocated as children of lnchn ...*/
 
 /* if handling normally, it call lnchn_resolve_htlc*/

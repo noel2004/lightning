@@ -1,6 +1,5 @@
 #include "commit_tx.h"
 #include "output_to_htlc.h"
-#include "lnchannel.h"
 #include "lnchannel_internal.h"
 
 /* FIXME: Array makes this O(n^2).  Use a hash table. */

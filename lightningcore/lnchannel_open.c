@@ -1,7 +1,6 @@
 
 #include "db.h"
 #include "log.h"
-#include "lnchannel.h"
 #include "lnchannel_internal.h"
 #include "permute_tx.h"
 #include "close_tx.h"
@@ -13,9 +12,6 @@
 #include "utils/utils.h"
 #include "utils/sodium/randombytes.h"
 #include <bitcoin/base58.h>
-#include <bitcoin/address.h>
-#include <bitcoin/script.h>
-#include <bitcoin/preimage.h>
 #include <bitcoin/tx.h>
 #include <ccan/array_size/array_size.h>
 #include <ccan/cast/cast.h>
@@ -504,11 +500,6 @@ bool lnchn_notify_first_commit(struct LNchannel *lnchn,
     return false;
 }
 
-
-static void on_first_commit_task(const struct LNchannel* lnchn, enum outsourcing_result ret, void *cbdata)
-{
-
-}
 
 //static bool open_ouranchor_pkt_in(struct LNchannel *lnchn, const Pkt *pkt)
 //{

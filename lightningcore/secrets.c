@@ -3,7 +3,6 @@
 #include "bitcoin/signature.h"
 #include "state.h"
 #include "log.h"
-#include "lnchannel.h"
 #include "lnchannel_internal.h"
 #include "secrets.h"
 #include "utils/utils.h"

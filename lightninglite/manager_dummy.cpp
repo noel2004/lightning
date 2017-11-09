@@ -103,7 +103,7 @@ extern "C" {
                 ipk, LNAPI_channel_copy(lnchn, LNchn_copy_all, nullptr)));
         }
         else {
-            NAPI_channel_update(fret->second, lnchn, LNchn_copy_all);
+            LNAPI_channel_update(fret->second, lnchn, LNchn_copy_all);
         }
 
     }
