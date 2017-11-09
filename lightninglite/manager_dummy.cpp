@@ -96,14 +96,14 @@ extern "C" {
 
     void    lite_update_channel(struct LNchannels *mgr, const struct LNchannel *lnchn)
     {
-        auto& ipk = pubkey_from_raw(LNAPI_channel_pubkey(lnchn));
+        auto& ipk = pubkey_from_raw(lnchn_channel_pubkey(lnchn));
         auto fret = mgr->channel_map.find(ipk);
         if (fret == mgr->channel_map.end()) {
             mgr->channel_map.insert(LNchannels::channelmap_type::value_type(
-                ipk, LNAPI_channel_copy(lnchn, LNchn_copy_all, nullptr)));
+                ipk, lnchn_channel_copy(lnchn, LNchn_copy_all, nullptr)));
         }
         else {
-            LNAPI_channel_update(fret->second, lnchn, LNchn_copy_all);
+            lnchn_channel_update(fret->second, lnchn, LNchn_copy_all);
         }
 
     }
@@ -114,12 +114,12 @@ extern "C" {
         auto ret = mgr->htlc_map.insert(LNchannels::htlcmap_type::value_type(
             shakey_from_raw(hash), nullhtlcChain));
         if (ret.second) {
-            (LNAPI_htlc_route_is_upstream(htlc) ? 
+            (lnchn_htlc_route_is_upstream(htlc) ?
                 (htlcItem&)(ret.first->second.first) : (ret.first->second.second))
                 = { htlc, lnchn };
         }
         else {
-            auto& hi = LNAPI_htlc_route_is_upstream(htlc) ?
+            auto& hi = lnchn_htlc_route_is_upstream(htlc) ?
                 (htlcItem&)(ret.first->second.first) : (ret.first->second.second);
             assert(hi.first == nullptr);
             hi = { htlc, lnchn };
@@ -132,7 +132,7 @@ extern "C" {
         auto ret = mgr->htlc_map.find(shakey_from_raw(hash));
         assert(ret != mgr->htlc_map.end());
 
-        auto& hi = LNAPI_htlc_route_is_upstream(htlc) ?
+        auto& hi = lnchn_htlc_route_is_upstream(htlc) ?
             (htlcItem&)(ret->second.first) : (ret->second.second);
 
         assert(hi.first == htlc);
@@ -168,7 +168,7 @@ extern "C" {
     struct LNchannelComm*  lite_comm_channel(struct LNchannels *mgr, struct LNchannelQuery *q)
     {
         auto r = new LNchannelComm{ nullptr, mgr };
-        auto fret = mgr->channel_map.find(pubkey_from_raw(LNAPI_channel_pubkey(q->p)));
+        auto fret = mgr->channel_map.find(pubkey_from_raw(lnchn_channel_pubkey(q->p)));
         assert(fret != mgr->channel_map.end());
         r->p = fret->second;
         return r;
@@ -204,18 +204,18 @@ extern "C" {
 
     void    lite_query_commit_txid(const struct LNchannelQuery *q, const struct sha256_double *commit_txid[3])
     {
-        LNAPI_channel_commits(q->p, commit_txid);
+        lnchn_channel_commits(q->p, commit_txid);
     }
 
     const struct pubkey *lite_query_pubkey(const struct LNchannelQuery *q)
     {
-        return LNAPI_channel_pubkey(q->p);
+        return lnchn_channel_pubkey(q->p);
     }
 
 
     int lite_query_isactive(const struct LNchannelQuery *q)
     {
-        auto s = LNAPI_channel_state(q->p);
+        auto s = lnchn_channel_state(q->p);
         return s < STATE_SHUTDOWN && s >= STATE_NORMAL;
     }
 
@@ -227,19 +227,19 @@ extern "C" {
     const struct htlc *lite_query_htlc(const struct LNchannelQuery *q, const struct sha256* hash)
     {
         //CAUTION: don't do this in a real implement, the return htlc should be a copy of original one
-        return LNAPI_channel_htlc(q->p, hash);
+        return lnchn_channel_htlc(q->p, hash);
     }
 
 
     void lite_notify_chn_commit(struct LNchannelComm* c)
     {
-        c->mgr->updated_list.insert(pubkey_from_raw(LNAPI_channel_pubkey(c->p)));
+        c->mgr->updated_list.insert(pubkey_from_raw(lnchn_channel_pubkey(c->p)));
     }
 
     void lite_notify_chn_htlc_update(struct LNchannelComm* c, const struct sha256* hash)
     {
         //CAUTION: don't do this in a real implement
-        LNAPI_channel_update_htlc(c->p, hash);
+        lnchn_update_htlc(c->p, hash);
     }
 
 

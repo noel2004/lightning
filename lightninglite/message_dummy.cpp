@@ -10,10 +10,22 @@ namespace {
         std::shared_ptr<T> wrapped_p;
         operator const T*() const { return wrapped_p.get(); }
     };
+
+    bool lnchn_notify_open_remote_adapter(struct LNchannel *lnchn,
+        const struct pubkey *chnid,                
+        const struct LNchannel_config *nego_config,
+        const struct sha256 *revocation_hash,     
+        const struct pubkey *remote_key1, 
+        const struct pubkey *remote_key2
+    ) {
+        const struct pubkey *k[2] = { remote_key1 , remote_key2 };
+
+        return lnchn_notify_open_remote(lnchn, chnid, nego_config, revocation_hash, k);
+    }
+
 }
 
 extern "C" {
-#include "lightningcore/state.h"
 #include "c/message.h"
 
     struct LNmessage {
@@ -37,7 +49,7 @@ extern "C" {
             std::shared_ptr<struct LNchannel_config>(new struct LNchannel_config) };        
         *pconfwrap.wrapped_p = *nego_config;
 
-        lnl_dummy::add_task(std::bind(&LNAPI_channelnotify_open_remote,
+        lnl_dummy::add_task(std::bind(&lnchn_notify_open_remote_adapter,
             p,
             WRAP_SHRPTR(struct pubkey, pubkey, target),
             pconfwrap,
@@ -54,7 +66,7 @@ extern "C" {
         const struct sha256 *revocation_hash)
     {
         auto p = lnl_dummy::dummy_get_channel(msg->state->channels, target);
-        lnl_dummy::add_task(std::bind(&LNAPI_channelnotify_anchor,
+        lnl_dummy::add_task(std::bind(&lnchn_notify_anchor,
             p,
             WRAP_SHRPTR(struct sha256_double, sha256double, txid),
             index, amount,
@@ -69,7 +81,7 @@ extern "C" {
     )
     {
         auto p = lnl_dummy::dummy_get_channel(msg->state->channels, target);
-        lnl_dummy::add_task(std::bind(&LNAPI_channelnotify_first_commit,
+        lnl_dummy::add_task(std::bind(&lnchn_notify_first_commit,
             p,
             WRAP_SHRPTR(struct sha256, sha256, revocation_hash),
             WRAP_SHRPTR(struct ecdsa_signature_, ecdsasig, sig)
@@ -86,24 +98,9 @@ extern "C" {
     )
     {
         auto p = lnl_dummy::dummy_get_channel(msg->state->channels, target);
-        auto htlcs = LNAPI_htlc_entry_create(num_htlc_entry, msg->alloc_ctx);
-        for (size_t i = 0; i < num_htlc_entry; ++i) {
-            LNAPI_htlc_entry_fill_hash(htlcs, i, simple_sha256_data(htlc_entry[i].rhash));
-            if (htlc_entry[i].action_type == 1 /*add*/) {
-                htlcs[i].action.add = htlc_entry[i].action.add;
-            }
-            else {
-                LNAPI_htlc_entry_fill_del(htlcs, i,
-                    htlc_entry[i].action.del.r ?
-                    simple_preimage_data(htlc_entry[i].action.del.r)
-                    : htlc_entry[i].action.del.fail,
-                    htlc_entry[i].action.del.r ? 0 :
-                    LNAPI_u8arr_size(htlc_entry[i].action.del.fail)
-                );
-                htlcs[i].action.del.failflag = htlc_entry[i].action.del.failflag;
-            }
-        }
-        lnl_dummy::add_task(std::bind(&LNAPI_channelnotify_commit,
+        auto htlcs = lnchn_htlc_entry_create(htlc_entry, num_htlc_entry, msg->alloc_ctx);
+
+        lnl_dummy::add_task(std::bind(&lnchn_notify_commit,
             p,
             commit_num,
             WRAP_SHRPTR(struct ecdsa_signature_, ecdsasig, sig),
@@ -122,7 +119,7 @@ extern "C" {
     )
     {
         auto p = lnl_dummy::dummy_get_channel(msg->state->channels, target);
-        lnl_dummy::add_task(std::bind(&LNAPI_channelnotify_remote_commit,
+        lnl_dummy::add_task(std::bind(&lnchn_notify_remote_commit,
             p,
             commit_num,
             WRAP_SHRPTR(struct ecdsa_signature_, ecdsasig, sig),
@@ -138,7 +135,7 @@ extern "C" {
     )
     {
         auto p = lnl_dummy::dummy_get_channel(msg->state->channels, target);
-        lnl_dummy::add_task(std::bind(&LNAPI_channelnotify_revo_commit,
+        lnl_dummy::add_task(std::bind(&lnchn_notify_revo_commit,
             p,
             commit_num,
             WRAP_SHRPTR(struct sha256, sha256, revocation_image)
@@ -149,7 +146,7 @@ extern "C" {
         const struct pubkey *target)
     {
         auto p = lnl_dummy::dummy_get_channel(msg->state->channels, target);
-        lnl_dummy::add_task(std::bind(&LNAPI_channelnotify_commit_done,
+        lnl_dummy::add_task(std::bind(&lnchn_notify_commit_done,
             p
         ));
     }

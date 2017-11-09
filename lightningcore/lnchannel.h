@@ -2,7 +2,9 @@
 #define LIGHTNING_CORE_LNCHANNEL_H
 #include "config.h"
 #include "include/lnchannel_struct.h"
+#include "state.h"
 #include <stdbool.h>
+#include <ccan/short_types/short_types.h>
 
 struct log;
 struct lightningd_state;
@@ -16,6 +18,9 @@ struct LNchannel *new_LNChannel(struct lightningd_state *dstate,
 
 /* call on every channel after DB is loaded*/
 void reopen_LNChannel(struct LNchannel *lnchn);
+
+int         lnchn_u8arr_size(const unsigned char* str);
+struct      msg_htlc_entry* lnchn_htlc_entry_create(const struct msg_htlc_entry*, unsigned int size, void *tal_ctx);
 
 void        lnchn_object_release(const void *);
 
@@ -121,11 +126,9 @@ bool lnchn_notify_first_commit(struct LNchannel *lnchn,
     const struct ecdsa_signature_ *sig
 );
 
-
-
 bool lnchn_notify_commit(struct LNchannel *lnchn, 
     u64 commit_num,
-    const ecdsa_signature *sig,
+    const struct ecdsa_signature_ *sig,
     const struct sha256 *next_revocation,
     u32 num_htlc_entry,
     const struct msg_htlc_entry *htlc_entry
@@ -133,7 +136,7 @@ bool lnchn_notify_commit(struct LNchannel *lnchn,
 
 bool lnchn_notify_remote_commit(struct LNchannel *lnchn,
     u64 commit_num,
-    const ecdsa_signature *sig,
+    const struct ecdsa_signature_ *sig,
     const struct sha256 *next_revocation,
     const struct sha256 *revocation_image
 );
