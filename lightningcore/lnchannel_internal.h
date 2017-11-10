@@ -15,10 +15,9 @@
 #include "lightninglite/c/manager.h"
 #include "lightninglite/c/message.h"
 #include "lightninglite/c/payment.h"
-#include "include/lnchannel_struct.h"
+#include "lnchannel.h"
 #include "htlc.h"
 #include "failure.h"
-#include "state.h"
 #include <ccan/crypto/sha256/sha256.h>
 #include <ccan/crypto/shachain/shachain.h>
 #include <ccan/list/list.h>

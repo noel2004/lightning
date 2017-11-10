@@ -583,7 +583,7 @@ static void on_commit_outsourcing_finish(struct LNchannel *lnchn, enum outsourci
    is only updated when all status is OK
 */
 static bool update_commit(struct LNchannel *lnchn, 
-    enum side side, const ecdsa_signature *remote_sig)
+    enum side side, const struct ecdsa_signature_ *remote_sig)
 {
     struct commit_info *ci;
     bool only_other_side;
@@ -664,7 +664,7 @@ static bool update_commit(struct LNchannel *lnchn,
 }
 
 void internal_lnchn_update_commit(struct LNchannel *lnchn,
-    enum side side, const ecdsa_signature *sig) {
+    enum side side, const struct ecdsa_signature_ *sig) {
 
     update_commit(lnchn, side, sig);
 }
@@ -746,7 +746,7 @@ bool lnchn_do_commit(struct LNchannel *lnchn)
 
 bool lnchn_notify_commit(struct LNchannel *lnchn,
     u64 commit_num,
-    const ecdsa_signature *sig,
+    const struct ecdsa_signature_ *sig,
     const struct sha256 *next_revocation,
     u32 num_htlc_entry,
     const struct msg_htlc_entry *htlc_entry
@@ -852,7 +852,7 @@ static void on_commit_revoke_outsourcing_finish(struct LNchannel *lnchn,
 
 bool lnchn_notify_remote_commit(struct LNchannel *lnchn,
     u64 commit_num,
-    const ecdsa_signature *sig,
+    const struct ecdsa_signature_ *sig,
     const struct sha256 *next_revocation,
     const struct sha256 *revocation_image
 ) {

@@ -10,6 +10,8 @@
 #include <ccan/timer/timer.h>
 #include <stdio.h>
 
+struct LNchannels;
+
 /* Various adjustable things. */
 struct config {
     /* How long do we want them to lock up their funds? (blocks) */

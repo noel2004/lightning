@@ -3,7 +3,7 @@
 #define LIGHTNING_LITE_DUMMY_IMPL_H
 
 #include <functional>
-#include "lightningcore/lnchannel_api.h"
+#include "lightningcore/lnchannel.h"
 #include "bitcoin/simple.h"
 
 namespace lnl_dummy {
