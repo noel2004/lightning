@@ -3,6 +3,7 @@
 #include "config.h"
 #include <ccan/short_types/short_types.h>
 #include <stdbool.h>
+#include <stddef.h>
 
 struct sha256_double;
 struct bitcoin_tx;
