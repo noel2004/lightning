@@ -76,6 +76,7 @@ MESSAGE( STATUS "CMAKE_CXX_FLAGS: " ${CMAKE_CXX_FLAGS} )
 
 # include
 include_directories (.)
+include_directories (include)
 include_directories (${CMAKE_BINARY_DIR})
 include_directories (ccan)
 include_directories (libwally-core)
