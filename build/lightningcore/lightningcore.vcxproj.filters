@@ -142,7 +142,10 @@
     <ClInclude Include="..\..\lightningcore\state_types.h">
       <Filter>头文件\LNChannel</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\lightningcore\lnchannel_api.h">
+    <ClInclude Include="..\..\include\lnchannel_api.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\lnchannel_struct.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>

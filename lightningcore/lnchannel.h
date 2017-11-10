@@ -7,7 +7,6 @@
 #include <ccan/short_types/short_types.h>
 
 struct log;
-struct lightningd_state;
 struct LNchannel;
 struct htlc;
 struct bitcoin_tx;
@@ -19,9 +18,7 @@ struct LNchannel *new_LNChannel(struct lightningd_state *dstate,
 /* call on every channel after DB is loaded*/
 void reopen_LNChannel(struct LNchannel *lnchn);
 
-int         lnchn_u8arr_size(const unsigned char* str);
 struct      msg_htlc_entry* lnchn_htlc_entry_create(const struct msg_htlc_entry*, unsigned int size, void *tal_ctx);
-
 void        lnchn_object_release(const void *);
 
 const struct pubkey* lnchn_channel_pubkey(const struct LNchannel*);
@@ -161,6 +158,12 @@ void debug_dump_lnchn(struct LNchannel *chn);
 bool lnchn_has_pending_outsourcing(struct LNchannel *chn);
 
 /* watch message, incoming tx struct MUST be allocated as children of lnchn ...*/
+
+enum outsourcing_deliver {
+    OUTSOURCING_DELIVER_DONE,
+    OUTSOURCING_DELIVER_FAILED,
+    OUTSOURCING_DELIVER_CONFIRMED,
+};
 
 /* if handling normally, it call lnchn_resolve_htlc*/
 void lnchn_notify_txo_delivered(struct LNchannel *chn, const struct txowatch *txo,

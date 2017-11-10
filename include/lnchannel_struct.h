@@ -20,35 +20,6 @@ extern "C" {
         unsigned long long    purpose_satoshi;
     };
 
-    struct LNchannel_msg_htlc_add
-    {
-        unsigned int       expiry;
-        unsigned long long mstatoshi;
-    };
-
-    struct LNchannel_msg_htlc_del
-    {
-        const struct preimage *r; /* NULL if being revoked*/
-        const unsigned char* fail;
-        unsigned int failflag; /* 1: indicate htlc fail from end so retry is not needed*/
-    };
-
-    struct LNchannel_msg_htlc_entry
-    {
-        const struct sha256 *rhash;
-        int   action_type; /*1 is add and 0 is del*/
-        union {
-            struct LNchannel_msg_htlc_add add;
-            struct LNchannel_msg_htlc_del del;
-        } action;
-    };
-
-    enum outsourcing_deliver {
-        OUTSOURCING_DELIVER_DONE,
-        OUTSOURCING_DELIVER_FAILED,
-        OUTSOURCING_DELIVER_CONFIRMED,
-    };
-
 
 #ifdef __cplusplus
 }

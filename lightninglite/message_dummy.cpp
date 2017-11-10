@@ -98,7 +98,12 @@ extern "C" {
     )
     {
         auto p = lnl_dummy::dummy_get_channel(msg->state->channels, target);
-        auto htlcs = lnchn_htlc_entry_create(htlc_entry, num_htlc_entry, msg->alloc_ctx);
+
+        pointer_wrapper<struct msg_htlc_entry> phtlcswrap{
+            std::shared_ptr<struct msg_htlc_entry>(
+                lnchn_htlc_entry_create(htlc_entry, num_htlc_entry, msg->alloc_ctx),
+                lnchn_object_release) 
+        };
 
         lnl_dummy::add_task(std::bind(&lnchn_notify_commit,
             p,
@@ -106,7 +111,7 @@ extern "C" {
             WRAP_SHRPTR(struct ecdsa_signature_, ecdsasig, sig),
             WRAP_SHRPTR(struct sha256, sha256, next_revocation),
             num_htlc_entry,
-            htlcs
+            phtlcswrap
         ));
     }
 

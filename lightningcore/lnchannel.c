@@ -768,6 +768,12 @@ void reopen_LNChannel(struct LNchannel *lnchn)
 //	command_success(cmd, null_response(cmd));
 //}
 
+void        lnchn_object_release(const void * p)
+{
+    tal_free(p);
+}
+
+
 const struct pubkey* lnchn_channel_pubkey(const struct LNchannel* chn)
 {
     return chn->id;
@@ -914,33 +920,6 @@ struct      msg_htlc_entry* lnchn_htlc_entry_create(const struct msg_htlc_entry*
     return ret;
 }
 
-int         lnchn_u8arr_size(const unsigned char* str) { return tal_len(str); }
-
-void        LNAPI_htlc_entry_fill_hash(struct msg_htlc_entry* h, unsigned int index, const unsigned char* hash)
-{
-    struct sha256* p = talz(h, struct sha256);
-    memcpy(p->u.u8, hash, sizeof(p->u.u8));
-    h[index].rhash = p;
-}
-
-void        LNAPI_htlc_entry_fill_del(struct msg_htlc_entry* h, unsigned int index,
-    const unsigned char* data, unsigned int sz/*if sz is zero, fill r instead of fail*/)
-{
-    if (sz == 0) {
-        struct preimage *r = talz(h, struct preimage);
-        memcpy(r->r, data, sizeof(r->r));
-        h[index].action.del.r = r;
-    }
-    else {
-        h[index].action.del.fail = tal_dup_arr(h, u8, data, sz, 0);
-    }
-}
-
-
-void        lnchn_object_release(const void * p)
-{
-    tal_free(p);
-}
 
 
 

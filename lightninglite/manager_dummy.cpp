@@ -22,7 +22,6 @@ namespace {
 }
 
 extern "C" {
-#include "lightningcore/state.h"
 #include "c/manager.h"
 }
 
