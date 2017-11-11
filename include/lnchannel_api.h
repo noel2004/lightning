@@ -28,19 +28,16 @@ extern "C" {
 
 struct LNchannel;
 
-struct LNAPI_channel_detail
+struct LNAPI_channel_detail_s
 {
+    const struct LNchannel* chn;
     const struct pubkey *id;
     unsigned long long  balance;
     unsigned long long  ability;
     const struct sha256_double *anchor_txid;
 };
 
-LNCHANNEL_API const struct pubkey*  LNAPI_channel_pubkey(const struct LNchannel*);
-LNCHANNEL_API int                   LNAPI_channel_state(const struct LNchannel*);
-LNCHANNEL_API unsigned long long    LNAPI_channel_balance(const struct LNchannel*);
-LNCHANNEL_API unsigned long long    LNAPI_channel_ability(const struct LNchannel*);
-LNCHANNEL_API const struct sha256_double* LNAPI_channel_anchor_txid(struct LNchannel *lnchn);
+LNCHANNEL_API int LNAPI_channel_detail(struct LNAPI_channel_detail_s *);
 
 /*lnchannel.h wrapper*/
 LNCHANNEL_API int LNAPI_channel_update_htlc(struct LNchannel *lnchn, const struct sha256 *rhash);
