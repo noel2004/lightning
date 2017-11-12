@@ -8,6 +8,9 @@ struct pubkey;
 struct sha256;
 struct sha256_double;
 
+void    lite_init_paymentmgr(struct lightningd_state* state);
+void    lite_clean_paymentmgr(struct lightningd_state* state);
+
 /*notify user to pay for the anchor*/
 void    lite_anchor_pay_notify(struct Payments *payment, struct LNchannel *lnchn);
 

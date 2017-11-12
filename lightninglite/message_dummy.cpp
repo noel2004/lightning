@@ -33,6 +33,17 @@ extern "C" {
         struct lightningd_state* state;
     };
 
+    void    lite_init_messagemgr(struct lightningd_state* state) {
+        state->message_svr = new LNmessage;
+        state->message_svr->alloc_ctx = state;
+        state->message_svr->state = state;
+    }
+
+    void    lite_clean_messagemgr(struct lightningd_state* state) {
+        delete state->message_svr;
+        state->message_svr = nullptr;
+    }
+
 #define WRAP_SHRPTR(TYPE, SUFFIX, NAME) pointer_wrapper<TYPE>{\
     std::shared_ptr<TYPE>(simple_##SUFFIX##_create(msg->alloc_ctx, \
     simple_##SUFFIX##_data(NAME)), simple_freeobjects)}

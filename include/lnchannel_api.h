@@ -26,7 +26,9 @@
 extern "C" {
 #endif
 
+struct LNcore;
 struct LNchannel;
+
 
 struct LNAPI_channel_detail_s
 {
@@ -37,10 +39,14 @@ struct LNAPI_channel_detail_s
     const struct sha256_double *anchor_txid;
 };
 
+LNCHANNEL_API struct LNcore* LNAPI_init();
+LNCHANNEL_API void LNAPI_uninit(struct LNcore*);
+
+
 LNCHANNEL_API int LNAPI_channel_detail(struct LNAPI_channel_detail_s *);
 
 /*lnchannel.h wrapper*/
-LNCHANNEL_API int LNAPI_channel_update_htlc(struct LNchannel *lnchn, const struct sha256 *rhash);
+LNCHANNEL_API int LNAPI_channel_new(struct LNcore*, const struct pubkey*);
 LNCHANNEL_API int LNAPI_channel_do_commit(struct LNchannel *chn);
 LNCHANNEL_API int LNAPI_channel_open_anchor(struct LNchannel *lnchn, const unsigned char* txdata,
     unsigned int txdata_sz);

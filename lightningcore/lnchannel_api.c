@@ -1,6 +1,7 @@
-#include "lnchannel_api.h"
-#include "lnchannel.h"
+#include "include/lnchannel_api.h"
 #include "lnchannel_internal.h"
+#include "log.h"
+#include "db.h"
 #include <ccan/mem/mem.h>
 #include <ccan/str/hex/hex.h>
 #include <ccan/structeq/structeq.h>
@@ -14,6 +15,39 @@
 #include "bitcoin/signature.h"
 #include "bitcoin/preimage.h"
 
+struct LNcore
+{
+    struct lightningd_state *dstate;
+};
+
+
+LNCHANNEL_API struct LNcore* LNAPI_init()
+{
+    struct lightningd_state *dstate = tal(NULL, struct lightningd_state);
+
+    dstate->log_book = new_log_book(dstate, 20 * 1024 * 1024, LOG_INFORM);
+    dstate->base_log = new_log(dstate, dstate->log_book,
+        "lightningd(%u):", (int)getpid());
+
+    db_init(dstate);
+    lite_init_channels(dstate);
+    lite_init_messagemgr(dstate);
+    lite_init_paymentmgr(dstate);
+    btcnetwork_init(dstate);
+
+    log_info(dstate->base_log, "Hello world!");
+
+    dstate->testnet = true;
+    dstate->default_redeem_address = NULL;
+ 
+    return dstate;
+
+}
+
+LNCHANNEL_API void LNAPI_uninit(struct LNcore* pcore)
+{
+    tal_free(pcore->dstate);
+}
 
 static     int check_failure(struct LNchannel *lnchn)
 {

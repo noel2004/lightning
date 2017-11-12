@@ -1161,10 +1161,12 @@ void db_init(struct lightningd_state *dstate)
 		fatal("SQLITE version mistmatch: compiled %u, now %u",
 		      SQLITE_VERSION_NUMBER, sqlite3_libversion_number());
 
+    assert(sqlite3_threadsafe());
+
 	dstate->db = tal(dstate, struct db);
 
-	err = sqlite3_open_v2(DB_FILE, &dstate->db->sql,
-			      SQLITE_OPEN_READWRITE, NULL);
+	err = sqlite3_open_v2(dstate->data_dir ? dstate->data_dir : DB_FILE, 
+        &dstate->db->sql, SQLITE_OPEN_READWRITE, NULL);
 	if (err != SQLITE_OK) {
 		log_unusual(dstate->base_log,
 			    "Error opening %s (%s), trying to create",

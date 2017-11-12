@@ -6,6 +6,10 @@
 struct sha256_double;
 struct chain_topology;
 
+/* init chain_topology and outsourcing service, require other lite modules */
+void    btcnetwork_init(struct lightningd_state* state);
+void    btcnetwork_release(struct lightningd_state* state);
+
 /* Information relevant to locating a TX in a blockchain. */
 struct txlocator {
 

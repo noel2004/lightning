@@ -71,6 +71,7 @@ struct lightningd_state {
 
     /* Our config dir, and rpc file */
     char *config_dir;
+    char *data_dir;
 
     /* A default redeem address*/
     char *default_redeem_address;

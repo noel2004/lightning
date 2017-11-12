@@ -51,6 +51,9 @@ struct msg_htlc_entry
     } action;
 };
 
+void    lite_init_messagemgr(struct lightningd_state* state);
+void    lite_clean_messagemgr(struct lightningd_state* state);
+
 void    lite_msg_commit_purpose(struct LNmessage *msg,
     const struct pubkey *target,
     unsigned long long commit_num,
