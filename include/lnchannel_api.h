@@ -27,6 +27,7 @@ extern "C" {
 #endif
 
 struct LNcore;
+struct LNworkspace;
 struct LNchannel;
 
 
@@ -41,16 +42,14 @@ struct LNAPI_channel_detail_s
 
 LNCHANNEL_API struct LNcore* LNAPI_init();
 LNCHANNEL_API void LNAPI_uninit(struct LNcore*);
-
-
-LNCHANNEL_API int LNAPI_channel_detail(struct LNAPI_channel_detail_s *);
+LNCHANNEL_API struct LNworkspace* LNAPI_assign_workspace(struct LNcore*);
+LNCHANNEL_API int LNAPI_release_workspace(struct LNworkspace*);
 
 /*lnchannel.h wrapper*/
-LNCHANNEL_API int LNAPI_channel_new(struct LNcore*, const struct pubkey*);
-LNCHANNEL_API int LNAPI_channel_do_commit(struct LNchannel *chn);
-LNCHANNEL_API int LNAPI_channel_open_anchor(struct LNchannel *lnchn, const unsigned char* txdata,
-    unsigned int txdata_sz);
-
+//create channel and bind it to a workspace (can rebind)
+LNCHANNEL_API int LNAPI_channel_new(struct LNworkspace*, const struct pubkey*);
+LNCHANNEL_API int LNAPI_channel_bind(struct LNchannel*, struct LNworkspace*);
+LNCHANNEL_API int LNAPI_channel_detail(struct LNAPI_channel_detail_s *);
 
 
 #ifdef __cplusplus
