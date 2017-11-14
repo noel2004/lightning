@@ -11,8 +11,9 @@ struct pubkey;
 struct sha256;
 struct sha256_double;
 
-void    lite_init_channels(struct lightningd_state* state);
-void    lite_clean_channels(struct lightningd_state* state);
+//init manager, message and payment
+void    lite_init(struct lightningd_state* state);
+void    lite_clean(struct lightningd_state* state);
 
 /* 
    data needed to be query is updated as transaction

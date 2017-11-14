@@ -5,6 +5,25 @@ extern "C" {
 #include "btcnetwork/c/chaintopology.h"
 #include "btcnetwork/c/watch.h"
 
+    struct chain_topology{};
+    struct outsourcing{};
+
+}
+
+namespace lnl_dummy {
+
+    class btcnewtork_dummy :
+        public chain_topology, public outsourcing
+    {
+
+    };
+
+}
+
+using namespace lnl_dummy;
+
+extern "C" {
+
     u32 get_block_height(const struct chain_topology *topo)
     {
         return 0;
@@ -14,27 +33,6 @@ extern "C" {
     {
         return 0;
     }
-
-    struct chain_topology
-    {
-
-    };
-
-    struct outsourcing
-    {
-
-    };
-}
-
-namespace lnl_dummy {
-
-    
-
-    class btcnewtork_dummy : 
-        public chain_topology, public outsourcing
-    {
-
-    };
 
     void    btcnetwork_init(struct lightningd_state* state)
     {
@@ -50,6 +48,5 @@ namespace lnl_dummy {
         state->topology = nullptr;
         state->outsourcing_svr = nullptr;
     }
-
 
 }

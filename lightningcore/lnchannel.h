@@ -1,5 +1,10 @@
 #ifndef LIGHTNING_CORE_LNCHANNEL_H
 #define LIGHTNING_CORE_LNCHANNEL_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "config.h"
 #include "include/lnchannel_struct.h"
 #include "state.h"
@@ -173,5 +178,8 @@ void lnchn_notify_txo_delivered(struct LNchannel *chn, const struct txowatch *tx
 void lnchn_notify_tx_delivered(struct LNchannel *chn, const struct bitcoin_tx *tx,
     enum outsourcing_deliver ret, const struct sha256_double *taskid);
 
+#ifdef __cplusplus
+} //extern C
+#endif
 
 #endif /* LIGHTNING_CORE_LNCHANNEL_H */

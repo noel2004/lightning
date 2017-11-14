@@ -3,22 +3,6 @@
 extern "C" {
 #include "c/payment.h"
 
-    struct Payments
-    {
-
-    };
-
-
-void    lite_init_paymentmgr(struct lightningd_state* state)
-{
-    state->payment = new Payments;
-}
-
-void    lite_clean_paymentmgr(struct lightningd_state* state)
-{
-    delete state->payment;
-    state->payment = nullptr;
-}
 
 void    lite_anchor_pay_notify(struct Payments *payment, struct LNchannel *lnchn)
 {

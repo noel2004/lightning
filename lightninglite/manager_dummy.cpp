@@ -1,36 +1,14 @@
 
-#include <unordered_map>
-#include <unordered_set>
-#include <array>
 #include <cassert>
 #include "dummy.h"
-
-namespace {
-
-    struct iLongKeyHash
-    {
-        template<class L>
-        size_t operator()(const L& i) const
-        {
-            static const size_t szsz = sizeof(size_t);
-            size_t v;
-            memcpy(&v, i.data() + SIMPLE_PUBKEY_DATASIZE - szsz, szsz);
-            return v;
-        }
-    };
-
-}
 
 extern "C" {
 #include "c/manager.h"
 }
 
-namespace {
-    typedef std::array<unsigned char, SIMPLE_PUBKEY_DATASIZE> iPubkey;
-    typedef std::array<unsigned char, SIMPLE_SHA256_DATASIZE> iShakey;
+using namespace lnl_dummy;
 
-    typedef std::pair<const struct htlc*, const struct LNchannel*> htlcItem;
-    typedef std::pair<htlcItem, htlcItem>                           htlcChain;
+namespace {
 
     inline const struct htlc* chain_source(const htlcChain& c) { return c.first.first; }
     inline const struct LNchannel* chain_source_chn(const htlcChain& c) { return c.first.second; }
@@ -38,48 +16,28 @@ namespace {
     inline const struct LNchannel* chain_downstream_chn(const htlcChain& c) { return c.second.second; }
     inline bool   we_has(void* p) { return p; }
 
-    inline const iShakey shakey_from_raw(const struct sha256* s)
-    {
-        iShakey k{};
-        std::copy(simple_sha256_data(s),
-            simple_sha256_data(s) + SIMPLE_SHA256_DATASIZE,
-            k.begin());
-        return k;
-    }
-
-    inline const iPubkey pubkey_from_raw(const struct pubkey* s)
-    {
-        iPubkey k{};
-        std::copy(simple_pubkey_data(s),
-            simple_pubkey_data(s) + SIMPLE_PUBKEY_DATASIZE,
-            k.begin());
-        return k;
-    }
-
     static const htlcChain nullhtlcChain = { {nullptr, nullptr}, {nullptr, nullptr} };
 }
  
 
 extern "C" {
-    struct LNchannels
-    {
-        typedef std::unordered_map<iPubkey, struct LNchannel*, iLongKeyHash> channelmap_type;
-        channelmap_type channel_map;
-        typedef std::unordered_map<iShakey, htlcChain, iLongKeyHash>          htlcmap_type;
-        htlcmap_type    htlc_map;
 
-        std::unordered_set<iPubkey, iLongKeyHash>       updated_list;
-    };
-
-    void    lite_init_channels(struct lightningd_state* state)
+    void    lite_init(struct lightningd_state* state)
     {
-        delete state->channels;
-        state->channels = new LNchannels;
+        auto p = new LNdummy_impl;
+        p->alloc_ctx = p->state = state;
+        state->channels = p;
+        state->message_svr = p;
+        state->payment = p;
     }
 
-    void    lite_clean_channels(struct lightningd_state* state)
+    void    lite_clean(struct lightningd_state* state)
     {
-        delete state->channels;
+        auto p = static_cast<LNdummy_impl*>(state->channels);
+        delete p;
+        state->channels = nullptr;
+        state->message_svr = nullptr;
+        state->payment = nullptr;
     }
 
     struct LNchannelQuery
@@ -90,15 +48,17 @@ extern "C" {
     struct LNchannelComm
     {
         struct LNchannel *p;
-        struct LNchannels *mgr;
+        LNdummy_impl     *mgr;
     };
 
-    void    lite_update_channel(struct LNchannels *mgr, const struct LNchannel *lnchn)
+    void    lite_update_channel(struct LNchannels *mgr_, const struct LNchannel *lnchn)
     {
+        auto mgr = static_cast<LNdummy_impl*>(mgr_);
+
         auto& ipk = pubkey_from_raw(lnchn_channel_pubkey(lnchn));
         auto fret = mgr->channel_map.find(ipk);
         if (fret == mgr->channel_map.end()) {
-            mgr->channel_map.insert(LNchannels::channelmap_type::value_type(
+            mgr->channel_map.insert(LNdummy_impl::channelmap_type::value_type(
                 ipk, lnchn_channel_copy(lnchn, LNchn_copy_all, nullptr)));
         }
         else {
@@ -107,10 +67,11 @@ extern "C" {
 
     }
 
-    void    lite_reg_htlc(struct LNchannels *mgr, const struct LNchannel *lnchn, 
+    void    lite_reg_htlc(struct LNchannels *mgr_, const struct LNchannel *lnchn, 
         const struct sha256* hash, const struct htlc *htlc)
     {
-        auto ret = mgr->htlc_map.insert(LNchannels::htlcmap_type::value_type(
+        auto mgr = static_cast<LNdummy_impl*>(mgr_);
+        auto ret = mgr->htlc_map.insert(LNdummy_impl::htlcmap_type::value_type(
             shakey_from_raw(hash), nullhtlcChain));
         if (ret.second) {
             (lnchn_htlc_route_is_upstream(htlc) ?
@@ -125,9 +86,10 @@ extern "C" {
         }
     }
 
-    void    lite_unreg_htlc(struct LNchannels *mgr, const struct sha256* hash, 
+    void    lite_unreg_htlc(struct LNchannels *mgr_, const struct sha256* hash, 
         const struct htlc *htlc)
     {
+        auto mgr = static_cast<LNdummy_impl*>(mgr_);
         auto ret = mgr->htlc_map.find(shakey_from_raw(hash));
         assert(ret != mgr->htlc_map.end());
 
@@ -142,16 +104,18 @@ extern "C" {
             mgr->htlc_map.erase(ret);
     }
 
-    struct LNchannelQuery* lite_query_channel(struct LNchannels *mgr, const struct pubkey *id)
+    struct LNchannelQuery* lite_query_channel(struct LNchannels *mgr_, const struct pubkey *id)
     {
+        auto mgr = static_cast<LNdummy_impl*>(mgr_);
         auto fret = mgr->channel_map.find(pubkey_from_raw(id));
         if (fret == mgr->channel_map.end())return nullptr;
         return new LNchannelQuery{ fret->second };
     }
 
-    struct LNchannelQuery* lite_query_channel_from_htlc(struct LNchannels *mgr, 
+    struct LNchannelQuery* lite_query_channel_from_htlc(struct LNchannels *mgr_, 
         const struct sha256 *hash, int issrc)
     {
+        auto mgr = static_cast<LNdummy_impl*>(mgr_);
         auto ret = mgr->htlc_map.find(shakey_from_raw(hash));
         assert(ret != mgr->htlc_map.end());
 
@@ -159,13 +123,14 @@ extern "C" {
             issrc ? chain_source_chn(ret->second) : chain_downstream_chn(ret->second) };
     }
 
-    void    lite_release_chn(struct LNchannels * /*mgr*/, const struct LNchannelQuery* chn)
+    void    lite_release_chn(struct LNchannels * /*mgr_*/, const struct LNchannelQuery* chn)
     {
         delete chn;
     }
 
-    struct LNchannelComm*  lite_comm_channel(struct LNchannels *mgr, struct LNchannelQuery *q)
+    struct LNchannelComm*  lite_comm_channel(struct LNchannels *mgr_, struct LNchannelQuery *q)
     {
+        auto mgr = static_cast<LNdummy_impl*>(mgr_);
         auto r = new LNchannelComm{ nullptr, mgr };
         auto fret = mgr->channel_map.find(pubkey_from_raw(lnchn_channel_pubkey(q->p)));
         assert(fret != mgr->channel_map.end());
@@ -182,21 +147,22 @@ extern "C" {
         return r;
     }
 
-    void lite_release_comm(struct LNchannels * /*mgr*/, struct LNchannelComm *c)
+    void lite_release_comm(struct LNchannels * /*mgr_*/, struct LNchannelComm *c)
     {
         delete c;
     }
 
-    const struct htlc *lite_query_htlc_direct(struct LNchannels *mgr, 
+    const struct htlc *lite_query_htlc_direct(struct LNchannels *mgr_, 
         const struct sha256* hash, int issrc)
     {
+        auto mgr = static_cast<LNdummy_impl*>(mgr_);
         auto ret = mgr->htlc_map.find(shakey_from_raw(hash));
         assert(ret != mgr->htlc_map.end());
 
         return issrc ? chain_source(ret->second) : chain_downstream(ret->second);
     }
 
-    void    lite_release_htlc(struct LNchannels * /*mgr*/, const struct htlc * /*htlc*/)
+    void    lite_release_htlc(struct LNchannels * /*mgr_*/, const struct htlc * /*htlc*/)
     {
         //do nothing: we just keep the original htlc
     }
@@ -244,9 +210,3 @@ extern "C" {
 
 }
 
-namespace lnl_dummy {
-    struct LNchannel* dummy_get_channel(struct LNchannels *, const struct pubkey *) 
-    {
-        return nullptr; 
-    }
-}
