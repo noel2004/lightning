@@ -114,6 +114,9 @@
     <ClCompile Include="..\..\ccan\ccan\autodata\autodata.c">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\ccan\ccan\tap\tap.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\ccan_config.h">

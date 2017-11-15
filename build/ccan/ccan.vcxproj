@@ -192,6 +192,7 @@
       <ObjectFileName Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)tal_str.obj</ObjectFileName>
     </ClCompile>
     <ClCompile Include="..\..\ccan\ccan\tal\tal.c" />
+    <ClCompile Include="..\..\ccan\ccan\tap\tap.c" />
     <ClCompile Include="..\..\ccan\ccan\timer\timer.c" />
     <ClCompile Include="..\..\ccan\ccan\time\time.c" />
   </ItemGroup>

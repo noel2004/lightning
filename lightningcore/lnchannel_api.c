@@ -28,6 +28,10 @@ LNCHANNEL_API struct LNcore* LNAPI_init()
     struct LNcore *core = tal(NULL, struct LNcore);
     struct lightningd_state *dstate = talz(core, struct lightningd_state);
 
+    dstate->log_book = new_log_book(dstate, 1024 * 1024, LOG_INFORM);
+    dstate->base_log = new_log(dstate, dstate->log_book,
+        "lightning-lite:");
+
     lite_init(dstate);
     btcnetwork_init(dstate);
 
@@ -37,7 +41,8 @@ LNCHANNEL_API struct LNcore* LNAPI_init()
     dstate->default_redeem_address = NULL;
  
     core->dstate_sample = dstate;
-
+    core->workspace_num = 0;
+ 
     return core;
 
 }
@@ -61,6 +66,7 @@ LNCHANNEL_API struct LNworkspace* LNAPI_assign_workspace(struct LNcore* pcore)
         "lightning-lite(%u):", pcore->workspace_num);
     db_init(dstate);
 
+    log_info(dstate->base_log, "Start a workspace");
     pcore->workspace_num++;
 
     return ws;

@@ -70,6 +70,7 @@ static const char *sqlite3_column_str(sqlite3_stmt *stmt, int iCol)
 #define TABLE(tablename, ...)					\
 	"CREATE TABLE " #tablename " (" CPPMAGIC_JOIN(", ", __VA_ARGS__) ");"
 
+
 static const char *sql_bool(bool b)
 {
 	/* SQL2003 says TRUE and FALSE are binary literal keywords.
@@ -1192,7 +1193,23 @@ void db_init(struct lightningd_state *dstate)
 	/* Set up tables. */
 	dstate->db->in_transaction = true;
 	db_exec(__func__, dstate, "BEGIN IMMEDIATE;");
-	db_exec(__func__, dstate,
+    db_exec(__func__, dstate,
+#ifdef _MSC_VER
+        //CPPMAGIC IS NOT WORK UNDER MSVC SO WE JUST PRINT THE STRING OUT HERE
+        "CREATE TABLE anchor_inputs(lnchn CHAR(33), txid CHAR(32), idx INT, in_amount BIGINT, out_amount BIGINT, walletkey CHAR(33));"
+        "CREATE TABLE anchors(lnchn CHAR(33), txid CHAR(32), idx INT, amount BIGINT, ok_depth INT, min_depth INT, ours BOOLEAN);"
+        "CREATE TABLE htlcs(lnchn CHAR(33), id BIGINT, state VARCHAR(45), msatoshi BIGINT, expiry INT, rhash CHAR(32), r CHAR(32), route INT, fail BLOB, history_beg BIGINT, history_end BIGINT, PRIMARY KEY(lnchn, rhash));"
+        "CREATE TABLE feechanges(lnchn CHAR(33), side VARCHAR(45), fee_rate INT, commit_num BIGINT, PRIMARY KEY(lnchn, side, commit_num));"
+        "CREATE TABLE commit_info(lnchn CHAR(33), side INT, commit_num BIGINT, revocation_hash CHAR(32), xmit_order BIGINT, sig CHAR(64), prev_revocation_hash CHAR(32), PRIMARY KEY(lnchn, side));"
+        "CREATE TABLE shachain(lnchn CHAR(33), shachain CHAR(2612), PRIMARY KEY(lnchn));"
+        "CREATE TABLE their_visible_state(lnchn CHAR(33), offered_anchor BOOLEAN, commitkey CHAR(33), finalkey CHAR(33), locktime INT, mindepth INT, commit_fee_rate INT, next_revocation_hash CHAR(32), PRIMARY KEY(lnchn));"
+        "CREATE TABLE their_commitments(lnchn CHAR(33), txid CHAR(32), commit_num BIGINT, PRIMARY KEY(lnchn, txid));"
+        "CREATE TABLE lnchn_secrets(lnchn CHAR(33), commitkey CHAR(32), finalkey CHAR(32), revocation_seed CHAR(32), PRIMARY KEY(lnchn));"
+        "CREATE TABLE closing(lnchn CHAR(33), our_fee BIGINT, their_fee BIGINT, their_sig CHAR(64), our_script BLOB, their_script BLOB, shutdown_order BIGINT, closing_order BIGINT, sigs_in BIGINT, PRIMARY KEY(lnchn));"
+        "CREATE TABLE lnchns(lnchn CHAR(33), state VARCHAR(45), offered_anchor BOOLEAN, our_feerate INT, redeemaddr BLOB, state_height INT, PRIMARY KEY(lnchn));"
+        "CREATE TABLE version(version VARCHAR(100));"
+    );
+#else
 		//TABLE(wallet,
 		//      SQL_PRIVKEY(privkey))
 		//TABLE(pay,
@@ -1268,6 +1285,7 @@ void db_init(struct lightningd_state *dstate)
               SQL_BLOB(redeemaddr), SQL_U32(state_height),
 		      "PRIMARY KEY(lnchn)")
 		TABLE(version, "version VARCHAR(100)"));
+#endif
 	db_exec(__func__, dstate, "INSERT INTO version VALUES ('"VERSION"');");
 	db_exec(__func__, dstate, "COMMIT;");
 	dstate->db->in_transaction = false;
