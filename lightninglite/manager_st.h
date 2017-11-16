@@ -1,39 +1,23 @@
 #pragma once
-#ifndef LIGHTNING_LITE_DUMMY_IMPL_H
-#define LIGHTNING_LITE_DUMMY_IMPL_H
+#ifndef LIGHTNING_LITE_MANAGER_ST_IMPL_H
+#define LIGHTNING_LITE_MANAGER_ST_IMPL_H
 
-#include <functional>
+#include <unordered_map>
+#include <unordered_set>
+#include <array>
 #include "lightningcore/lnchannel.h"
 #include "bitcoin/simple.h"
 
-namespace lnl_dummy {
+#ifdef __cplusplus
+extern "C" {
+#endif
+    struct LNchannels {};
 
-    class task_package_base
-    {
-    protected:
-        virtual void execute() = 0;
-    public:
-        virtual ~task_package_base(){}
-        void operator()() { execute(); }
-    };
+#ifdef __cplusplus
+}
+#endif
 
-    template<class F>
-    class task_package : public task_package_base
-    {
-        F funcobj;
-        void execute() override { funcobj(); }
-
-    public:
-        task_package(const F& o) : funcobj(o) { }
-
-    };
-
-    void  add_task_p(task_package_base*);
-    template<class F>
-    void  add_task(const F& o) { add_task_p(new task_package<F>(o)); }
-
-    void  dump_tasks();
-    void  clear_tasks();
+namespace lnl_st {
 
     typedef std::array<unsigned char, SIMPLE_PUBKEY_DATASIZE> iPubkey;
     typedef std::array<unsigned char, SIMPLE_SHA256_DATASIZE> iShakey;
@@ -53,18 +37,6 @@ namespace lnl_dummy {
         }
     };
 
-}//namespace lnl_dummy
-
-#include <unordered_map>
-#include <unordered_set>
-#include <array>
-
-struct LNchannels{};
-struct Payments{};
-struct LNmessage {};
-
-namespace lnl_dummy {
-
     inline const iShakey shakey_from_raw(const struct sha256* s)
     {
         iShakey k{};
@@ -83,7 +55,7 @@ namespace lnl_dummy {
         return k;
     }
 
-    class LNdummy_impl : public LNchannels, public Payments, public LNmessage
+    class LNchannels_impl : public ::LNchannels
     {
     public:
         void* alloc_ctx;
@@ -96,8 +68,6 @@ namespace lnl_dummy {
 
         std::unordered_set<iPubkey, iLongKeyHash>       updated_list;
     };
-
 }
 
-#endif //LIGHTNING_LITE_DUMMY_IMPL_H
-
+#endif //LIGHTNING_LITE_MANAGER_ST_IMPL_H

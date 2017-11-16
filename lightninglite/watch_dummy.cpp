@@ -40,13 +40,3 @@ extern "C" {
 
 }
 
-namespace lnl_dummy {
-
-    void init_watch(struct lightningd_state* state) {
-        state->outsourcing_svr = new struct outsourcing;
-    }
-
-    void clean_watch(struct lightningd_state* state) {
-        delete state->outsourcing_svr;
-    }
-}

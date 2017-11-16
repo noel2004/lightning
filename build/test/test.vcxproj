@@ -19,6 +19,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\lightninglite\message_test.cpp" />
     <ClCompile Include="..\..\test\channel_open.cpp" />
     <ClCompile Include="..\..\test\test.cpp" />
   </ItemGroup>

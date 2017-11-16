@@ -17,5 +17,8 @@
     <ClCompile Include="..\..\test\channel_open.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\lightninglite\message_test.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

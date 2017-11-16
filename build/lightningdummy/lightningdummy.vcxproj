@@ -20,14 +20,18 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\lightninglite\chain_dummy.cpp" />
-    <ClCompile Include="..\..\lightninglite\lite_dummy.cpp" />
-    <ClCompile Include="..\..\lightninglite\manager_dummy.cpp" />
-    <ClCompile Include="..\..\lightninglite\message_dummy.cpp" />
-    <ClCompile Include="..\..\lightninglite\payment_dummy.cpp" />
+    <ClCompile Include="..\..\lightninglite\lite_demo.cpp" />
+    <ClCompile Include="..\..\lightninglite\manager_st.cpp" />
+    <ClCompile Include="..\..\lightninglite\message_demo.cpp" />
+    <ClCompile Include="..\..\lightninglite\payment_st.cpp" />
     <ClCompile Include="..\..\lightninglite\watch_dummy.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\lightninglite\dummy.h" />
+    <ClInclude Include="..\..\lightninglite\lite_task.h" />
+    <ClInclude Include="..\..\lightninglite\lite_demo.h" />
+    <ClInclude Include="..\..\lightninglite\manager_st.h" />
+    <ClInclude Include="..\..\lightninglite\message_demo.h" />
+    <ClInclude Include="..\..\lightninglite\payment_st.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>
@@ -35,6 +39,7 @@
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>lightningdummy</RootNamespace>
     <WindowsTargetPlatformVersion>10.0.15063.0</WindowsTargetPlatformVersion>
+    <ProjectName>lightninglite_demo</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
