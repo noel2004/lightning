@@ -1,20 +1,12 @@
-#include "dummy.h"
+
 
 extern "C" {
 
 #include "btcnetwork/c/chaintopology.h"
-#include "btcnetwork/c/watch.h"
-
-}
-
-
-using namespace lnl_dummy;
-
-extern "C" {
 
     u32 get_block_height(const struct chain_topology *topo)
     {
-        return 0;
+        return 20171106;//fixed height
     }
 
     u64 get_feerate(const struct chain_topology *topo)
@@ -22,4 +14,7 @@ extern "C" {
         return 55u;//a default feerate
     }
 
+
 }
+
+
