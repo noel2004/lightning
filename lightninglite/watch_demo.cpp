@@ -1,20 +1,17 @@
-#include "dummy.h"
+#include "watch_demo.h"
+
+using namespace lnl_demo;
 
 extern "C" {
-#include "lightningcore/state.h"
 #include "btcnetwork/c/watch.h"
-
-    struct outsourcing
-    {
-
-    };
 
     void outsourcing_tasks(struct outsourcing* svr,
         const struct lnwatch_task *tasks, unsigned int taskcnt,//array of tasks
         void(*notify)(enum outsourcing_result, void *cbdata),
         void *cbdata
     ) {
-        lnl_dummy::add_task(std::bind(
+        auto p = static_cast<outsourcing_impl*>(svr);
+        p->add_task(std::bind(
             notify,
             OUTSOURCING_OK,
             cbdata
@@ -26,7 +23,8 @@ extern "C" {
         void(*notify)(enum outsourcing_result, void *cbdata),
         void *cbdata
     ) {
-        lnl_dummy::add_task(std::bind(
+        auto p = static_cast<outsourcing_impl*>(svr);
+        p->add_task(std::bind(
             notify,
             OUTSOURCING_OK,
             cbdata

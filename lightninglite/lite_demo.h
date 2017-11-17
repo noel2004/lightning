@@ -5,6 +5,7 @@
 #include "manager_st.h"
 #include "message_demo.h"
 #include "payment_st.h"
+#include "watch_demo.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -12,7 +13,6 @@ extern "C" {
 
     struct lightningd_state;
     struct chain_topology {};
-    struct outsourcing {};
 
 #ifdef __cplusplus
 }
@@ -28,7 +28,7 @@ namespace lnl_demo {
     };
 
     class btcnewtork :
-        public chain_topology, public outsourcing
+        public chain_topology, public lnl_demo::outsourcing_impl
     {
 
     };

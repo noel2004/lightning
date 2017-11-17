@@ -24,14 +24,14 @@
     <ClCompile Include="..\..\lightninglite\manager_st.cpp" />
     <ClCompile Include="..\..\lightninglite\message_demo.cpp" />
     <ClCompile Include="..\..\lightninglite\payment_st.cpp" />
-    <ClCompile Include="..\..\lightninglite\watch_dummy.cpp" />
+    <ClCompile Include="..\..\lightninglite\watch_demo.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\lightninglite\lite_task.h" />
     <ClInclude Include="..\..\lightninglite\lite_demo.h" />
     <ClInclude Include="..\..\lightninglite\manager_st.h" />
     <ClInclude Include="..\..\lightninglite\message_demo.h" />
     <ClInclude Include="..\..\lightninglite\payment_st.h" />
+    <ClInclude Include="..\..\lightninglite\watch_demo.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>
