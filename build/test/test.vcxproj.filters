@@ -9,6 +9,9 @@
       <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
       <Extensions>h;hh;hpp;hxx;hm;inl;inc;xsd</Extensions>
     </Filter>
+    <Filter Include="Source Files\lite_impl">
+      <UniqueIdentifier>{383c3e63-a4eb-4c6d-8432-278885b2b337}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\test\test.cpp">
@@ -18,7 +21,7 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\lightninglite\message_test.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\lite_impl</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

@@ -32,6 +32,9 @@
     <ProjectReference Include="..\lightningcore\lightningcore.vcxproj">
       <Project>{e732edf6-ef8b-45dd-8afa-991b6ebc62c0}</Project>
     </ProjectReference>
+    <ProjectReference Include="..\lightningdummy\lightningdummy.vcxproj">
+      <Project>{39ca5157-c2c6-4704-9294-56ce2dd0b55d}</Project>
+    </ProjectReference>
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>
