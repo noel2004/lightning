@@ -74,9 +74,6 @@
     <ProjectReference Include="..\ccan\ccan.vcxproj">
       <Project>{3fb34916-d1ef-4c70-915a-bc8fb052b403}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\lightningdummy\lightningdummy.vcxproj">
-      <Project>{39ca5157-c2c6-4704-9294-56ce2dd0b55d}</Project>
-    </ProjectReference>
     <ProjectReference Include="..\sqlite\sqlite.vcxproj">
       <Project>{2622eb1f-ef98-4045-8e52-58b3c5db9c61}</Project>
     </ProjectReference>

@@ -19,14 +19,25 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\lightninglite\lite_test.cpp" />
+    <ClCompile Include="..\..\lightninglite\manager_st.cpp" />
     <ClCompile Include="..\..\lightninglite\message_test.cpp" />
+    <ClCompile Include="..\..\lightninglite\payment_dummy.cpp" />
+    <ClCompile Include="..\..\lightninglite\watch_demo.cpp" />
     <ClCompile Include="..\..\test\channel_open.cpp" />
     <ClCompile Include="..\..\test\test.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\lightningcorelib\lightningcorelib.vcxproj">
-      <Project>{ababeee2-9e26-4b6e-b95b-30bab512a12e}</Project>
+    <ProjectReference Include="..\lightningcore\lightningcore.vcxproj">
+      <Project>{e732edf6-ef8b-45dd-8afa-991b6ebc62c0}</Project>
     </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\lightninglite\lite_test.h" />
+    <ClInclude Include="..\..\lightninglite\manager_st.h" />
+    <ClInclude Include="..\..\lightninglite\messate_test.h" />
+    <ClInclude Include="..\..\lightninglite\payment_st.h" />
+    <ClInclude Include="..\..\lightninglite\watch_demo.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>

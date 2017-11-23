@@ -9,6 +9,9 @@
       <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
       <Extensions>h;hh;hpp;hxx;hm;inl;inc;xsd</Extensions>
     </Filter>
+    <Filter Include="Source Files\lite_impl">
+      <UniqueIdentifier>{8ee3e7cf-4990-452c-a5ce-837eb50d66d1}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\test\test.cpp">
@@ -18,7 +21,36 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\lightninglite\message_test.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\lite_impl</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\lightninglite\lite_test.cpp">
+      <Filter>Source Files\lite_impl</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\lightninglite\manager_st.cpp">
+      <Filter>Source Files\lite_impl</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\lightninglite\payment_dummy.cpp">
+      <Filter>Source Files\lite_impl</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\lightninglite\watch_demo.cpp">
+      <Filter>Source Files\lite_impl</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\lightninglite\lite_test.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\lightninglite\manager_st.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\lightninglite\payment_st.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\lightninglite\watch_demo.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\lightninglite\messate_test.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

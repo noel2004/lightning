@@ -1,8 +1,8 @@
-
+#include "messate_test.h"
 #include <memory>
 #include <array>
 
-using namespace lnl_dummy;
+using namespace lnl_test;
 
 namespace {
     template<class T>
