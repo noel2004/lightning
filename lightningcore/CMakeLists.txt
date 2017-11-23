@@ -31,3 +31,4 @@ add_library( lightningcore
              STATIC
              ${LNCORE_SOURCE_FILES}
              )
+
