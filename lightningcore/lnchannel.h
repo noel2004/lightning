@@ -10,6 +10,7 @@ extern "C" {
 #include "state.h"
 #include <stdbool.h>
 #include <ccan/short_types/short_types.h>
+#include "failure.h"
 
 struct log;
 struct LNchannel;
@@ -65,7 +66,7 @@ bool lnchn_update_htlc(struct LNchannel *lnchn, const struct sha256 *rhash);
 
 bool lnchn_do_commit(struct LNchannel *chn);
 
-bool lnchn_resolve_htlc(struct LNchannel *lnchn, const struct sha256 *rhash, 
+bool lnchn_resolve_htlc(struct LNchannel *lnchn, const struct sha256 *rhash,
     const struct preimage *r, enum fail_error *error_code);
 
 
@@ -89,17 +90,17 @@ void lnchn_negotiate_from_remote(struct LNchannel *lnchn);
   * for the restored channel, always start with a re-sent commit
   * a restored channel may stay in COMMITE state (while another side
   * is COMMITING), in this case, commit message from another side
-  * is rejected and re-negotation is required. 
+  * is rejected and re-negotation is required.
 */
 
-/* 
-    when channel is under COMMITING state, help to restore 
+/*
+    when channel is under COMMITING state, help to restore
     all required negotation data and rebuild the committing process
 
     there is three possible state for restored-channel:
 
     invoked side ----- received side ---------- action
-    COMMITE            COMMITE                  previous negotation is lost, 
+    COMMITE            COMMITE                  previous negotation is lost,
                                                 can start a new one
     COMMITING          COMMITE                  COMMITING side reject new negotation, and
                                                 send message to restore the processing one
@@ -109,14 +110,14 @@ void lnchn_negotiate_from_remote(struct LNchannel *lnchn);
     COMMITING          COMMITING                both side simply re-send their commit
 */
 
-bool lnchn_notify_open_remote(struct LNchannel *lnchn, 
+bool lnchn_notify_open_remote(struct LNchannel *lnchn,
     const struct pubkey *chnid,                /*if replay from remote, this is NULL*/
     const struct LNchannel_config *nego_config,
     const struct sha256 *revocation_hash,      /*first hash*/
     const struct pubkey *remote_key[2] /*commit key and final key*/
 );
 
-bool lnchn_notify_anchor(struct LNchannel *lnchn, 
+bool lnchn_notify_anchor(struct LNchannel *lnchn,
     const struct sha256_double *txid,
     unsigned int index,
     unsigned long long amount,
@@ -128,7 +129,7 @@ bool lnchn_notify_first_commit(struct LNchannel *lnchn,
     const struct ecdsa_signature_ *sig
 );
 
-bool lnchn_notify_commit(struct LNchannel *lnchn, 
+bool lnchn_notify_commit(struct LNchannel *lnchn,
     u64 commit_num,
     const struct ecdsa_signature_ *sig,
     const struct sha256 *next_revocation,
