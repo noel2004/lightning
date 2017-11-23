@@ -104,7 +104,7 @@ void internal_lnchn_fail_on_notify(struct LNchannel *lnchn, const char* msg, ...
     va_list ap;
 
     tal_free(lnchn->notify_fail_reason);
-    
+
     va_start(ap, msg);
     lnchn->notify_fail_reason = tal_vfmt(lnchn, msg, ap);
     va_end(ap);
@@ -413,7 +413,7 @@ static bool lnchn_start_shutdown(struct LNchannel *lnchn)
 	 * A node SHOULD send a `close_shutdown` (if it has
 	 * not already) after receiving `close_shutdown`.
 	 */
-	
+
 	db_set_our_closing_script(lnchn);
 
 	queue_pkt_close_shutdown(lnchn);
@@ -549,7 +549,7 @@ struct htlc *internal_new_htlc(struct LNchannel *lnchn,
     h->history[0] = lnchn->local.commit ? lnchn->local.commit->commit_num : 0;
     h->history[1] = h->history[0] + 1;
 
-    h->in_commit_output[0] = h->in_commit_output[1] 
+    h->in_commit_output[0] = h->in_commit_output[1]
         = h->in_commit_output[2] = -1;
 
     //htlc_map_add(&lnchn->htlcs, h);
@@ -558,7 +558,7 @@ struct htlc *internal_new_htlc(struct LNchannel *lnchn,
 	return h;
 }
 
-/* 
+/*
     rebuild all data related with other channel (currently only src expiry in htlcs)
     and make some verification
 */
@@ -566,7 +566,7 @@ void reopen_LNChannel(struct LNchannel *lnchn)
 {
     struct htlc_map_iter it;
     struct htlc *h, *srchtlc;
-    enum feechange_state i;
+    /* enum feechange_state i; */
 
     //verify signature from remote
     if (lnchn->remote.commit && lnchn->remote.commit->sig &&
@@ -911,7 +911,7 @@ struct      msg_htlc_entry* lnchn_htlc_entry_create(const struct msg_htlc_entry*
             }
             else {
                 ret[i].action.del.failflag = from[i].action.del.failflag;
-                ret[i].action.del.fail = tal_dup_arr(tal_ctx, u8, ret[i].action.del.fail, 
+                ret[i].action.del.fail = tal_dup_arr(tal_ctx, u8, ret[i].action.del.fail,
                     tal_len(ret[i].action.del.fail), 0);
             }
         }

@@ -3,6 +3,7 @@
 #include "config.h"
 #include <stdbool.h>
 #include <ccan/short_types/short_types.h>
+#include "htlc.h"
 
 struct lightningd_state;
 struct LNchannel;
