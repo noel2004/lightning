@@ -1,5 +1,7 @@
 #include "lite_demo.h"
 
+extern "C"{
+
 void    lite_init(struct lightningd_state* state)
 {
     auto p = new lnl_demo::LNlite;
@@ -31,4 +33,6 @@ void    btcnetwork_release(struct lightningd_state* state)
     delete p;
     state->topology = nullptr;
     state->outsourcing_svr = nullptr;
+}
+
 }

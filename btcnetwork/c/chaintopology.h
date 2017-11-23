@@ -2,6 +2,7 @@
 #define LIGHTNING_BTCNETWORK_CHAINTOPOLOGY_C_INTERFACE_H
 #include "config.h"
 #include <ccan/short_types/short_types.h>
+#include <stddef.h>
 
 struct sha256_double;
 struct chain_topology;
