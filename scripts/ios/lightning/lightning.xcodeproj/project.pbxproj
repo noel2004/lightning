@@ -20,9 +20,6 @@
 		6C255A2F1FD545AD00E301B0 /* bip32.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A221FD545AD00E301B0 /* bip32.c */; };
 		6C255A301FD545AD00E301B0 /* mnemonic.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A231FD545AD00E301B0 /* mnemonic.c */; };
 		6C255A311FD545AD00E301B0 /* hex.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A241FD545AD00E301B0 /* hex.c */; };
-		6C255A331FD545C600E301B0 /* sha256.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A321FD545C600E301B0 /* sha256.c */; };
-		6C255A351FD545DC00E301B0 /* sha512.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A341FD545DC00E301B0 /* sha512.c */; };
-		6C255A371FD545EF00E301B0 /* ripemd160.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A361FD545EF00E301B0 /* ripemd160.c */; };
 		6C255A3B1FD5461000E301B0 /* hex.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A391FD5461000E301B0 /* hex.c */; };
 		6C255A3E1FD5462100E301B0 /* tap.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A3D1FD5462100E301B0 /* tap.c */; };
 		6C255A411FD5465500E301B0 /* secp256k1.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A401FD5465500E301B0 /* secp256k1.c */; };
@@ -58,6 +55,9 @@
 		6C255AA61FD548E000E301B0 /* manager_st.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A9E1FD548E000E301B0 /* manager_st.cpp */; };
 		6C255AA71FD548E000E301B0 /* payment_dummy.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A9F1FD548E000E301B0 /* payment_dummy.cpp */; };
 		6C255AA81FD548E000E301B0 /* chain_dummy.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 6C255AA11FD548E000E301B0 /* chain_dummy.cpp */; };
+		6C255AAF1FD54EE700E301B0 /* ripemd160.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255AAE1FD54EE700E301B0 /* ripemd160.c */; };
+		6C255AB21FD54F1A00E301B0 /* sha256.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255AB01FD54F1A00E301B0 /* sha256.c */; };
+		6C255AB51FD54F2D00E301B0 /* sha512.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255AB41FD54F2D00E301B0 /* sha512.c */; };
 		6C7C00D81FD5326900EBA441 /* lightning.m in Sources */ = {isa = PBXBuildFile; fileRef = 6C7C00D71FD5326900EBA441 /* lightning.m */; };
 		6C7C00D91FD5326900EBA441 /* lightning.h in CopyFiles */ = {isa = PBXBuildFile; fileRef = 6C7C00D61FD5326900EBA441 /* lightning.h */; };
 		6CBE1ECF1FD5345600B1A6CF /* autodata.c in Sources */ = {isa = PBXBuildFile; fileRef = 6CBE1ECE1FD5345600B1A6CF /* autodata.c */; };
@@ -107,9 +107,6 @@
 		6C255A221FD545AD00E301B0 /* bip32.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = bip32.c; path = "../../../../../libwally-core/src/bip32.c"; sourceTree = "<group>"; };
 		6C255A231FD545AD00E301B0 /* mnemonic.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = mnemonic.c; path = "../../../../../libwally-core/src/mnemonic.c"; sourceTree = "<group>"; };
 		6C255A241FD545AD00E301B0 /* hex.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = hex.c; path = "../../../../../libwally-core/src/hex.c"; sourceTree = "<group>"; };
-		6C255A321FD545C600E301B0 /* sha256.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = sha256.c; sourceTree = "<group>"; };
-		6C255A341FD545DC00E301B0 /* sha512.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = sha512.c; sourceTree = "<group>"; };
-		6C255A361FD545EF00E301B0 /* ripemd160.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = ripemd160.c; sourceTree = "<group>"; };
 		6C255A391FD5461000E301B0 /* hex.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = hex.c; path = "../../../../../../libwally-core/src/ccan/ccan/str/hex/hex.c"; sourceTree = "<group>"; };
 		6C255A3A1FD5461000E301B0 /* hex.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = hex.h; path = "../../../../../../libwally-core/src/ccan/ccan/str/hex/hex.h"; sourceTree = "<group>"; };
 		6C255A3C1FD5462100E301B0 /* tap.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = tap.h; path = "../../../../../../libwally-core/src/ccan/ccan/tap/tap.h"; sourceTree = "<group>"; };
@@ -184,6 +181,12 @@
 		6C255AAB1FD54B6600E301B0 /* config.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = config.h; path = ../../../../../include/config.h; sourceTree = "<group>"; };
 		6C255AAC1FD54B6600E301B0 /* gen_version.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = gen_version.h; path = ../../../../../include/gen_version.h; sourceTree = "<group>"; };
 		6C255AAD1FD54B6600E301B0 /* lnchannel_api.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = lnchannel_api.h; path = ../../../../../include/lnchannel_api.h; sourceTree = "<group>"; };
+		6C255AAE1FD54EE700E301B0 /* ripemd160.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = ripemd160.c; path = "../../../../../../libwally-core/src/ccan/ccan/crypto/ripemd160/ripemd160.c"; sourceTree = "<group>"; };
+		6C255AB01FD54F1A00E301B0 /* sha256.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = sha256.c; path = "../../../../../../libwally-core/src/ccan/ccan/crypto/sha256/sha256.c"; sourceTree = "<group>"; };
+		6C255AB11FD54F1A00E301B0 /* sha256.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = sha256.h; path = "../../../../../../libwally-core/src/ccan/ccan/crypto/sha256/sha256.h"; sourceTree = "<group>"; };
+		6C255AB31FD54F2D00E301B0 /* sha512.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = sha512.h; path = "../../../../../../libwally-core/src/ccan/ccan/crypto/sha512/sha512.h"; sourceTree = "<group>"; };
+		6C255AB41FD54F2D00E301B0 /* sha512.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = sha512.c; path = "../../../../../../libwally-core/src/ccan/ccan/crypto/sha512/sha512.c"; sourceTree = "<group>"; };
+		6C255AB61FD54F4700E301B0 /* ripemd160.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = ripemd160.h; path = "../../../../../../libwally-core/src/ccan/ccan/crypto/ripemd160/ripemd160.h"; sourceTree = "<group>"; };
 		6C7C00D31FD5326900EBA441 /* liblightning.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = liblightning.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		6C7C00D61FD5326900EBA441 /* lightning.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = lightning.h; sourceTree = "<group>"; };
 		6C7C00D71FD5326900EBA441 /* lightning.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = lightning.m; sourceTree = "<group>"; };
@@ -255,13 +258,16 @@
 		6C255A381FD545F600E301B0 /* ccan */ = {
 			isa = PBXGroup;
 			children = (
+				6C255AB41FD54F2D00E301B0 /* sha512.c */,
+				6C255AB31FD54F2D00E301B0 /* sha512.h */,
+				6C255AB01FD54F1A00E301B0 /* sha256.c */,
+				6C255AB11FD54F1A00E301B0 /* sha256.h */,
+				6C255AAE1FD54EE700E301B0 /* ripemd160.c */,
+				6C255AB61FD54F4700E301B0 /* ripemd160.h */,
 				6C255A3D1FD5462100E301B0 /* tap.c */,
 				6C255A3C1FD5462100E301B0 /* tap.h */,
 				6C255A391FD5461000E301B0 /* hex.c */,
 				6C255A3A1FD5461000E301B0 /* hex.h */,
-				6C255A361FD545EF00E301B0 /* ripemd160.c */,
-				6C255A341FD545DC00E301B0 /* sha512.c */,
-				6C255A321FD545C600E301B0 /* sha256.c */,
 			);
 			path = ccan;
 			sourceTree = "<group>";
@@ -537,15 +543,15 @@
 				6C255A581FD5480700E301B0 /* randombytes_sysrandom.c in Sources */,
 				6C255A281FD545AD00E301B0 /* internal.c in Sources */,
 				6CBE1EF31FD536E500B1A6CF /* base58.c in Sources */,
-				6C255A351FD545DC00E301B0 /* sha512.c in Sources */,
 				6CBE1ED11FD5360300B1A6CF /* shachain.c in Sources */,
 				6CBE1EF41FD536E500B1A6CF /* locktime.c in Sources */,
 				6C255A8A1FD548AC00E301B0 /* lnchannel.c in Sources */,
-				6C255A331FD545C600E301B0 /* sha256.c in Sources */,
 				6C255A3E1FD5462100E301B0 /* tap.c in Sources */,
+				6C255AAF1FD54EE700E301B0 /* ripemd160.c in Sources */,
 				6C255A5A1FD5480700E301B0 /* utils.c in Sources */,
 				6CBE1EF01FD536E500B1A6CF /* tx.c in Sources */,
 				6C255A871FD548AC00E301B0 /* names.c in Sources */,
+				6C255AB51FD54F2D00E301B0 /* sha512.c in Sources */,
 				6CBE1EF21FD536E500B1A6CF /* varint.c in Sources */,
 				6C255A2F1FD545AD00E301B0 /* bip32.c in Sources */,
 				6C255A2A1FD545AD00E301B0 /* pbkdf2.c in Sources */,
@@ -556,7 +562,6 @@
 				6CBE1EF51FD536E500B1A6CF /* pullpush.c in Sources */,
 				6C255A261FD545AD00E301B0 /* scrypt.c in Sources */,
 				6CBE1ECF1FD5345600B1A6CF /* autodata.c in Sources */,
-				6C255A371FD545EF00E301B0 /* ripemd160.c in Sources */,
 				6C255A2C1FD545AD00E301B0 /* bip39.c in Sources */,
 				6CBE1EEE1FD536E500B1A6CF /* shadouble.c in Sources */,
 				6C255A291FD545AD00E301B0 /* hmac.c in Sources */,
@@ -583,6 +588,7 @@
 				6C255A2B1FD545AD00E301B0 /* bip38.c in Sources */,
 				6C255A8B1FD548AC00E301B0 /* lnchannel_commit.c in Sources */,
 				6C255A881FD548AC00E301B0 /* db.c in Sources */,
+				6C255AB21FD54F1A00E301B0 /* sha256.c in Sources */,
 				6C255A971FD548AC00E301B0 /* lnchannel_api.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
