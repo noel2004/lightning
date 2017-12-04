@@ -26,6 +26,38 @@
 		6C255A3B1FD5461000E301B0 /* hex.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A391FD5461000E301B0 /* hex.c */; };
 		6C255A3E1FD5462100E301B0 /* tap.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A3D1FD5462100E301B0 /* tap.c */; };
 		6C255A411FD5465500E301B0 /* secp256k1.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A401FD5465500E301B0 /* secp256k1.c */; };
+		6C255A471FD547C600E301B0 /* sqlite3.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A451FD547C600E301B0 /* sqlite3.c */; };
+		6C255A4F1FD547F400E301B0 /* utils.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A4A1FD547F400E301B0 /* utils.c */; };
+		6C255A501FD547F400E301B0 /* opt_bits.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A4B1FD547F400E301B0 /* opt_bits.c */; };
+		6C255A511FD547F400E301B0 /* type_to_string.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A4D1FD547F400E301B0 /* type_to_string.c */; };
+		6C255A581FD5480700E301B0 /* randombytes_sysrandom.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A521FD5480600E301B0 /* randombytes_sysrandom.c */; };
+		6C255A591FD5480700E301B0 /* randombytes.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A531FD5480600E301B0 /* randombytes.c */; };
+		6C255A5A1FD5480700E301B0 /* utils.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A571FD5480700E301B0 /* utils.c */; };
+		6C255A851FD548AC00E301B0 /* secrets.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A631FD548A900E301B0 /* secrets.c */; };
+		6C255A861FD548AC00E301B0 /* lnchannel_htlc.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A641FD548A900E301B0 /* lnchannel_htlc.c */; };
+		6C255A871FD548AC00E301B0 /* names.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A651FD548A900E301B0 /* names.c */; };
+		6C255A881FD548AC00E301B0 /* db.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A661FD548A900E301B0 /* db.c */; };
+		6C255A891FD548AC00E301B0 /* close_tx.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A691FD548A900E301B0 /* close_tx.c */; };
+		6C255A8A1FD548AC00E301B0 /* lnchannel.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A6C1FD548AA00E301B0 /* lnchannel.c */; };
+		6C255A8B1FD548AC00E301B0 /* lnchannel_commit.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A6D1FD548AA00E301B0 /* lnchannel_commit.c */; };
+		6C255A8C1FD548AC00E301B0 /* lnchannel_redeem.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A6E1FD548AA00E301B0 /* lnchannel_redeem.c */; };
+		6C255A8D1FD548AC00E301B0 /* commit_tx.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A711FD548AA00E301B0 /* commit_tx.c */; };
+		6C255A8E1FD548AC00E301B0 /* version.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A731FD548AA00E301B0 /* version.c */; };
+		6C255A8F1FD548AC00E301B0 /* failure.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A741FD548AA00E301B0 /* failure.c */; };
+		6C255A901FD548AC00E301B0 /* output_to_htlc.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A761FD548AA00E301B0 /* output_to_htlc.c */; };
+		6C255A911FD548AC00E301B0 /* permute_tx.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A771FD548AA00E301B0 /* permute_tx.c */; };
+		6C255A921FD548AC00E301B0 /* htlc.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A791FD548AB00E301B0 /* htlc.c */; };
+		6C255A931FD548AC00E301B0 /* log.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A7A1FD548AB00E301B0 /* log.c */; };
+		6C255A941FD548AC00E301B0 /* pseudorand.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A7C1FD548AB00E301B0 /* pseudorand.c */; };
+		6C255A951FD548AC00E301B0 /* channel.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A7E1FD548AB00E301B0 /* channel.c */; };
+		6C255A961FD548AC00E301B0 /* lnchannel_open.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A831FD548AC00E301B0 /* lnchannel_open.c */; };
+		6C255A971FD548AC00E301B0 /* lnchannel_api.c in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A841FD548AC00E301B0 /* lnchannel_api.c */; };
+		6C255AA31FD548E000E301B0 /* lite_demo.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A981FD548DF00E301B0 /* lite_demo.cpp */; };
+		6C255AA41FD548E000E301B0 /* watch_demo.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A9B1FD548DF00E301B0 /* watch_demo.cpp */; };
+		6C255AA51FD548E000E301B0 /* message_demo.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A9C1FD548E000E301B0 /* message_demo.cpp */; };
+		6C255AA61FD548E000E301B0 /* manager_st.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A9E1FD548E000E301B0 /* manager_st.cpp */; };
+		6C255AA71FD548E000E301B0 /* payment_dummy.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 6C255A9F1FD548E000E301B0 /* payment_dummy.cpp */; };
+		6C255AA81FD548E000E301B0 /* chain_dummy.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 6C255AA11FD548E000E301B0 /* chain_dummy.cpp */; };
 		6C7C00D81FD5326900EBA441 /* lightning.m in Sources */ = {isa = PBXBuildFile; fileRef = 6C7C00D71FD5326900EBA441 /* lightning.m */; };
 		6C7C00D91FD5326900EBA441 /* lightning.h in CopyFiles */ = {isa = PBXBuildFile; fileRef = 6C7C00D61FD5326900EBA441 /* lightning.h */; };
 		6CBE1ECF1FD5345600B1A6CF /* autodata.c in Sources */ = {isa = PBXBuildFile; fileRef = 6CBE1ECE1FD5345600B1A6CF /* autodata.c */; };
@@ -84,6 +116,74 @@
 		6C255A3D1FD5462100E301B0 /* tap.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = tap.c; path = "../../../../../../libwally-core/src/ccan/ccan/tap/tap.c"; sourceTree = "<group>"; };
 		6C255A401FD5465500E301B0 /* secp256k1.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = secp256k1.c; path = "../../../../../../libwally-core/src/secp256k1/src/secp256k1.c"; sourceTree = "<group>"; };
 		6C255A431FD5471500E301B0 /* ccan_config.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = ccan_config.h; path = ../../../../../include/ios/ccan_config.h; sourceTree = "<group>"; };
+		6C255A451FD547C600E301B0 /* sqlite3.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = sqlite3.c; path = ../../../../../sqlite3/sqlite3.c; sourceTree = "<group>"; };
+		6C255A461FD547C600E301B0 /* sqlite3.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = sqlite3.h; path = ../../../../../sqlite3/sqlite3.h; sourceTree = "<group>"; };
+		6C255A491FD547F400E301B0 /* utils.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = utils.h; path = ../../../../../utils/utils.h; sourceTree = "<group>"; };
+		6C255A4A1FD547F400E301B0 /* utils.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = utils.c; path = ../../../../../utils/utils.c; sourceTree = "<group>"; };
+		6C255A4B1FD547F400E301B0 /* opt_bits.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = opt_bits.c; path = ../../../../../utils/opt_bits.c; sourceTree = "<group>"; };
+		6C255A4C1FD547F400E301B0 /* opt_bits.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = opt_bits.h; path = ../../../../../utils/opt_bits.h; sourceTree = "<group>"; };
+		6C255A4D1FD547F400E301B0 /* type_to_string.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = type_to_string.c; path = ../../../../../utils/type_to_string.c; sourceTree = "<group>"; };
+		6C255A4E1FD547F400E301B0 /* type_to_string.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = type_to_string.h; path = ../../../../../utils/type_to_string.h; sourceTree = "<group>"; };
+		6C255A521FD5480600E301B0 /* randombytes_sysrandom.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = randombytes_sysrandom.c; path = ../../../../../utils/sodium/randombytes_sysrandom.c; sourceTree = "<group>"; };
+		6C255A531FD5480600E301B0 /* randombytes.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = randombytes.c; path = ../../../../../utils/sodium/randombytes.c; sourceTree = "<group>"; };
+		6C255A541FD5480600E301B0 /* randombytes_sysrandom.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = randombytes_sysrandom.h; path = ../../../../../utils/sodium/randombytes_sysrandom.h; sourceTree = "<group>"; };
+		6C255A551FD5480700E301B0 /* randombytes.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = randombytes.h; path = ../../../../../utils/sodium/randombytes.h; sourceTree = "<group>"; };
+		6C255A561FD5480700E301B0 /* utils.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = utils.h; path = ../../../../../utils/sodium/utils.h; sourceTree = "<group>"; };
+		6C255A571FD5480700E301B0 /* utils.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = utils.c; path = ../../../../../utils/sodium/utils.c; sourceTree = "<group>"; };
+		6C255A5E1FD548A900E301B0 /* pseudorand.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = pseudorand.h; path = ../../../../../lightningcore/pseudorand.h; sourceTree = "<group>"; };
+		6C255A5F1FD548A900E301B0 /* db.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = db.h; path = ../../../../../lightningcore/db.h; sourceTree = "<group>"; };
+		6C255A601FD548A900E301B0 /* version.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = version.h; path = ../../../../../lightningcore/version.h; sourceTree = "<group>"; };
+		6C255A611FD548A900E301B0 /* names.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = names.h; path = ../../../../../lightningcore/names.h; sourceTree = "<group>"; };
+		6C255A621FD548A900E301B0 /* commit_tx.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = commit_tx.h; path = ../../../../../lightningcore/commit_tx.h; sourceTree = "<group>"; };
+		6C255A631FD548A900E301B0 /* secrets.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = secrets.c; path = ../../../../../lightningcore/secrets.c; sourceTree = "<group>"; };
+		6C255A641FD548A900E301B0 /* lnchannel_htlc.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = lnchannel_htlc.c; path = ../../../../../lightningcore/lnchannel_htlc.c; sourceTree = "<group>"; };
+		6C255A651FD548A900E301B0 /* names.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = names.c; path = ../../../../../lightningcore/names.c; sourceTree = "<group>"; };
+		6C255A661FD548A900E301B0 /* db.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = db.c; path = ../../../../../lightningcore/db.c; sourceTree = "<group>"; };
+		6C255A671FD548A900E301B0 /* log.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = log.h; path = ../../../../../lightningcore/log.h; sourceTree = "<group>"; };
+		6C255A681FD548A900E301B0 /* permute_tx.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = permute_tx.h; path = ../../../../../lightningcore/permute_tx.h; sourceTree = "<group>"; };
+		6C255A691FD548A900E301B0 /* close_tx.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = close_tx.c; path = ../../../../../lightningcore/close_tx.c; sourceTree = "<group>"; };
+		6C255A6A1FD548A900E301B0 /* secrets.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = secrets.h; path = ../../../../../lightningcore/secrets.h; sourceTree = "<group>"; };
+		6C255A6B1FD548AA00E301B0 /* lnchannel.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = lnchannel.h; path = ../../../../../lightningcore/lnchannel.h; sourceTree = "<group>"; };
+		6C255A6C1FD548AA00E301B0 /* lnchannel.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = lnchannel.c; path = ../../../../../lightningcore/lnchannel.c; sourceTree = "<group>"; };
+		6C255A6D1FD548AA00E301B0 /* lnchannel_commit.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = lnchannel_commit.c; path = ../../../../../lightningcore/lnchannel_commit.c; sourceTree = "<group>"; };
+		6C255A6E1FD548AA00E301B0 /* lnchannel_redeem.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = lnchannel_redeem.c; path = ../../../../../lightningcore/lnchannel_redeem.c; sourceTree = "<group>"; };
+		6C255A6F1FD548AA00E301B0 /* failure.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = failure.h; path = ../../../../../lightningcore/failure.h; sourceTree = "<group>"; };
+		6C255A701FD548AA00E301B0 /* feechange.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = feechange.h; path = ../../../../../lightningcore/feechange.h; sourceTree = "<group>"; };
+		6C255A711FD548AA00E301B0 /* commit_tx.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = commit_tx.c; path = ../../../../../lightningcore/commit_tx.c; sourceTree = "<group>"; };
+		6C255A721FD548AA00E301B0 /* htlc.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = htlc.h; path = ../../../../../lightningcore/htlc.h; sourceTree = "<group>"; };
+		6C255A731FD548AA00E301B0 /* version.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = version.c; path = ../../../../../lightningcore/version.c; sourceTree = "<group>"; };
+		6C255A741FD548AA00E301B0 /* failure.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = failure.c; path = ../../../../../lightningcore/failure.c; sourceTree = "<group>"; };
+		6C255A761FD548AA00E301B0 /* output_to_htlc.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = output_to_htlc.c; path = ../../../../../lightningcore/output_to_htlc.c; sourceTree = "<group>"; };
+		6C255A771FD548AA00E301B0 /* permute_tx.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = permute_tx.c; path = ../../../../../lightningcore/permute_tx.c; sourceTree = "<group>"; };
+		6C255A781FD548AB00E301B0 /* close_tx.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = close_tx.h; path = ../../../../../lightningcore/close_tx.h; sourceTree = "<group>"; };
+		6C255A791FD548AB00E301B0 /* htlc.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = htlc.c; path = ../../../../../lightningcore/htlc.c; sourceTree = "<group>"; };
+		6C255A7A1FD548AB00E301B0 /* log.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = log.c; path = ../../../../../lightningcore/log.c; sourceTree = "<group>"; };
+		6C255A7B1FD548AB00E301B0 /* output_to_htlc.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = output_to_htlc.h; path = ../../../../../lightningcore/output_to_htlc.h; sourceTree = "<group>"; };
+		6C255A7C1FD548AB00E301B0 /* pseudorand.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = pseudorand.c; path = ../../../../../lightningcore/pseudorand.c; sourceTree = "<group>"; };
+		6C255A7D1FD548AB00E301B0 /* state_types.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = state_types.h; path = ../../../../../lightningcore/state_types.h; sourceTree = "<group>"; };
+		6C255A7E1FD548AB00E301B0 /* channel.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = channel.c; path = ../../../../../lightningcore/channel.c; sourceTree = "<group>"; };
+		6C255A7F1FD548AB00E301B0 /* remove_dust.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = remove_dust.h; path = ../../../../../lightningcore/remove_dust.h; sourceTree = "<group>"; };
+		6C255A801FD548AB00E301B0 /* state.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = state.h; path = ../../../../../lightningcore/state.h; sourceTree = "<group>"; };
+		6C255A811FD548AC00E301B0 /* lnchannel_internal.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = lnchannel_internal.h; path = ../../../../../lightningcore/lnchannel_internal.h; sourceTree = "<group>"; };
+		6C255A821FD548AC00E301B0 /* channel.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = channel.h; path = ../../../../../lightningcore/channel.h; sourceTree = "<group>"; };
+		6C255A831FD548AC00E301B0 /* lnchannel_open.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = lnchannel_open.c; path = ../../../../../lightningcore/lnchannel_open.c; sourceTree = "<group>"; };
+		6C255A841FD548AC00E301B0 /* lnchannel_api.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = lnchannel_api.c; path = ../../../../../lightningcore/lnchannel_api.c; sourceTree = "<group>"; };
+		6C255A981FD548DF00E301B0 /* lite_demo.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = lite_demo.cpp; path = ../../../../../lightninglite/lite_demo.cpp; sourceTree = "<group>"; };
+		6C255A991FD548DF00E301B0 /* lite_task.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = lite_task.h; path = ../../../../../lightninglite/lite_task.h; sourceTree = "<group>"; };
+		6C255A9A1FD548DF00E301B0 /* watch_demo.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = watch_demo.h; path = ../../../../../lightninglite/watch_demo.h; sourceTree = "<group>"; };
+		6C255A9B1FD548DF00E301B0 /* watch_demo.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = watch_demo.cpp; path = ../../../../../lightninglite/watch_demo.cpp; sourceTree = "<group>"; };
+		6C255A9C1FD548E000E301B0 /* message_demo.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = message_demo.cpp; path = ../../../../../lightninglite/message_demo.cpp; sourceTree = "<group>"; };
+		6C255A9D1FD548E000E301B0 /* manager_st.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = manager_st.h; path = ../../../../../lightninglite/manager_st.h; sourceTree = "<group>"; };
+		6C255A9E1FD548E000E301B0 /* manager_st.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = manager_st.cpp; path = ../../../../../lightninglite/manager_st.cpp; sourceTree = "<group>"; };
+		6C255A9F1FD548E000E301B0 /* payment_dummy.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = payment_dummy.cpp; path = ../../../../../lightninglite/payment_dummy.cpp; sourceTree = "<group>"; };
+		6C255AA01FD548E000E301B0 /* lite_demo.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = lite_demo.h; path = ../../../../../lightninglite/lite_demo.h; sourceTree = "<group>"; };
+		6C255AA11FD548E000E301B0 /* chain_dummy.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = chain_dummy.cpp; path = ../../../../../lightninglite/chain_dummy.cpp; sourceTree = "<group>"; };
+		6C255AA21FD548E000E301B0 /* message_demo.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = message_demo.h; path = ../../../../../lightninglite/message_demo.h; sourceTree = "<group>"; };
+		6C255AA91FD54B6600E301B0 /* lnchannel_struct.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = lnchannel_struct.h; path = ../../../../../include/lnchannel_struct.h; sourceTree = "<group>"; };
+		6C255AAA1FD54B6600E301B0 /* libsecp256k1-config.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = "libsecp256k1-config.h"; path = "../../../../../include/libsecp256k1-config.h"; sourceTree = "<group>"; };
+		6C255AAB1FD54B6600E301B0 /* config.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = config.h; path = ../../../../../include/config.h; sourceTree = "<group>"; };
+		6C255AAC1FD54B6600E301B0 /* gen_version.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = gen_version.h; path = ../../../../../include/gen_version.h; sourceTree = "<group>"; };
+		6C255AAD1FD54B6600E301B0 /* lnchannel_api.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = lnchannel_api.h; path = ../../../../../include/lnchannel_api.h; sourceTree = "<group>"; };
 		6C7C00D31FD5326900EBA441 /* liblightning.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = liblightning.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		6C7C00D61FD5326900EBA441 /* lightning.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = lightning.h; sourceTree = "<group>"; };
 		6C7C00D71FD5326900EBA441 /* lightning.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = lightning.m; sourceTree = "<group>"; };
@@ -177,9 +277,105 @@
 		6C255A421FD5470800E301B0 /* include */ = {
 			isa = PBXGroup;
 			children = (
+				6C255AAB1FD54B6600E301B0 /* config.h */,
+				6C255AAC1FD54B6600E301B0 /* gen_version.h */,
+				6C255AAA1FD54B6600E301B0 /* libsecp256k1-config.h */,
+				6C255AAD1FD54B6600E301B0 /* lnchannel_api.h */,
+				6C255AA91FD54B6600E301B0 /* lnchannel_struct.h */,
 				6C255A431FD5471500E301B0 /* ccan_config.h */,
 			);
 			path = include;
+			sourceTree = "<group>";
+		};
+		6C255A441FD547B100E301B0 /* sqlite3 */ = {
+			isa = PBXGroup;
+			children = (
+				6C255A451FD547C600E301B0 /* sqlite3.c */,
+				6C255A461FD547C600E301B0 /* sqlite3.h */,
+			);
+			path = sqlite3;
+			sourceTree = "<group>";
+		};
+		6C255A481FD547D000E301B0 /* utils */ = {
+			isa = PBXGroup;
+			children = (
+				6C255A521FD5480600E301B0 /* randombytes_sysrandom.c */,
+				6C255A541FD5480600E301B0 /* randombytes_sysrandom.h */,
+				6C255A531FD5480600E301B0 /* randombytes.c */,
+				6C255A551FD5480700E301B0 /* randombytes.h */,
+				6C255A571FD5480700E301B0 /* utils.c */,
+				6C255A561FD5480700E301B0 /* utils.h */,
+				6C255A4B1FD547F400E301B0 /* opt_bits.c */,
+				6C255A4C1FD547F400E301B0 /* opt_bits.h */,
+				6C255A4D1FD547F400E301B0 /* type_to_string.c */,
+				6C255A4E1FD547F400E301B0 /* type_to_string.h */,
+				6C255A4A1FD547F400E301B0 /* utils.c */,
+				6C255A491FD547F400E301B0 /* utils.h */,
+			);
+			path = utils;
+			sourceTree = "<group>";
+		};
+		6C255A5B1FD5484A00E301B0 /* lightningcore */ = {
+			isa = PBXGroup;
+			children = (
+				6C255A7E1FD548AB00E301B0 /* channel.c */,
+				6C255A821FD548AC00E301B0 /* channel.h */,
+				6C255A691FD548A900E301B0 /* close_tx.c */,
+				6C255A781FD548AB00E301B0 /* close_tx.h */,
+				6C255A711FD548AA00E301B0 /* commit_tx.c */,
+				6C255A621FD548A900E301B0 /* commit_tx.h */,
+				6C255A661FD548A900E301B0 /* db.c */,
+				6C255A5F1FD548A900E301B0 /* db.h */,
+				6C255A741FD548AA00E301B0 /* failure.c */,
+				6C255A6F1FD548AA00E301B0 /* failure.h */,
+				6C255A701FD548AA00E301B0 /* feechange.h */,
+				6C255A791FD548AB00E301B0 /* htlc.c */,
+				6C255A721FD548AA00E301B0 /* htlc.h */,
+				6C255A841FD548AC00E301B0 /* lnchannel_api.c */,
+				6C255A6D1FD548AA00E301B0 /* lnchannel_commit.c */,
+				6C255A641FD548A900E301B0 /* lnchannel_htlc.c */,
+				6C255A811FD548AC00E301B0 /* lnchannel_internal.h */,
+				6C255A831FD548AC00E301B0 /* lnchannel_open.c */,
+				6C255A6E1FD548AA00E301B0 /* lnchannel_redeem.c */,
+				6C255A6C1FD548AA00E301B0 /* lnchannel.c */,
+				6C255A6B1FD548AA00E301B0 /* lnchannel.h */,
+				6C255A7A1FD548AB00E301B0 /* log.c */,
+				6C255A671FD548A900E301B0 /* log.h */,
+				6C255A651FD548A900E301B0 /* names.c */,
+				6C255A611FD548A900E301B0 /* names.h */,
+				6C255A761FD548AA00E301B0 /* output_to_htlc.c */,
+				6C255A7B1FD548AB00E301B0 /* output_to_htlc.h */,
+				6C255A771FD548AA00E301B0 /* permute_tx.c */,
+				6C255A681FD548A900E301B0 /* permute_tx.h */,
+				6C255A7C1FD548AB00E301B0 /* pseudorand.c */,
+				6C255A5E1FD548A900E301B0 /* pseudorand.h */,
+				6C255A7F1FD548AB00E301B0 /* remove_dust.h */,
+				6C255A631FD548A900E301B0 /* secrets.c */,
+				6C255A6A1FD548A900E301B0 /* secrets.h */,
+				6C255A7D1FD548AB00E301B0 /* state_types.h */,
+				6C255A801FD548AB00E301B0 /* state.h */,
+				6C255A731FD548AA00E301B0 /* version.c */,
+				6C255A601FD548A900E301B0 /* version.h */,
+			);
+			path = lightningcore;
+			sourceTree = "<group>";
+		};
+		6C255A5D1FD5485C00E301B0 /* lightninglite */ = {
+			isa = PBXGroup;
+			children = (
+				6C255AA11FD548E000E301B0 /* chain_dummy.cpp */,
+				6C255A981FD548DF00E301B0 /* lite_demo.cpp */,
+				6C255AA01FD548E000E301B0 /* lite_demo.h */,
+				6C255A991FD548DF00E301B0 /* lite_task.h */,
+				6C255A9E1FD548E000E301B0 /* manager_st.cpp */,
+				6C255A9D1FD548E000E301B0 /* manager_st.h */,
+				6C255A9C1FD548E000E301B0 /* message_demo.cpp */,
+				6C255AA21FD548E000E301B0 /* message_demo.h */,
+				6C255A9F1FD548E000E301B0 /* payment_dummy.cpp */,
+				6C255A9B1FD548DF00E301B0 /* watch_demo.cpp */,
+				6C255A9A1FD548DF00E301B0 /* watch_demo.h */,
+			);
+			path = lightninglite;
 			sourceTree = "<group>";
 		};
 		6C7C00CA1FD5326900EBA441 = {
@@ -201,11 +397,15 @@
 		6C7C00D51FD5326900EBA441 /* lightning */ = {
 			isa = PBXGroup;
 			children = (
-				6C255A421FD5470800E301B0 /* include */,
 				6CBE1ED41FD5368600B1A6CF /* bitcoin */,
 				6CBE1EF61FD537ED00B1A6CF /* btcnetwork */,
 				6CBE1ECD1FD5343700B1A6CF /* ccan */,
 				6C255A141FD5454F00E301B0 /* libwally-core */,
+				6C255A5B1FD5484A00E301B0 /* lightningcore */,
+				6C255A5D1FD5485C00E301B0 /* lightninglite */,
+				6C255A441FD547B100E301B0 /* sqlite3 */,
+				6C255A481FD547D000E301B0 /* utils */,
+				6C255A421FD5470800E301B0 /* include */,
 				6C7C00D61FD5326900EBA441 /* lightning.h */,
 				6C7C00D71FD5326900EBA441 /* lightning.m */,
 			);
@@ -318,24 +518,41 @@
 			buildActionMask = 2147483647;
 			files = (
 				6C255A3B1FD5461000E301B0 /* hex.c in Sources */,
+				6C255AA41FD548E000E301B0 /* watch_demo.cpp in Sources */,
+				6C255A8D1FD548AC00E301B0 /* commit_tx.c in Sources */,
 				6C255A2D1FD545AD00E301B0 /* sign.c in Sources */,
+				6C255A8F1FD548AC00E301B0 /* failure.c in Sources */,
+				6C255A941FD548AC00E301B0 /* pseudorand.c in Sources */,
 				6CBE1EEF1FD536E500B1A6CF /* simple.c in Sources */,
 				6CBE1EED1FD536E500B1A6CF /* script.c in Sources */,
+				6C255A931FD548AC00E301B0 /* log.c in Sources */,
 				6C255A2E1FD545AD00E301B0 /* base58.c in Sources */,
+				6C255A961FD548AC00E301B0 /* lnchannel_open.c in Sources */,
+				6C255AA81FD548E000E301B0 /* chain_dummy.cpp in Sources */,
+				6C255AA71FD548E000E301B0 /* payment_dummy.cpp in Sources */,
 				6CBE1EF11FD536E500B1A6CF /* signature.c in Sources */,
+				6C255A851FD548AC00E301B0 /* secrets.c in Sources */,
 				6C255A251FD545AD00E301B0 /* wordlist.c in Sources */,
+				6C255A891FD548AC00E301B0 /* close_tx.c in Sources */,
+				6C255A581FD5480700E301B0 /* randombytes_sysrandom.c in Sources */,
 				6C255A281FD545AD00E301B0 /* internal.c in Sources */,
 				6CBE1EF31FD536E500B1A6CF /* base58.c in Sources */,
 				6C255A351FD545DC00E301B0 /* sha512.c in Sources */,
 				6CBE1ED11FD5360300B1A6CF /* shachain.c in Sources */,
 				6CBE1EF41FD536E500B1A6CF /* locktime.c in Sources */,
+				6C255A8A1FD548AC00E301B0 /* lnchannel.c in Sources */,
 				6C255A331FD545C600E301B0 /* sha256.c in Sources */,
 				6C255A3E1FD5462100E301B0 /* tap.c in Sources */,
+				6C255A5A1FD5480700E301B0 /* utils.c in Sources */,
 				6CBE1EF01FD536E500B1A6CF /* tx.c in Sources */,
+				6C255A871FD548AC00E301B0 /* names.c in Sources */,
 				6CBE1EF21FD536E500B1A6CF /* varint.c in Sources */,
 				6C255A2F1FD545AD00E301B0 /* bip32.c in Sources */,
 				6C255A2A1FD545AD00E301B0 /* pbkdf2.c in Sources */,
+				6C255A511FD547F400E301B0 /* type_to_string.c in Sources */,
+				6C255A8C1FD548AC00E301B0 /* lnchannel_redeem.c in Sources */,
 				6C255A271FD545AD00E301B0 /* aes.c in Sources */,
+				6C255A471FD547C600E301B0 /* sqlite3.c in Sources */,
 				6CBE1EF51FD536E500B1A6CF /* pullpush.c in Sources */,
 				6C255A261FD545AD00E301B0 /* scrypt.c in Sources */,
 				6CBE1ECF1FD5345600B1A6CF /* autodata.c in Sources */,
@@ -343,15 +560,30 @@
 				6C255A2C1FD545AD00E301B0 /* bip39.c in Sources */,
 				6CBE1EEE1FD536E500B1A6CF /* shadouble.c in Sources */,
 				6C255A291FD545AD00E301B0 /* hmac.c in Sources */,
+				6C255A8E1FD548AC00E301B0 /* version.c in Sources */,
+				6C255AA51FD548E000E301B0 /* message_demo.cpp in Sources */,
 				6C255A311FD545AD00E301B0 /* hex.c in Sources */,
+				6C255A911FD548AC00E301B0 /* permute_tx.c in Sources */,
+				6C255AA61FD548E000E301B0 /* manager_st.cpp in Sources */,
+				6C255A591FD5480700E301B0 /* randombytes.c in Sources */,
 				6C255A301FD545AD00E301B0 /* mnemonic.c in Sources */,
+				6C255A921FD548AC00E301B0 /* htlc.c in Sources */,
+				6C255AA31FD548E000E301B0 /* lite_demo.cpp in Sources */,
 				6CBE1ED31FD5361D00B1A6CF /* siphash24.c in Sources */,
+				6C255A951FD548AC00E301B0 /* channel.c in Sources */,
 				6CBE1EEC1FD536E500B1A6CF /* block.c in Sources */,
+				6C255A501FD547F400E301B0 /* opt_bits.c in Sources */,
 				6C255A411FD5465500E301B0 /* secp256k1.c in Sources */,
 				6C7C00D81FD5326900EBA441 /* lightning.m in Sources */,
 				6CBE1EEB1FD536E500B1A6CF /* pubkey.c in Sources */,
 				6CBE1EF91FD5382200B1A6CF /* watch.c in Sources */,
+				6C255A901FD548AC00E301B0 /* output_to_htlc.c in Sources */,
+				6C255A4F1FD547F400E301B0 /* utils.c in Sources */,
+				6C255A861FD548AC00E301B0 /* lnchannel_htlc.c in Sources */,
 				6C255A2B1FD545AD00E301B0 /* bip38.c in Sources */,
+				6C255A8B1FD548AC00E301B0 /* lnchannel_commit.c in Sources */,
+				6C255A881FD548AC00E301B0 /* db.c in Sources */,
+				6C255A971FD548AC00E301B0 /* lnchannel_api.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -477,11 +709,16 @@
 					"$(SRCROOT)/../../../include",
 					"$(SRCROOT)/../../../ccan",
 					"$(SRCROOT)/../../../bitcoin",
+					"$(SRCROOT)/../../../btcnetwork",
 					"$(SRCROOT)/../../../libwally-core",
 					"$(SRCROOT)/../../../libwally-core/src",
 					"$(SRCROOT)/../../../libwally-core/src/ccan",
 					"$(SRCROOT)/../../../libwally-core/src/secp256k1",
 					"$(SRCROOT)/../../../libwally-core/src/secp256k1/src",
+					"$(SRCROOT)/../../../lightningcore",
+					"$(SRCROOT)/../../../lightninglite",
+					"$(SRCROOT)/../../../sqlite3",
+					"$(SRCROOT)/../../../utils",
 				);
 				OTHER_LDFLAGS = "-ObjC";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -505,11 +742,16 @@
 					"$(SRCROOT)/../../../include",
 					"$(SRCROOT)/../../../ccan",
 					"$(SRCROOT)/../../../bitcoin",
+					"$(SRCROOT)/../../../btcnetwork",
 					"$(SRCROOT)/../../../libwally-core",
 					"$(SRCROOT)/../../../libwally-core/src",
 					"$(SRCROOT)/../../../libwally-core/src/ccan",
 					"$(SRCROOT)/../../../libwally-core/src/secp256k1",
 					"$(SRCROOT)/../../../libwally-core/src/secp256k1/src",
+					"$(SRCROOT)/../../../lightningcore",
+					"$(SRCROOT)/../../../lightninglite",
+					"$(SRCROOT)/../../../sqlite3",
+					"$(SRCROOT)/../../../utils",
 				);
 				OTHER_LDFLAGS = "-ObjC";
 				PRODUCT_NAME = "$(TARGET_NAME)";
