@@ -16,7 +16,7 @@
     - https://sourceforge.net/projects/mingw-w64/files/Toolchains%20targetting%20Win64/Personal%20Builds/mingw-builds/7.1.0/threads-posix/seh/x86_64-7.1.0-release-posix-seh-rt_v5-rev2.7z
 
 - 安装 Git Bash
-    - https://npm.taobao.org/mirrors/git-for-windows/2.10.1.windows.1/Git-2.10.1-64-bit.exe    
+    - https://npm.taobao.org/mirrors/git-for-windows/2.10.1.windows.1/Git-2.10.1-64-bit.exe
 
 - 在 Bash 里执行
 
@@ -45,7 +45,7 @@
 ## Android
 
 - 下载 NDK
-    - https://developer.android.com/ndk/downloads/index.html 
+    - https://developer.android.com/ndk/downloads/index.html
 - 下载 cmake
     - https://dl.google.com/android/repository/cmake-3.6.3155560-linux-x86_64.zip
     - https://dl.google.com/android/repository/cmake-3.6.3155560-darwin-x86_64.zip
@@ -67,11 +67,11 @@
 
 - 输出动态库在 output/android 目录下
 
-## iOS (TODO)
+## iOS
 
 ```
-./scripts/build-ios.sh
+open scripts/ios/lightning/lightning.xcodeproj
 ```
 
-- 输出动态库在 output/ios 目录下
+- 使用 xcode 进行编译，生成 .a 静态库
 
