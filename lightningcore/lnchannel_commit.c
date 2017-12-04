@@ -29,8 +29,7 @@
 #include <stdlib.h>
 #include <sys/types.h>
 
-
-static u64 commit_tx_fee(const struct bitcoin_tx *commit, u64 anchor_satoshis)
+u64 commit_tx_fee(const struct bitcoin_tx *commit, u64 anchor_satoshis)
 {
 	uint64_t i, total = 0;
 

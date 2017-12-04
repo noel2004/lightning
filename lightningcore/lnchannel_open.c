@@ -1,4 +1,5 @@
 
+#include "channel.h"
 #include "db.h"
 #include "log.h"
 #include "lnchannel_internal.h"

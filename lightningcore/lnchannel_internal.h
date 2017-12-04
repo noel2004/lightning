@@ -281,4 +281,6 @@ static u64 desired_commit_feerate(struct lightningd_state *dstate)
     return get_feerate(dstate->topology) * dstate->config.commitment_fee_percent / 100;
 }
 
+u64 commit_tx_fee(const struct bitcoin_tx *commit, u64 anchor_satoshis);
+
 #endif /* LIGHTNING_CORE_LNCHANNEL_INTERNAL_H */
