@@ -1,4 +1,5 @@
 
+#include "names.h"
 #include "db.h"
 #include "log.h"
 #include "lnchannel_internal.h"
@@ -393,8 +394,8 @@ static bool lnchn_start_shutdown(struct LNchannel *lnchn)
 	//u8 *redeemscript;
 
 	/* We might have uncommited changes; if so, commit them now. */
-	if (!do_commit(lnchn, NULL))
-		return false;
+//    if (!do_commit(lnchn, NULL))
+//        return false;
 
 	db_start_transaction(lnchn);
 
@@ -416,7 +417,7 @@ static bool lnchn_start_shutdown(struct LNchannel *lnchn)
 
 	db_set_our_closing_script(lnchn);
 
-	queue_pkt_close_shutdown(lnchn);
+	//queue_pkt_close_shutdown(lnchn);
 
 	if (lnchn->state == STATE_NORMAL_COMMITTING) {
 		newstate = STATE_SHUTDOWN_COMMITTING;
@@ -426,8 +427,8 @@ static bool lnchn_start_shutdown(struct LNchannel *lnchn)
 	internal_set_lnchn_state(lnchn, newstate, __func__, true);
 
 	/* Catch case where we've exchanged and had no HTLCs anyway. */
-	if (lnchn->closing.their_script && !committed_to_htlcs(lnchn))
-		start_closing_in_transaction(lnchn);
+//    if (lnchn->closing.their_script && !committed_to_htlcs(lnchn))
+//        start_closing_in_transaction(lnchn);
 
 	return db_commit_transaction(lnchn) == NULL;
 }
